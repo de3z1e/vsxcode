@@ -1,6 +1,6 @@
 # Swift Package Helper VS Code Command
 
-This lightweight workspace extension exposes a `Swift: Generate Package.swift from Xcode Project` command. Run it from the command palette (⇧⌘P) to read the active `.xcodeproj` and scaffold a `Package.swift` in the workspace root.
+This lightweight workspace extension exposes a `Swift: Generate Package.swift from Xcode Project` command. Run it from the command palette (⇧⌘P) to read the active `.xcodeproj` and scaffold a `Package.swift` in the workspace root. It fills the gap when you want to work in VS Code, and take advantage of its autocomplete, inline refactoring, or AI tools, while still targeting an existing Xcode project. With a generated `Package.swift`, every build target, package dependency, and framework import (UIKit, SwiftUI, etc.) resolves correctly so VS Code can offer full IntelliSense support.
 
 ### Capability
 
