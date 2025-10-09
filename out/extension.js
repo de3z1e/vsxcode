@@ -1,54 +1,71 @@
-'use strict';
-
-const vscode = require('vscode');
-const path = require('path');
-const fs = require('fs');
-const fsp = fs.promises;
-const { promisify } = require('util');
-const execFile = promisify(require('child_process').execFile);
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.activate = activate;
+exports.deactivate = deactivate;
+const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const fs_1 = require("fs");
+const util_1 = require("util");
+const child_process_1 = require("child_process");
+const execFile = (0, util_1.promisify)(child_process_1.execFile);
 const PLATFORM_KEYS = {
     IPHONEOS_DEPLOYMENT_TARGET: 'iOS',
     MACOSX_DEPLOYMENT_TARGET: 'macOS',
     TVOS_DEPLOYMENT_TARGET: 'tvOS',
     WATCHOS_DEPLOYMENT_TARGET: 'watchOS'
 };
-
 const PLATFORM_DECLARATIONS = {
     iOS: '.iOS',
     macOS: '.macOS',
     tvOS: '.tvOS',
     watchOS: '.watchOS'
 };
-
 const DEFAULT_SWIFT_VERSION = '6.2';
 const DEFAULT_PLATFORM = { platform: 'iOS', version: '26.0' };
 const INDENT = '    ';
-
-/**
- * @param {number} level
- * @returns {string}
- */
 function indent(level) {
     return INDENT.repeat(level);
 }
-
-/**
- * @param {string} value
- * @returns {string}
- */
 function cleanup(value) {
     if (!value) {
         return '';
     }
     return value.replace(/^"+|"+$/g, '').trim();
 }
-
-/**
- * @param {string} left
- * @param {string} right
- * @returns {number}
- */
 function compareVersions(left, right) {
     const parse = (value) => value.split('.').map((part) => Number(part) || 0);
     const a = parse(left);
@@ -65,11 +82,6 @@ function compareVersions(left, right) {
     }
     return 0;
 }
-
-/**
- * @param {string} pbxContents
- * @returns {string | null}
- */
 function parseSwiftVersion(pbxContents) {
     const matches = [...pbxContents.matchAll(/SWIFT_VERSION = ([^;]+);/g)];
     const versions = matches
@@ -79,11 +91,6 @@ function parseSwiftVersion(pbxContents) {
     unique.sort((a, b) => compareVersions(b, a));
     return unique[0] || null;
 }
-
-/**
- * @param {string} output
- * @returns {string | null}
- */
 function parseSwiftToolsVersion(output) {
     if (!output) {
         return null;
@@ -91,10 +98,6 @@ function parseSwiftToolsVersion(output) {
     const match = output.match(/Swift(?:\s+language)?\s+version\s+([0-9]+(?:\.[0-9]+)*)/i);
     return match ? match[1] : null;
 }
-
-/**
- * @returns {Promise<string | null>}
- */
 async function detectSwiftToolsVersion() {
     const commands = [
         { command: 'xcrun', args: ['swift', '--version'] },
@@ -107,16 +110,13 @@ async function detectSwiftToolsVersion() {
             if (version) {
                 return version;
             }
-        } catch (error) {
+        }
+        catch (error) {
             // Ignore and try next candidate.
         }
     }
     return null;
 }
-
-/**
- * @returns {Promise<string | null>}
- */
 async function detectMacOSVersion() {
     if (process.platform !== 'darwin') {
         return null;
@@ -125,18 +125,15 @@ async function detectMacOSVersion() {
         const { stdout } = await execFile('sw_vers', ['-productVersion'], { encoding: 'utf8' });
         const version = cleanup(stdout);
         return version.length > 0 ? version : null;
-    } catch (error) {
+    }
+    catch (error) {
         return null;
     }
 }
-
-/**
- * @param {string} pbxContents
- * @returns {Array<{platform: string, version: string}>}
- */
 function parseDeploymentTargets(pbxContents) {
     const found = new Map();
-    for (const [key, platform] of Object.entries(PLATFORM_KEYS)) {
+    const entries = Object.entries(PLATFORM_KEYS);
+    for (const [key, platform] of entries) {
         const regex = new RegExp(`${key} = ([^;]+);`, 'g');
         let match;
         while ((match = regex.exec(pbxContents)) !== null) {
@@ -155,11 +152,6 @@ function parseDeploymentTargets(pbxContents) {
     }
     return Array.from(found.entries()).map(([platform, version]) => ({ platform, version }));
 }
-
-/**
- * @param {Array<{platform: string, version: string}>} platforms
- * @returns {Promise<Array<{platform: string, version: string}>>}
- */
 async function ensureMacOSPlatform(platforms) {
     const detectedVersion = await detectMacOSVersion();
     if (!detectedVersion) {
@@ -170,45 +162,23 @@ async function ensureMacOSPlatform(platforms) {
     const macEntry = { platform: 'macOS', version: detectedVersion };
     if (macIndex === -1) {
         next.push(macEntry);
-    } else {
+    }
+    else {
         next[macIndex] = macEntry;
     }
     return next;
 }
-
-/**
- * @param {string} productType
- * @returns {boolean}
- */
 function isTestTarget(productType) {
     if (!productType) {
         return false;
     }
-    return productType.includes('unit-test') || productType.includes('ui-testing') || productType.includes('.test');
+    return (productType.includes('unit-test') ||
+        productType.includes('ui-testing') ||
+        productType.includes('.test'));
 }
-
-/**
- * Product type should always map to .library to ensure library dependencies are resolved correctly with autocomplete support.
- * @param {string} productType
- * @returns {'.library'|'.executable'}
- */
-function mapProductType(productType) {
-    // if (!productType) {
-    //     return '.library';
-    // }
-    // if (productType.includes('framework') || productType.includes('library')) {
-    //     return '.library';
-    // }
-    // if (productType.includes('application') || productType.includes('tool') || productType.includes('executable')) {
-    //     return '.executable';
-    // }
+function mapProductType(_productType) {
     return '.library';
 }
-
-/**
- * @param {string} pbxContents
- * @returns {Array<{name: string, productName: string, productType: string}>}
- */
 function parseNativeTargets(pbxContents) {
     const sectionRegex = /\/\* Begin PBXNativeTarget section \*\/([\s\S]*?)\/\* End PBXNativeTarget section \*\//;
     const sectionMatch = sectionRegex.exec(pbxContents);
@@ -242,12 +212,6 @@ function parseNativeTargets(pbxContents) {
     }
     return targets;
 }
-
-/**
- * @param {string} contents
- * @param {number} startIndex
- * @returns {{ body: string, endIndex: number } | null}
- */
 function extractObjectBody(contents, startIndex) {
     const length = contents.length;
     const braceIndex = contents.indexOf('{', startIndex);
@@ -261,7 +225,8 @@ function extractObjectBody(contents, startIndex) {
         const char = contents[index];
         if (char === '{') {
             depth += 1;
-        } else if (char === '}') {
+        }
+        else if (char === '}') {
             depth -= 1;
             if (depth === 0) {
                 return {
@@ -277,11 +242,6 @@ function extractObjectBody(contents, startIndex) {
         endIndex: length
     };
 }
-
-/**
- * @param {string} block
- * @returns {Record<string, string>}
- */
 function parsePackageRequirement(block) {
     const requirement = {};
     const pairRegex = /([A-Za-z]+)\s*=\s*([^;]+);/g;
@@ -295,16 +255,9 @@ function parsePackageRequirement(block) {
     }
     return requirement;
 }
-
-/**
- * @param {string} pbxContents
- * @returns {Map<string, {id: string, name: string, type: 'remote'|'local', url?: string, path?: string, requirement?: Record<string, string>}>}
- */
 function parseSwiftPackageReferences(pbxContents) {
     const references = new Map();
-
-    const remoteRegex =
-        /([A-F0-9]+)\s*\/\*\s*XCRemoteSwiftPackageReference\s*"([^"]+)"\s*\*\/\s*=\s*\{/g;
+    const remoteRegex = /([A-F0-9]+)\s*\/\*\s*XCRemoteSwiftPackageReference\s*"([^"]+)"\s*\*\/\s*=\s*\{/g;
     let match;
     while ((match = remoteRegex.exec(pbxContents)) !== null) {
         const [, id, displayName] = match;
@@ -324,9 +277,7 @@ function parseSwiftPackageReferences(pbxContents) {
             requirement: requirementMatch ? parsePackageRequirement(requirementMatch[1]) : {}
         });
     }
-
-    const localRegex =
-        /([A-F0-9]+)\s*\/\*\s*XCLocalSwiftPackageReference\s*"([^"]+)"\s*\*\/\s*=\s*\{/g;
+    const localRegex = /([A-F0-9]+)\s*\/\*\s*XCLocalSwiftPackageReference\s*"([^"]+)"\s*\*\/\s*=\s*\{/g;
     while ((match = localRegex.exec(pbxContents)) !== null) {
         const [, id, displayName] = match;
         const objectBody = extractObjectBody(pbxContents, localRegex.lastIndex - 1);
@@ -343,18 +294,11 @@ function parseSwiftPackageReferences(pbxContents) {
             path: cleanup(pathMatch ? pathMatch[1] : '')
         });
     }
-
     return references;
 }
-
-/**
- * @param {string} pbxContents
- * @returns {Map<string, {id: string, productName: string, packageRef: string | null, packageName: string | null}>}
- */
 function parseSwiftPackageProductDependencies(pbxContents) {
     const dependencies = new Map();
-    const regex =
-        /([A-F0-9]+)\s*\/\*\s*([^*]+)\s*\*\/\s*=\s*\{\s*isa\s*=\s*XCSwiftPackageProductDependency;([\s\S]*?)\};/g;
+    const regex = /([A-F0-9]+)\s*\/\*\s*([^*]+)\s*\*\/\s*=\s*\{\s*isa\s*=\s*XCSwiftPackageProductDependency;([\s\S]*?)\};/g;
     let match;
     while ((match = regex.exec(pbxContents)) !== null) {
         const [, id, displayName, body] = match;
@@ -372,11 +316,6 @@ function parseSwiftPackageProductDependencies(pbxContents) {
     }
     return dependencies;
 }
-
-/**
- * @param {string} version
- * @returns {string}
- */
 function formatPlatformVersion(version) {
     const major = Number.parseInt(String(version).split('.')[0], 10);
     if (Number.isFinite(major) && major > 0) {
@@ -384,13 +323,6 @@ function formatPlatformVersion(version) {
     }
     return `.v13`;
 }
-
-/**
- * @param {string} rootPath
- * @param {string} targetName
- * @param {boolean} isTest
- * @returns {string}
- */
 function determineTargetPath(rootPath, targetName, isTest) {
     const relativeCandidates = [];
     if (isTest) {
@@ -398,12 +330,12 @@ function determineTargetPath(rootPath, targetName, isTest) {
         if (targetName.endsWith('Tests')) {
             relativeCandidates.push(path.join('Tests', targetName.replace(/Tests$/, '')));
         }
-    } else {
+    }
+    else {
         relativeCandidates.push(path.join('Sources', targetName));
     }
     relativeCandidates.push(targetName);
     relativeCandidates.push(path.join('Sources', 'Shared', targetName));
-
     for (const relativeCandidate of relativeCandidates) {
         const absolute = path.join(rootPath, relativeCandidate);
         if (fs.existsSync(absolute)) {
@@ -412,47 +344,32 @@ function determineTargetPath(rootPath, targetName, isTest) {
     }
     return targetName;
 }
-
-/**
- * @param {Array<{platform: string, version: string}>} platforms
- * @returns {string}
- */
 function formatPlatforms(platforms) {
     return platforms
         .map(({ platform, version }, index) => {
-            const declaration = PLATFORM_DECLARATIONS[platform] || '.iOS';
-            const formattedVersion = formatPlatformVersion(version);
-            const suffix = index < platforms.length - 1 ? ',' : '';
-            return `${indent(2)}${declaration}(${formattedVersion})${suffix}`;
-        })
+        const declaration = PLATFORM_DECLARATIONS[platform] || '.iOS';
+        const formattedVersion = formatPlatformVersion(version);
+        const suffix = index < platforms.length - 1 ? ',' : '';
+        return `${indent(2)}${declaration}(${formattedVersion})${suffix}`;
+    })
         .join('\n');
 }
-
-/**
- * @param {Array<{type: '.library'|'.executable', name: string, targets: Array<string>}>} products
- * @returns {string}
- */
 function formatProducts(products) {
     if (products.length === 0) {
         return `${indent(2)}.library(\n${indent(3)}name: "Library",\n${indent(3)}targets: []\n${indent(2)})`;
     }
     return products
         .map((product) => {
-            const targetsList = product.targets.map((item) => `"${item}"`).join(', ');
-            return [
-                `${indent(2)}${product.type}(`,
-                `${indent(3)}name: "${product.name}",`,
-                `${indent(3)}targets: [${targetsList}]`,
-                `${indent(2)})`
-            ].join('\n');
-        })
+        const targetsList = product.targets.map((item) => `"${item}"`).join(', ');
+        return [
+            `${indent(2)}${product.type}(`,
+            `${indent(3)}name: "${product.name}",`,
+            `${indent(3)}targets: [${targetsList}]`,
+            `${indent(2)})`
+        ].join('\n');
+    })
         .join('\n');
 }
-
-/**
- * @param {Record<string, string>} requirement
- * @returns {string | null}
- */
 function formatRemotePackageRequirement(requirement) {
     if (!requirement) {
         return null;
@@ -515,17 +432,11 @@ function formatRemotePackageRequirement(requirement) {
     }
     return null;
 }
-
-/**
- * @param {{id: string, name: string, type: 'remote'|'local', url?: string, path?: string, requirement?: Record<string, string>}} reference
- * @returns {string}
- */
 function formatPackageDependencyEntry(reference) {
     if (reference.type === 'local') {
         const pathValue = reference.path && reference.path.length > 0 ? reference.path : `./${reference.name}`;
         return `.package(path: "${pathValue}")`;
     }
-
     const url = reference.url || '';
     const requirement = reference.requirement || {};
     const formattedRequirement = formatRemotePackageRequirement(requirement);
@@ -534,52 +445,30 @@ function formatPackageDependencyEntry(reference) {
     }
     return `.package(url: "${url}")`;
 }
-
-/**
- * @param {Array<string>} dependencies
- * @returns {string}
- */
 function formatPackageDependencies(dependencies) {
     return dependencies.map((dependency) => `${indent(2)}${dependency}`).join('\n');
 }
-
-/**
- * @param {Array<{spmType: string, name: string, path: string, dependencies?: Array<string>}>} targets
- * @returns {string}
- */
 function formatTargets(targets) {
     if (targets.length === 0) {
         return `${indent(2)}.target(\n${indent(3)}name: "Placeholder",\n${indent(3)}path: "Sources"\n${indent(2)})`;
     }
     return targets
         .map((target) => {
-            const properties = [`name: "${target.name}"`];
-            if (target.dependencies && target.dependencies.length > 0) {
-                properties.push(`dependencies: [${target.dependencies.join(', ')}]`);
-            }
-            properties.push(`path: "${target.path}"`);
-
-            const lines = [`${indent(2)}${target.spmType}(`];
-            properties.forEach((property, index) => {
-                const suffix = index === properties.length - 1 ? '' : ',';
-                lines.push(`${indent(3)}${property}${suffix}`);
-            });
-            lines.push(`${indent(2)})`);
-            return lines.join('\n');
-        })
+        const properties = [`name: "${target.name}"`];
+        if (target.dependencies && target.dependencies.length > 0) {
+            properties.push(`dependencies: [${target.dependencies.join(', ')}]`);
+        }
+        properties.push(`path: "${target.path}"`);
+        const lines = [`${indent(2)}${target.spmType}(`];
+        properties.forEach((property, index) => {
+            const suffix = index === properties.length - 1 ? '' : ',';
+            lines.push(`${indent(3)}${property}${suffix}`);
+        });
+        lines.push(`${indent(2)})`);
+        return lines.join('\n');
+    })
         .join('\n');
 }
-
-/**
- * @param {object} options
- * @param {string} options.packageName
- * @param {string} options.swiftVersion
- * @param {Array<{platform: string, version: string}>} options.platforms
- * @param {Array<{type: '.library'|'.executable', name: string, targets: Array<string>}>} options.products
- * @param {Array<string>} options.dependencies
- * @param {Array<{spmType: string, name: string, path: string, dependencies?: Array<string>}>} options.targets
- * @returns {string}
- */
 function buildPackageSwift({ packageName, swiftVersion, platforms, products, dependencies, targets }) {
     const platformsSection = formatPlatforms(platforms);
     const productsSection = formatProducts(products);
@@ -597,82 +486,67 @@ ${platformsSection}
     ],
     products: [
 ${productsSection}
-    ],${
-        dependenciesSection
-            ? `
+    ],${dependenciesSection
+        ? `
     dependencies: [
 ${dependenciesSection}
     ],`
-            : ''
-    }
+        : ''}
     targets: [
 ${targetsSection}
     ]
 )
 `;
 }
-
-/**
- * @param {string} rootPath
- * @returns {Promise<void>}
- */
 async function generatePackageSwift(rootPath) {
-    const entries = await fsp.readdir(rootPath, { withFileTypes: true });
+    const entries = await fs_1.promises.readdir(rootPath, { withFileTypes: true });
     const xcodeProjects = entries.filter((entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj'));
     if (xcodeProjects.length === 0) {
         throw new Error('No .xcodeproj found in the workspace root.');
     }
-
     let selectedProject = xcodeProjects[0].name;
     if (xcodeProjects.length > 1) {
-        const pick = await vscode.window.showQuickPick(
-            xcodeProjects.map((entry) => entry.name),
-            { placeHolder: 'Select the Xcode project to read' }
-        );
+        const pick = await vscode.window.showQuickPick(xcodeProjects.map((entry) => entry.name), { placeHolder: 'Select the Xcode project to read' });
         if (!pick) {
             return;
         }
         selectedProject = pick;
     }
-
     const pbxprojPath = path.join(rootPath, selectedProject, 'project.pbxproj');
     let pbxContents;
     try {
-        pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-    } catch (error) {
-        throw new Error(`Unable to read ${pbxprojPath}: ${error.message}`);
+        pbxContents = await fs_1.promises.readFile(pbxprojPath, 'utf8');
     }
-
-    const swiftVersion =
-        (await detectSwiftToolsVersion()) || parseSwiftVersion(pbxContents) || DEFAULT_SWIFT_VERSION;
+    catch (error) {
+        const message = error.message;
+        throw new Error(`Unable to read ${pbxprojPath}: ${message}`);
+    }
+    const swiftVersion = (await detectSwiftToolsVersion()) || parseSwiftVersion(pbxContents) || DEFAULT_SWIFT_VERSION;
     const platforms = await ensureMacOSPlatform(parseDeploymentTargets(pbxContents));
     const nativeTargets = parseNativeTargets(pbxContents);
     const packageReferences = parseSwiftPackageReferences(pbxContents);
     const packageProductDependencies = parseSwiftPackageProductDependencies(pbxContents);
-
     if (nativeTargets.length === 0) {
         throw new Error('No native targets found in the Xcode project.');
     }
-
     const packageName = path.basename(selectedProject, '.xcodeproj');
-
     const targetDefinitions = nativeTargets.map((target) => {
         const testTarget = isTestTarget(target.productType);
-        const targetPackageDependencies =
-            target.packageProductDependencyIds && target.packageProductDependencyIds.length > 0
-                ? target.packageProductDependencyIds
-                      .map((dependencyId) => packageProductDependencies.get(dependencyId))
-                      .filter((dependency) => Boolean(dependency))
-                      .map((dependency) => {
-                          const packageRef = dependency.packageRef ? packageReferences.get(dependency.packageRef) : null;
-                          const packageName =
-                              (packageRef && packageRef.name) ||
-                              dependency.packageName ||
-                              dependency.productName;
-                          return `.product(name: "${dependency.productName}", package: "${packageName}")`;
-                      })
-                : [];
-        const uniqueDependencies = [...new Set(targetPackageDependencies)];
+        const targetPackageDependencies = target.packageProductDependencyIds && target.packageProductDependencyIds.length > 0
+            ? target.packageProductDependencyIds
+                .map((dependencyId) => packageProductDependencies.get(dependencyId))
+                .filter((dependency) => Boolean(dependency))
+                .map((dependency) => {
+                const packageRef = dependency.packageRef
+                    ? packageReferences.get(dependency.packageRef)
+                    : undefined;
+                const packageNameValue = ((packageRef && packageRef.name) ||
+                    dependency.packageName ||
+                    dependency.productName);
+                return `.product(name: "${dependency.productName}", package: "${packageNameValue}")`;
+            })
+            : [];
+        const uniqueDependencies = Array.from(new Set(targetPackageDependencies));
         return {
             name: target.name,
             productName: target.productName,
@@ -683,33 +557,32 @@ async function generatePackageSwift(rootPath) {
             dependencies: uniqueDependencies
         };
     });
-
     const productMap = new Map();
     for (const target of targetDefinitions) {
         if (target.isTest) {
             continue;
         }
         const type = mapProductType(target.productType);
-        if (!type) {
-            continue;
-        }
         if (!productMap.has(target.productName)) {
-            productMap.set(target.productName, { type, name: target.productName, targets: [target.name] });
-        } else {
+            productMap.set(target.productName, {
+                type,
+                name: target.productName,
+                targets: [target.name]
+            });
+        }
+        else {
             const existing = productMap.get(target.productName);
-            if (!existing.targets.includes(target.name)) {
+            if (existing && !existing.targets.includes(target.name)) {
                 existing.targets.push(target.name);
             }
         }
     }
-
     const products = Array.from(productMap.values());
     const packageDependenciesList = Array.from(packageReferences.values())
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((reference) => formatPackageDependencyEntry(reference))
         .filter((entry) => Boolean(entry));
-    const uniquePackageDependencies = [...new Set(packageDependenciesList)];
-
+    const uniquePackageDependencies = Array.from(new Set(packageDependenciesList));
     const packageContents = buildPackageSwift({
         packageName,
         swiftVersion,
@@ -723,7 +596,6 @@ async function generatePackageSwift(rootPath) {
             dependencies: target.dependencies
         }))
     });
-
     const packagePath = path.join(rootPath, 'Package.swift');
     if (fs.existsSync(packagePath)) {
         const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
@@ -733,16 +605,11 @@ async function generatePackageSwift(rootPath) {
             return;
         }
     }
-
-    await fsp.writeFile(packagePath, packageContents, 'utf8');
+    await fs_1.promises.writeFile(packagePath, packageContents, 'utf8');
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(packagePath));
     await vscode.window.showTextDocument(document, { preview: false });
     vscode.window.showInformationMessage(`Package.swift generated from ${selectedProject}`);
 }
-
-/**
- * @param {vscode.ExtensionContext} context
- */
 function activate(context) {
     const disposable = vscode.commands.registerCommand('swiftPackageHelper.createFromXcodeproj', async () => {
         try {
@@ -752,16 +619,13 @@ function activate(context) {
             }
             const rootPath = workspaceFolders[0].uri.fsPath;
             await generatePackageSwift(rootPath);
-        } catch (error) {
-            vscode.window.showErrorMessage(error.message);
+        }
+        catch (error) {
+            const message = error.message;
+            vscode.window.showErrorMessage(message);
         }
     });
     context.subscriptions.push(disposable);
 }
-
-function deactivate() {}
-
-module.exports = {
-    activate,
-    deactivate
-};
+function deactivate() { }
+//# sourceMappingURL=extension.js.map

@@ -13,9 +13,16 @@
         "vscode": "^1.80.0"
     },
     "categories": [
-        "Other"
+        "Programming Languages"
     ],
-    "main": "./extension.js",
+    "keywords": [
+        "swift",
+        "swiftpm",
+        "package.swift",
+        "xcode",
+        "spm"
+    ],
+    "main": "./out/extension.js",
     "contributes": {
         "commands": [
             {
@@ -24,7 +31,21 @@
             }
         ]
     },
+    "scripts": {
+        "compile": "tsc -p ./",
+        "watch": "tsc -w -p ./",
+        "prepublish": "npm run compile",
+        "package": "vsce package"
+    },
+    "files": [
+        "out",
+        "README.md",
+        "LICENSE"
+    ],
     "devDependencies": {
-        "@vscode/vsce": "^3.6.2"
+        "@types/node": "^20.11.30",
+        "@types/vscode": "^1.80.0",
+        "@vscode/vsce": "^3.6.2",
+        "typescript": "^5.4.0"
     }
 }
