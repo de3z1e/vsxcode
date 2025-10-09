@@ -1,0 +1,28 @@
+{
+    "name": "swift-package-helper",
+    "displayName": "Swift Package Helper",
+    "description": "Generate a Package.swift from the active Xcode project.",
+    "version": "0.0.1",
+    "publisher": "local",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:swiftPackageHelper.createFromXcodeproj"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "swiftPackageHelper.createFromXcodeproj",
+                "title": "Swift: Generate Package.swift from Xcode Project"
+            }
+        ]
+    },
+    "devDependencies": {
+        "@vscode/vsce": "^3.6.2"
+    }
+}
