@@ -3,7 +3,7 @@
     "displayName": "Swift Package Helper",
     "description": "Generate a Package.swift from the active Xcode project.",
     "version": "0.0.1",
-    "publisher": "local",
+    "publisher": "de3z1e",
     "license": "MIT",
     "repository": {
         "type": "git",
