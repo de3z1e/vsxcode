@@ -2,7 +2,7 @@
     "name": "swift-package-helper",
     "displayName": "Swift Package Helper",
     "description": "Generate a Package.swift from the active Xcode project.",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "publisher": "de3z1e",
     "icon": "images/icon.png",
     "license": "MIT",
