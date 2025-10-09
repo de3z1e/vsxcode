@@ -13,5 +13,5 @@ package-lock.json
 # VSIX package files
 *.vsix
 
-// Ignore build output
+# Ignore build output
 out
