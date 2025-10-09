@@ -10,7 +10,7 @@ This lightweight workspace extension exposes a `Swift: Generate Package.swift fr
 
 ### Installation
 
-- Install from the VS Code Marketplace once published (search for `Swift Package Helper`).
+- Install from the VS Code Marketplace (search for `Swift Package Helper`).
 - Install the bundled package directly: `code --install-extension swift-package-helper-0.0.1.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
