@@ -4,6 +4,7 @@
     "description": "Generate a Package.swift from the active Xcode project.",
     "version": "0.0.1",
     "publisher": "local",
+    "license": "MIT",
     "repository": {
         "type": "git",
         "url": "https://github.com/de3z1e/SwiftPackageHelper.git"
