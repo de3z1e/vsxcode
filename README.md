@@ -8,19 +8,27 @@ This lightweight workspace extension exposes a `Swift: Generate Package.swift fr
 - Extracts the Swift tools version, platform deployment targets, targets, and product metadata from the project file.
 - Creates or updates `Package.swift` with matching platforms, products, and targets.
 
-### Usage
+### Installation
 
-1. Open this workspace folder in VS Code.
-2. Press `F5` to launch the included **Swift Package Helper** debug configuration (opens a separate Extension Development Host window using the bundled `.vscode/SchoolPortal-dev.code-workspace`).
-3. The dev-host window already loads that workspace; just open the command palette and search for **Swift: Generate Package.swift from Xcode Project**.
-4. Confirm overwriting when prompted if `Package.swift` already exists.
+- Install from the VS Code Marketplace once published (search for `Swift Package Helper`).
+- Install the bundled package directly: `code --install-extension swift-package-helper-0.0.1.vsix`.
+- VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
-If you prefer the terminal, run:
+#### Build from source
 
 ```bash
-code --extensionDevelopmentPath ./vscode/SwiftPackageHelper \
-     --user-data-dir .vscode/.devhost-data \
-     --new-window .vscode/SchoolPortal-dev.code-workspace
+npm install              # install dev dependencies
+npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
+code --install-extension swift-package-helper-0.0.1.vsix
 ```
 
-This mirrors the debug launch: it opens a fresh profile so VS Code keeps the dev-host window separate from your primary editor.
+The `vsce package` step writes the new `.vsix` file to the project root. Update the filename in the final command if the version number changes.
+
+### Usage
+
+1. Open the folder that contains your `.xcodeproj` in VS Code.
+2. Launch the command palette (⇧⌘P) and run **Swift: Generate Package.swift from Xcode Project**.
+3. Select the project if prompted when multiple `.xcodeproj` files are present.
+4. Confirm overwriting when prompted; `Package.swift` is created or refreshed with the project’s settings.
+
+The command uses Xcode’s project metadata, so run it on macOS with Xcode installed for best results.
