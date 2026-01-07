@@ -85,6 +85,7 @@ interface BuildPackageSwiftOptions {
     products: ProductDefinition[];
     dependencies: string[];
     targets: TargetOutput[];
+    defaultLocalization?: string;
 }
 
 const execFile = promisify(execFileCallback) as (
@@ -187,6 +188,20 @@ async function detectMacOSVersion(): Promise<string | null> {
     } catch (error) {
         return null;
     }
+}
+
+function parseDefaultLocalization(pbxContents: string): string | null {
+    const projectRegex = /\/\* Begin PBXProject section \*\/([\s\S]*?)\/\* End PBXProject section \*\//;
+    const projectMatch = projectRegex.exec(pbxContents);
+    if (!projectMatch) {
+        return null;
+    }
+    const projectSection = projectMatch[1];
+    const localizationMatch = /developmentRegion = ([^;]+);/.exec(projectSection);
+    if (localizationMatch) {
+        return cleanup(localizationMatch[1]);
+    }
+    return null;
 }
 
 function parseDeploymentTargets(pbxContents: string): DeploymentTarget[] {
@@ -566,20 +581,23 @@ function buildPackageSwift({
     platforms,
     products,
     dependencies,
-    targets
+    targets,
+    defaultLocalization
 }: BuildPackageSwiftOptions): string {
     const platformsSection = formatPlatforms(platforms);
     const productsSection = formatProducts(products);
     const dependenciesSection =
         dependencies && dependencies.length > 0 ? formatPackageDependencies(dependencies) : '';
     const targetsSection = formatTargets(targets);
+    const defaultLocalizationLine = defaultLocalization ? `
+    defaultLocalization: "${defaultLocalization}",` : '';
     return `// swift-tools-version: ${swiftVersion}
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
 let package = Package(
-    name: "${packageName}",
+    name: "${packageName}",${defaultLocalizationLine}
     platforms: [
 ${platformsSection}
     ],
@@ -633,6 +651,7 @@ async function generatePackageSwift(rootPath: string): Promise<void> {
     const swiftVersion =
         (await detectSwiftToolsVersion()) || parseSwiftVersion(pbxContents) || DEFAULT_SWIFT_VERSION;
     const platforms = await ensureMacOSPlatform(parseDeploymentTargets(pbxContents));
+    const defaultLocalization = parseDefaultLocalization(pbxContents);
     const nativeTargets = parseNativeTargets(pbxContents);
     const packageReferences = parseSwiftPackageReferences(pbxContents);
     const packageProductDependencies = parseSwiftPackageProductDependencies(pbxContents);
@@ -716,7 +735,8 @@ async function generatePackageSwift(rootPath: string): Promise<void> {
                 path: target.path,
                 dependencies: target.dependencies
             })
-        )
+        ),
+        defaultLocalization: defaultLocalization || undefined
     });
 
     const packagePath = path.join(rootPath, 'Package.swift');
