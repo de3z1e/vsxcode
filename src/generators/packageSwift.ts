@@ -45,7 +45,7 @@ export function formatProducts(products: ProductDefinition[]): string {
                 `${indent(2)})`
             ].join('\n');
         })
-        .join('\n');
+        .join(',\n');
 }
 
 export function formatRemotePackageRequirement(requirement?: PackageRequirement | null): string | null {
@@ -128,7 +128,7 @@ export function formatPackageDependencyEntry(reference: SwiftPackageReference): 
 }
 
 function formatPackageDependencies(dependencies: string[]): string {
-    return dependencies.map((dependency) => `${indent(2)}${dependency}`).join('\n');
+    return dependencies.map((dependency) => `${indent(2)}${dependency}`).join(',\n');
 }
 
 function formatTargetArray(label: string, items: string[], indentLevel: number): string {
@@ -200,7 +200,7 @@ export function formatTargets(targets: TargetOutput[]): string {
             lines.push(`${indent(2)})`);
             return lines.join('\n');
         })
-        .join('\n');
+        .join(',\n');
 }
 
 export function buildPackageSwift({
