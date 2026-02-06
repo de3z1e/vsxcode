@@ -29,6 +29,10 @@
             {
                 "command": "swiftPackageHelper.createFromXcodeproj",
                 "title": "Swift: Generate Package.swift from Xcode Project"
+            },
+            {
+                "command": "swiftPackageHelper.createFromXcodeprojWithOptions",
+                "title": "Swift: Generate Package.swift from Xcode Project (with Options)"
             }
         ]
     },
