@@ -70,7 +70,6 @@ export interface TargetOutput {
     path: string;
     dependencies?: string[];
     resources?: ResourceOutput[];
-    swiftLanguageMode?: string;
     swiftSettings?: string[];
     linkerSettings?: string[];
     cSettings?: string[];

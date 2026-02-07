@@ -250,7 +250,6 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
 
         const swiftSettings = generateSwiftSettings(projectBuildSettings, targetSettings, configurationName);
         const linkedFrameworks = parseLinkedFrameworksForTarget(pbxContents, buildPhases.frameworksBuildPhaseId);
-        const linkerSettings = generateLinkerSettings(linkedFrameworks);
         const resources = parseResourcesForTarget(pbxContents, buildPhases.resourcesBuildPhaseId);
         const excluded = parseExcludedFiles(pbxContents, nativeTarget.name);
 
@@ -259,6 +258,15 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
 
         const swiftLangVersion = targetSettings?.swiftVersion;
         const swiftLanguageMode = resolveSwiftLanguageMode(swiftLangVersion);
+        if (swiftLanguageMode) {
+            swiftSettings.unshift(`.swiftLanguageMode(${swiftLanguageMode})`);
+        }
+
+        const packageDependencyNames = new Set(
+            Array.from(packageReferences.values()).map((ref) => ref.name)
+        );
+        const filteredFrameworks = linkedFrameworks.filter((name) => !packageDependencyNames.has(name));
+        const linkerSettings = generateLinkerSettings(filteredFrameworks);
 
         return {
             spmType: targetDef.spmType,
@@ -266,7 +274,6 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
             path: targetDef.path,
             dependencies: targetDef.dependencies.length > 0 ? targetDef.dependencies : undefined,
             resources: resources.length > 0 ? resources : undefined,
-            swiftLanguageMode,
             swiftSettings: swiftSettings.length > 0 ? swiftSettings : undefined,
             cSettings: cSettings.length > 0 ? cSettings : undefined,
             linkerSettings: linkerSettings.length > 0 ? linkerSettings : undefined,

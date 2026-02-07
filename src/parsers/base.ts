@@ -54,5 +54,9 @@ export function parseListValue(raw: string): string[] {
             .map((item) => cleanup(item.trim()))
             .filter((item) => item.length > 0);
     }
-    return [cleanup(trimmed)].filter((item) => item.length > 0);
+    const cleaned = cleanup(trimmed);
+    if (cleaned.includes(' ')) {
+        return cleaned.split(/\s+/).map((s) => s.trim()).filter((s) => s.length > 0);
+    }
+    return cleaned.length > 0 ? [cleaned] : [];
 }

@@ -176,10 +176,6 @@ export function formatTargets(targets: TargetOutput[]): string {
                 properties.push(formatTargetArray('resources', resourceItems, 3));
             }
 
-            if (target.swiftLanguageMode) {
-                properties.push(`${indent(3)}swiftLanguageMode: ${target.swiftLanguageMode}`);
-            }
-
             if (target.swiftSettings && target.swiftSettings.length > 0) {
                 properties.push(formatTargetArray('swiftSettings', target.swiftSettings, 3));
             }
