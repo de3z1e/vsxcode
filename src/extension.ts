@@ -20,6 +20,8 @@ import { parseResourcesForTarget } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
+import { generateTasksJson, generateLaunchJson } from './generators/buildTasks';
+import { listAvailableSimulators } from './utils/simulator';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
 import { PLATFORM_KEYS, DEFAULT_PLATFORM } from './types/constants';
@@ -332,6 +334,124 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
     vscode.window.showInformationMessage(`Package.swift generated from ${selectedProject}`);
 }
 
+async function generateBuildTasks(rootPath: string): Promise<void> {
+    const entries = await fsp.readdir(rootPath, { withFileTypes: true });
+    const xcodeProjects = entries.filter(
+        (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
+    );
+    if (xcodeProjects.length === 0) {
+        throw new Error('No .xcodeproj found in the workspace root.');
+    }
+
+    let selectedProject = xcodeProjects[0].name;
+    if (xcodeProjects.length > 1) {
+        const pick = await vscode.window.showQuickPick(
+            xcodeProjects.map((entry) => entry.name),
+            { placeHolder: 'Select the Xcode project' }
+        );
+        if (!pick) {
+            return;
+        }
+        selectedProject = pick;
+    }
+
+    const pbxprojPath = path.join(rootPath, selectedProject, 'project.pbxproj');
+    let pbxContents: string;
+    try {
+        pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+    } catch (error) {
+        const message = (error as { message?: string }).message;
+        throw new Error(`Unable to read ${pbxprojPath}: ${message}`);
+    }
+
+    const nativeTargets = parseNativeTargets(pbxContents);
+    const nonTestTargets = nativeTargets.filter((t) => !isTestTarget(t.productType));
+    if (nonTestTargets.length === 0) {
+        throw new Error('No non-test targets found in the Xcode project.');
+    }
+
+    let selectedTarget = nonTestTargets[0];
+    if (nonTestTargets.length > 1) {
+        const pick = await vscode.window.showQuickPick(
+            nonTestTargets.map((t) => t.name),
+            { placeHolder: 'Select the target to build' }
+        );
+        if (!pick) {
+            return;
+        }
+        selectedTarget = nonTestTargets.find((t) => t.name === pick)!;
+    }
+
+    let bundleIdentifier = '';
+    if (selectedTarget.buildConfigurationListId) {
+        const settings = getBuildSettingsForTarget(pbxContents, selectedTarget.buildConfigurationListId, 'Debug');
+        bundleIdentifier = settings?.bundleIdentifier || '';
+    }
+    if (!bundleIdentifier) {
+        const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
+        bundleIdentifier = projectSettings?.bundleIdentifier || '';
+    }
+    if (!bundleIdentifier) {
+        const input = await vscode.window.showInputBox({
+            prompt: 'Could not detect bundle identifier. Please enter it manually.',
+            placeHolder: 'com.example.MyApp'
+        });
+        if (!input) {
+            return;
+        }
+        bundleIdentifier = input;
+    }
+
+    const simulators = await listAvailableSimulators();
+    if (simulators.length === 0) {
+        throw new Error('No available iOS simulators found. Install simulators via Xcode.');
+    }
+
+    const simulatorPick = await vscode.window.showQuickPick(
+        simulators.map((s) => ({ label: s.name, description: s.state, detail: s.runtime })),
+        { placeHolder: 'Select simulator device' }
+    );
+    if (!simulatorPick) {
+        return;
+    }
+
+    const projectName = path.basename(selectedProject, '.xcodeproj');
+    const tasksContent = generateTasksJson({
+        projectFile: selectedProject,
+        schemeName: projectName,
+        productName: selectedTarget.productName || selectedTarget.name,
+        bundleIdentifier,
+        simulatorDevice: simulatorPick.label
+    });
+    const launchContent = generateLaunchJson(selectedTarget.productName || selectedTarget.name);
+
+    const vscodeDir = path.join(rootPath, '.vscode');
+    if (!fs.existsSync(vscodeDir)) {
+        await fsp.mkdir(vscodeDir, { recursive: true });
+    }
+
+    const tasksPath = path.join(vscodeDir, 'tasks.json');
+    const launchPath = path.join(vscodeDir, 'launch.json');
+
+    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath)) {
+        const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
+            placeHolder: '.vscode/tasks.json or launch.json already exists. Overwrite?'
+        });
+        if (overwrite !== 'Overwrite') {
+            return;
+        }
+    }
+
+    await fsp.writeFile(tasksPath, tasksContent, 'utf8');
+    await fsp.writeFile(launchPath, launchContent, 'utf8');
+
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(tasksPath));
+    await vscode.window.showTextDocument(document, { preview: false });
+    vscode.window.showInformationMessage(
+        `Build tasks generated for ${selectedTarget.name} on ${simulatorPick.label}`
+    );
+}
+
 export function activate(context: vscode.ExtensionContext): void {
     const generateCommand = vscode.commands.registerCommand(
         'swiftPackageHelper.createFromXcodeproj',
@@ -374,6 +494,23 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    const generateBuildTasksCommand = vscode.commands.registerCommand(
+        'swiftPackageHelper.generateBuildTasks',
+        async () => {
+            try {
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (!workspaceFolders || workspaceFolders.length === 0) {
+                    throw new Error('Open a workspace folder before running this command.');
+                }
+                const rootPath = workspaceFolders[0].uri.fsPath;
+                await generateBuildTasks(rootPath);
+            } catch (error) {
+                const message = (error as { message?: string }).message as string;
+                vscode.window.showErrorMessage(message);
+            }
+        }
+    );
+
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.pbxproj');
     const onProjectChange = watcher.onDidChange(async (uri) => {
         const action = await vscode.window.showInformationMessage(
@@ -394,7 +531,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    context.subscriptions.push(generateCommand, generateWithOptionsCommand, watcher, onProjectChange);
+    context.subscriptions.push(generateCommand, generateWithOptionsCommand, generateBuildTasksCommand, watcher, onProjectChange);
 }
 
 export function deactivate(): void {}

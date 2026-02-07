@@ -94,6 +94,7 @@ export interface BuildSettings {
     otherSwiftFlags?: string[];
     gccPreprocessorDefinitions?: string[];
     headerSearchPaths?: string[];
+    bundleIdentifier?: string;
 }
 
 export interface SwiftSettingsOutput {
