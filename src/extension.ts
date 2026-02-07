@@ -416,9 +416,47 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     }
 
     const projectName = path.basename(selectedProject, '.xcodeproj');
+
+    const schemesDir = path.join(rootPath, selectedProject, 'xcshareddata', 'xcschemes');
+    let schemes: string[] = [];
+    try {
+        const schemeFiles = await fsp.readdir(schemesDir);
+        schemes = schemeFiles
+            .filter((f) => f.endsWith('.xcscheme'))
+            .map((f) => path.basename(f, '.xcscheme'));
+    } catch {
+        // No shared schemes directory
+    }
+
+    let schemeName = projectName;
+    if (schemes.length === 1) {
+        schemeName = schemes[0];
+    } else if (schemes.length > 1) {
+        const pick = await vscode.window.showQuickPick(schemes, {
+            placeHolder: 'Select the scheme to build'
+        });
+        if (!pick) {
+            return;
+        }
+        schemeName = pick;
+    } else {
+        const targetNames = nonTestTargets.map((t) => t.name);
+        if (targetNames.length === 1) {
+            schemeName = targetNames[0];
+        } else {
+            const pick = await vscode.window.showQuickPick([projectName, ...targetNames], {
+                placeHolder: 'No shared schemes found. Select scheme name'
+            });
+            if (!pick) {
+                return;
+            }
+            schemeName = pick;
+        }
+    }
+
     const tasksContent = generateTasksJson({
         projectFile: selectedProject,
-        schemeName: projectName,
+        schemeName,
         productName: selectedTarget.productName || selectedTarget.name,
         bundleIdentifier,
         simulatorDevice: simulatorPick.label
@@ -512,7 +550,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.pbxproj');
-    const onProjectChange = watcher.onDidChange(async (uri) => {
+    const onProjectChange = watcher.onDidChange(async () => {
         const action = await vscode.window.showInformationMessage(
             'Xcode project file changed. Regenerate Package.swift?',
             'Regenerate',

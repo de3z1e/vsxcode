@@ -16,7 +16,7 @@ export function generateTasksJson(options: BuildTasksOptions): string {
     );
     const appPath = path.join(
         derivedDataPath,
-        'Build', 'Products', 'Debug-iphonesimulator', `${options.productName}.app`
+        'Build', 'Products', 'Debug-iphonesimulator', `${options.schemeName}.app`
     );
 
     const tasks = {
