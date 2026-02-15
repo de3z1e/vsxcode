@@ -74,6 +74,14 @@ export function generateTasksJson(options: BuildTasksOptions): string {
                 presentation: {
                     reveal: 'silent'
                 }
+            },
+            {
+                label: 'cleanup-debugserver',
+                type: 'shell',
+                command: 'pkill -f debugserver || true',
+                presentation: {
+                    reveal: 'silent'
+                }
             }
         ]
     };
@@ -91,6 +99,7 @@ export function generateLaunchJson(productName: string): string {
                 name: `Debug ${productName}`,
                 program: productName,
                 preLaunchTask: 'launch-app',
+                postDebugTask: 'cleanup-debugserver',
                 waitFor: true
             }
         ]
