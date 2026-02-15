@@ -95,6 +95,7 @@ export interface BuildSettings {
     gccPreprocessorDefinitions?: string[];
     headerSearchPaths?: string[];
     bundleIdentifier?: string;
+    productName?: string;
 }
 
 export interface SwiftSettingsOutput {

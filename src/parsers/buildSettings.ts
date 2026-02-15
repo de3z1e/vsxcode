@@ -56,6 +56,11 @@ export function parseBuildConfigurations(pbxContents: string): Map<string, Build
             settings.bundleIdentifier = cleanup(bundleIdMatch[1]);
         }
 
+        const productNameSettingMatch = /PRODUCT_NAME = ([^;]+);/.exec(settingsBlock);
+        if (productNameSettingMatch) {
+            settings.productName = cleanup(productNameSettingMatch[1]);
+        }
+
         configs.set(configId, settings);
     }
 

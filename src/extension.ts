@@ -383,9 +383,13 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     }
 
     let bundleIdentifier = '';
+    let resolvedProductName = selectedTarget.productName || selectedTarget.name;
     if (selectedTarget.buildConfigurationListId) {
         const settings = getBuildSettingsForTarget(pbxContents, selectedTarget.buildConfigurationListId, 'Debug');
         bundleIdentifier = settings?.bundleIdentifier || '';
+        if (settings?.productName && !settings.productName.includes('$(')) {
+            resolvedProductName = settings.productName;
+        }
     }
     if (!bundleIdentifier) {
         const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
@@ -457,11 +461,11 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     const tasksContent = generateTasksJson({
         projectFile: selectedProject,
         schemeName,
-        productName: selectedTarget.productName || selectedTarget.name,
+        productName: resolvedProductName,
         bundleIdentifier,
         simulatorDevice: simulatorPick.label
     });
-    const launchContent = generateLaunchJson(selectedTarget.productName || selectedTarget.name);
+    const launchContent = generateLaunchJson(resolvedProductName);
 
     const vscodeDir = path.join(rootPath, '.vscode');
     if (!fs.existsSync(vscodeDir)) {
