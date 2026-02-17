@@ -68,7 +68,7 @@ export function generateTasksJson(): string {
             {
                 label: 'build',
                 type: 'shell',
-                command: '.vscode/build.sh',
+                command: '.vscode/scripts/build.sh',
                 group: {
                     kind: 'build',
                     isDefault: true
@@ -82,7 +82,7 @@ export function generateTasksJson(): string {
             {
                 label: 'build-and-run',
                 type: 'shell',
-                command: '.vscode/build-and-run.sh',
+                command: '.vscode/scripts/build-and-run.sh',
                 presentation: {
                     reveal: 'always',
                     panel: 'dedicated'

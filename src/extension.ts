@@ -472,14 +472,15 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     const launchContent = generateLaunchJson(resolvedProductName);
 
     const vscodeDir = path.join(rootPath, '.vscode');
-    if (!fs.existsSync(vscodeDir)) {
-        await fsp.mkdir(vscodeDir, { recursive: true });
+    const scriptsDir = path.join(vscodeDir, 'scripts');
+    if (!fs.existsSync(scriptsDir)) {
+        await fsp.mkdir(scriptsDir, { recursive: true });
     }
 
     const tasksPath = path.join(vscodeDir, 'tasks.json');
     const launchPath = path.join(vscodeDir, 'launch.json');
-    const buildScriptPath = path.join(vscodeDir, 'build.sh');
-    const buildAndRunScriptPath = path.join(vscodeDir, 'build-and-run.sh');
+    const buildScriptPath = path.join(scriptsDir, 'build.sh');
+    const buildAndRunScriptPath = path.join(scriptsDir, 'build-and-run.sh');
 
     if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildAndRunScriptPath)) {
         const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
