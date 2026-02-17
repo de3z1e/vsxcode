@@ -24,7 +24,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 
 - Parses the `.xcodeproj` to extract the target name, scheme, and bundle identifier.
 - Queries available iOS simulators and lets you pick one.
-- Generates standalone shell scripts in `.vscode/`:
+- Generates standalone shell scripts in `.vscode/scripts/`:
   - `build.sh` — builds the project for the iOS Simulator.
   - `build-and-run.sh` — builds, boots the simulator, installs, and launches the app.
 - Generates a minimal `tasks.json` referencing the scripts and a `launch.json` with an LLDB attach configuration for debugging (F5).
