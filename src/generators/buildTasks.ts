@@ -1,6 +1,3 @@
-import * as os from 'os';
-import * as path from 'path';
-
 interface BuildTasksOptions {
     projectFile: string;
     schemeName: string;
@@ -9,36 +6,69 @@ interface BuildTasksOptions {
     simulatorDevice: string;
 }
 
-export function generateTasksJson(options: BuildTasksOptions): string {
-    const derivedDataPath = path.join(
-        os.homedir(),
-        'Library', 'Developer', 'VSCode', 'DerivedData', options.schemeName
-    );
-    const appPath = path.join(
-        derivedDataPath,
-        'Build', 'Products', 'Debug-iphonesimulator', `${options.productName}.app`
-    );
+export function generateBuildScript(options: BuildTasksOptions): string {
+    return `#!/bin/bash
+set -e
 
+# Build configuration
+PROJECT_FILE="${options.projectFile}"
+SCHEME_NAME="${options.schemeName}"
+DERIVED_DATA_PATH="$HOME/Library/Developer/VSCode/DerivedData/${options.schemeName}"
+
+# Build for iOS Simulator
+xcodebuild \\
+    -project "$PROJECT_FILE" \\
+    -scheme "$SCHEME_NAME" \\
+    -configuration Debug \\
+    -sdk iphonesimulator \\
+    -derivedDataPath "$DERIVED_DATA_PATH" \\
+    build
+`;
+}
+
+export function generateBuildAndRunScript(options: BuildTasksOptions): string {
+    return `#!/bin/bash
+set -e
+
+# Build configuration
+PROJECT_FILE="${options.projectFile}"
+SCHEME_NAME="${options.schemeName}"
+BUNDLE_IDENTIFIER="${options.bundleIdentifier}"
+SIMULATOR_DEVICE="${options.simulatorDevice}"
+DERIVED_DATA_PATH="$HOME/Library/Developer/VSCode/DerivedData/${options.schemeName}"
+APP_PATH="$DERIVED_DATA_PATH/Build/Products/Debug-iphonesimulator/${options.productName}.app"
+
+# Build for iOS Simulator
+xcodebuild \\
+    -project "$PROJECT_FILE" \\
+    -scheme "$SCHEME_NAME" \\
+    -configuration Debug \\
+    -sdk iphonesimulator \\
+    -derivedDataPath "$DERIVED_DATA_PATH" \\
+    build
+
+# Boot simulator (ignore error if already booted)
+xcrun simctl boot "$SIMULATOR_DEVICE" || true
+
+# Install app on simulator
+xcrun simctl install booted "$APP_PATH"
+
+# Launch app on simulator
+xcrun simctl launch booted "$BUNDLE_IDENTIFIER"
+
+# Bring Simulator.app to front
+open -a Simulator
+`;
+}
+
+export function generateTasksJson(): string {
     const tasks = {
         version: '2.0.0',
         tasks: [
             {
-                label: 'build-simulator',
+                label: 'build',
                 type: 'shell',
-                command: 'xcodebuild',
-                args: [
-                    '-project',
-                    options.projectFile,
-                    '-scheme',
-                    options.schemeName,
-                    '-configuration',
-                    'Debug',
-                    '-sdk',
-                    'iphonesimulator',
-                    '-derivedDataPath',
-                    derivedDataPath,
-                    'build'
-                ],
+                command: '.vscode/build.sh',
                 group: {
                     kind: 'build',
                     isDefault: true
@@ -50,30 +80,14 @@ export function generateTasksJson(options: BuildTasksOptions): string {
                 problemMatcher: ['$swiftc']
             },
             {
-                label: 'boot-simulator',
+                label: 'build-and-run',
                 type: 'shell',
-                command: `xcrun simctl boot '${options.simulatorDevice}' || true`,
+                command: '.vscode/build-and-run.sh',
                 presentation: {
-                    reveal: 'silent'
-                }
-            },
-            {
-                label: 'install-app',
-                type: 'shell',
-                command: `xcrun simctl install booted ${appPath}`,
-                dependsOn: ['build-simulator', 'boot-simulator'],
-                presentation: {
-                    reveal: 'silent'
-                }
-            },
-            {
-                label: 'launch-app',
-                type: 'shell',
-                command: `xcrun simctl launch booted ${options.bundleIdentifier} && open -a Simulator`,
-                dependsOn: ['install-app'],
-                presentation: {
-                    reveal: 'silent'
-                }
+                    reveal: 'always',
+                    panel: 'dedicated'
+                },
+                problemMatcher: ['$swiftc']
             },
             {
                 label: 'cleanup-debugserver',
@@ -98,7 +112,7 @@ export function generateLaunchJson(productName: string): string {
                 request: 'attach',
                 name: `Debug ${productName}`,
                 program: productName,
-                preLaunchTask: 'launch-app',
+                preLaunchTask: 'build-and-run',
                 postDebugTask: 'cleanup-debugserver',
                 waitFor: true
             }

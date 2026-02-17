@@ -8,7 +8,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 |---------|-------------|
 | **Swift: Generate Package.swift from Xcode Project** | Generates `Package.swift` from the active `.xcodeproj` using the Debug configuration. |
 | **Swift: Generate Package.swift from Xcode Project (with Options)** | Same as above but lets you choose Debug or Release configuration. |
-| **Swift: Generate VS Code Build Tasks** | Generates `.vscode/tasks.json` and `launch.json` for building and running on the iOS Simulator. |
+| **Swift: Generate VS Code Build Tasks** | Generates standalone build scripts, VS Code tasks, and a debug launch config for the iOS Simulator. |
 
 ### Capability
 
@@ -24,14 +24,16 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 
 - Parses the `.xcodeproj` to extract the target name, scheme, and bundle identifier.
 - Queries available iOS simulators and lets you pick one.
-- Generates a chained task pipeline: build → boot simulator → install app → launch app.
-- Generates an LLDB attach configuration for debugging (F5).
-- After generation, use ⇧⌘B to build and F5 to launch on the simulator.
+- Generates standalone shell scripts in `.vscode/`:
+  - `build.sh` — builds the project for the iOS Simulator.
+  - `build-and-run.sh` — builds, boots the simulator, installs, and launches the app.
+- Generates a minimal `tasks.json` referencing the scripts and a `launch.json` with an LLDB attach configuration for debugging (F5).
+- Scripts work standalone from any terminal; use ⇧⌘B to build and F5 to debug from VS Code.
 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-1.0.3.vsix`.
+- Install the bundled package directly: `code --install-extension swift-package-helper-1.0.4.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -39,7 +41,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-1.0.3.vsix
+code --install-extension swift-package-helper-1.0.4.vsix
 ```
 
 The `vsce package` step writes the new `.vsix` file to the project root. Update the filename in the final command if the version number changes.
