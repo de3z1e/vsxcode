@@ -48,7 +48,7 @@ xcodebuild \\
     build
 
 # Boot simulator (ignore error if already booted)
-xcrun simctl boot "$SIMULATOR_DEVICE" || true
+xcrun simctl boot "$SIMULATOR_DEVICE" 2>/dev/null || true
 
 # Install app on simulator
 xcrun simctl install booted "$APP_PATH"
