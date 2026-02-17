@@ -503,6 +503,16 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     vscode.window.showInformationMessage(
         `Build scripts generated for ${selectedTarget.name} on ${simulatorPick.label}`
     );
+
+    if (!vscode.extensions.getExtension('vadimcn.vscode-lldb')) {
+        const install = await vscode.window.showWarningMessage(
+            'CodeLLDB extension is required for debugging. Install it?',
+            'Install', 'Dismiss'
+        );
+        if (install === 'Install') {
+            vscode.commands.executeCommand('workbench.extensions.installExtension', 'vadimcn.vscode-lldb');
+        }
+    }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
