@@ -20,7 +20,7 @@ import { parseResourcesForTarget } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { generateBuildScript, generateBuildAndRunScript, generateTasksJson, generateLaunchJson } from './generators/buildTasks';
+import { generateBuildScript, generateBuildAndDebugScript, generateTasksJson, generateLaunchJson } from './generators/buildTasks';
 import { listAvailableSimulators } from './utils/simulator';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
@@ -467,7 +467,7 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     };
 
     const buildScriptContent = generateBuildScript(buildTasksOptions);
-    const buildAndRunScriptContent = generateBuildAndRunScript(buildTasksOptions);
+    const buildAndDebugScriptContent = generateBuildAndDebugScript(buildTasksOptions);
     const tasksContent = generateTasksJson();
     const launchContent = generateLaunchJson(resolvedProductName);
 
@@ -480,9 +480,9 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     const tasksPath = path.join(vscodeDir, 'tasks.json');
     const launchPath = path.join(vscodeDir, 'launch.json');
     const buildScriptPath = path.join(scriptsDir, 'build.sh');
-    const buildAndRunScriptPath = path.join(scriptsDir, 'build-and-run.sh');
+    const buildAndDebugScriptPath = path.join(scriptsDir, 'build-and-debug.sh');
 
-    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildAndRunScriptPath)) {
+    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildAndDebugScriptPath)) {
         const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
             placeHolder: '.vscode build files already exist. Overwrite?'
         });
@@ -492,13 +492,13 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     }
 
     await fsp.writeFile(buildScriptPath, buildScriptContent, 'utf8');
-    await fsp.writeFile(buildAndRunScriptPath, buildAndRunScriptContent, 'utf8');
+    await fsp.writeFile(buildAndDebugScriptPath, buildAndDebugScriptContent, 'utf8');
     await fsp.writeFile(tasksPath, tasksContent, 'utf8');
     await fsp.writeFile(launchPath, launchContent, 'utf8');
     await fsp.chmod(buildScriptPath, 0o755);
-    await fsp.chmod(buildAndRunScriptPath, 0o755);
+    await fsp.chmod(buildAndDebugScriptPath, 0o755);
 
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(buildAndRunScriptPath));
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(buildAndDebugScriptPath));
     await vscode.window.showTextDocument(document, { preview: false });
     vscode.window.showInformationMessage(
         `Build scripts generated for ${selectedTarget.name} on ${simulatorPick.label}`

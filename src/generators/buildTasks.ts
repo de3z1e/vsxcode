@@ -26,7 +26,7 @@ xcodebuild \\
 `;
 }
 
-export function generateBuildAndRunScript(options: BuildTasksOptions): string {
+export function generateBuildAndDebugScript(options: BuildTasksOptions): string {
     return `#!/bin/bash
 set -e
 
@@ -50,11 +50,14 @@ xcodebuild \\
 # Boot simulator (ignore error if already booted)
 xcrun simctl boot "$SIMULATOR_DEVICE" 2>/dev/null || true
 
+# Terminate existing instance (if running)
+xcrun simctl terminate booted "$BUNDLE_IDENTIFIER" 2>/dev/null || true
+
 # Install app on simulator
 xcrun simctl install booted "$APP_PATH"
 
-# Launch app on simulator
-xcrun simctl launch booted "$BUNDLE_IDENTIFIER"
+# Launch app on simulator (suspended until debugger attaches)
+xcrun simctl launch --wait-for-debugger booted "$BUNDLE_IDENTIFIER"
 
 # Bring Simulator.app to front
 open -a Simulator
@@ -80,9 +83,9 @@ export function generateTasksJson(): string {
                 problemMatcher: ['$swiftc']
             },
             {
-                label: 'build-and-run',
+                label: 'build-and-debug',
                 type: 'shell',
-                command: '.vscode/scripts/build-and-run.sh',
+                command: '.vscode/scripts/build-and-debug.sh',
                 presentation: {
                     reveal: 'always',
                     panel: 'dedicated'
@@ -112,7 +115,7 @@ export function generateLaunchJson(productName: string): string {
                 request: 'attach',
                 name: `Debug ${productName}`,
                 program: productName,
-                preLaunchTask: 'build-and-run',
+                preLaunchTask: 'build-and-debug',
                 postDebugTask: 'cleanup-debugserver',
                 waitFor: true
             }
