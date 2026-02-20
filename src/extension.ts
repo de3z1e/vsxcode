@@ -599,6 +599,7 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
+    let consoleExecution: vscode.TaskExecution | undefined;
 
     const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
         const taskName = event.execution.task.name;
@@ -617,7 +618,7 @@ export function activate(context: vscode.ExtensionContext): void {
         if (consoleTask) {
             outputChannel.appendLine('[app-console] executing app-console task...');
             try {
-                await vscode.tasks.executeTask(consoleTask);
+                consoleExecution = await vscode.tasks.executeTask(consoleTask);
                 outputChannel.appendLine('[app-console] task started successfully');
             } catch (error) {
                 const message = (error as { message?: string }).message;
@@ -628,7 +629,18 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    context.subscriptions.push(generateCommand, generateWithOptionsCommand, generateBuildTasksCommand, watcher, onProjectChange, onTaskEnd);
+    const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async () => {
+        if (consoleExecution) {
+            outputChannel.appendLine('[debug-end] terminating console task');
+            consoleExecution.terminate();
+            consoleExecution = undefined;
+        }
+        outputChannel.appendLine('[debug-end] cleaning up debugserver');
+        const cp = await import('child_process');
+        cp.exec('pkill -f debugserver', () => {});
+    });
+
+    context.subscriptions.push(generateCommand, generateWithOptionsCommand, generateBuildTasksCommand, watcher, onProjectChange, onTaskEnd, onDebugEnd);
 }
 
 export function deactivate(): void {}

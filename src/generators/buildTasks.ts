@@ -106,14 +106,6 @@ export function generateTasksJson(): string {
                     panel: 'dedicated'
                 },
                 problemMatcher: []
-            },
-            {
-                label: 'cleanup-debugserver',
-                type: 'shell',
-                command: 'pkill -f debugserver || true',
-                presentation: {
-                    reveal: 'silent'
-                }
             }
         ]
     };
@@ -131,7 +123,6 @@ export function generateLaunchJson(productName: string): string {
                 name: `Debug ${productName}`,
                 program: productName,
                 preLaunchTask: 'build-and-debug',
-                postDebugTask: 'cleanup-debugserver',
                 waitFor: true
             }
         ]
