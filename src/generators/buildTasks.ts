@@ -26,7 +26,7 @@ xcodebuild \\
 `;
 }
 
-export function generateBuildAndDebugScript(options: BuildTasksOptions): string {
+export function generateBuildInstallScript(options: BuildTasksOptions): string {
     return `#!/bin/bash
 set -e
 
@@ -61,7 +61,7 @@ open -a Simulator
 `;
 }
 
-export function generateConsoleScript(options: BuildTasksOptions): string {
+export function generateLaunchAppScript(options: BuildTasksOptions): string {
     return `#!/bin/bash
 
 # Launch app and stream stdout/stderr via pty
@@ -88,9 +88,9 @@ export function generateTasksJson(): string {
                 problemMatcher: ['$swiftc']
             },
             {
-                label: 'build-and-debug',
+                label: 'build-install',
                 type: 'shell',
-                command: '.vscode/scripts/build-and-debug.sh',
+                command: '.vscode/scripts/build-install.sh',
                 presentation: {
                     reveal: 'always',
                     panel: 'dedicated'
@@ -98,9 +98,9 @@ export function generateTasksJson(): string {
                 problemMatcher: ['$swiftc']
             },
             {
-                label: 'app-console',
+                label: 'launch-app',
                 type: 'shell',
-                command: '.vscode/scripts/console.sh',
+                command: '.vscode/scripts/launch-app.sh',
                 presentation: {
                     reveal: 'always',
                     panel: 'dedicated'
@@ -122,7 +122,7 @@ export function generateLaunchJson(productName: string): string {
                 request: 'attach',
                 name: `Debug ${productName}`,
                 program: productName,
-                preLaunchTask: 'build-and-debug',
+                preLaunchTask: 'build-install',
                 waitFor: true
             }
         ]

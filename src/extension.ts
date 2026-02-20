@@ -20,7 +20,7 @@ import { parseResourcesForTarget } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { generateBuildScript, generateBuildAndDebugScript, generateConsoleScript, generateTasksJson, generateLaunchJson } from './generators/buildTasks';
+import { generateBuildScript, generateBuildInstallScript, generateLaunchAppScript, generateTasksJson, generateLaunchJson } from './generators/buildTasks';
 import { listAvailableSimulators } from './utils/simulator';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
@@ -467,8 +467,8 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     };
 
     const buildScriptContent = generateBuildScript(buildTasksOptions);
-    const buildAndDebugScriptContent = generateBuildAndDebugScript(buildTasksOptions);
-    const consoleScriptContent = generateConsoleScript(buildTasksOptions);
+    const buildInstallScriptContent = generateBuildInstallScript(buildTasksOptions);
+    const launchAppScriptContent = generateLaunchAppScript(buildTasksOptions);
     const tasksContent = generateTasksJson();
     const launchContent = generateLaunchJson(resolvedProductName);
 
@@ -481,10 +481,10 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     const tasksPath = path.join(vscodeDir, 'tasks.json');
     const launchPath = path.join(vscodeDir, 'launch.json');
     const buildScriptPath = path.join(scriptsDir, 'build.sh');
-    const buildAndDebugScriptPath = path.join(scriptsDir, 'build-and-debug.sh');
-    const consoleScriptPath = path.join(scriptsDir, 'console.sh');
+    const buildInstallScriptPath = path.join(scriptsDir, 'build-install.sh');
+    const launchAppScriptPath = path.join(scriptsDir, 'launch-app.sh');
 
-    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildAndDebugScriptPath) || fs.existsSync(consoleScriptPath)) {
+    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildInstallScriptPath) || fs.existsSync(launchAppScriptPath)) {
         const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
             placeHolder: '.vscode build files already exist. Overwrite?'
         });
@@ -494,15 +494,15 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     }
 
     await fsp.writeFile(buildScriptPath, buildScriptContent, 'utf8');
-    await fsp.writeFile(buildAndDebugScriptPath, buildAndDebugScriptContent, 'utf8');
-    await fsp.writeFile(consoleScriptPath, consoleScriptContent, 'utf8');
+    await fsp.writeFile(buildInstallScriptPath, buildInstallScriptContent, 'utf8');
+    await fsp.writeFile(launchAppScriptPath, launchAppScriptContent, 'utf8');
     await fsp.writeFile(tasksPath, tasksContent, 'utf8');
     await fsp.writeFile(launchPath, launchContent, 'utf8');
     await fsp.chmod(buildScriptPath, 0o755);
-    await fsp.chmod(buildAndDebugScriptPath, 0o755);
-    await fsp.chmod(consoleScriptPath, 0o755);
+    await fsp.chmod(buildInstallScriptPath, 0o755);
+    await fsp.chmod(launchAppScriptPath, 0o755);
 
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(buildAndDebugScriptPath));
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(buildInstallScriptPath));
     await vscode.window.showTextDocument(document, { preview: false });
     vscode.window.showInformationMessage(
         `Build scripts generated for ${selectedTarget.name} on ${simulatorPick.label}`
@@ -606,26 +606,26 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[task-end] "${taskName}" exited with code ${event.exitCode}`);
         outputChannel.show(true);
 
-        if (taskName !== 'build-and-debug' || event.exitCode !== 0) {
+        if (taskName !== 'build-install' || event.exitCode !== 0) {
             return;
         }
 
-        outputChannel.appendLine('[app-console] fetching workspace tasks...');
+        outputChannel.appendLine('[launch-app] fetching workspace tasks...');
         const tasks = await vscode.tasks.fetchTasks();
-        outputChannel.appendLine(`[app-console] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
+        outputChannel.appendLine(`[launch-app] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
 
-        const consoleTask = tasks.find((t) => t.name === 'app-console');
-        if (consoleTask) {
-            outputChannel.appendLine('[app-console] executing app-console task...');
+        const launchTask = tasks.find((t) => t.name === 'launch-app');
+        if (launchTask) {
+            outputChannel.appendLine('[launch-app] executing launch-app task...');
             try {
-                consoleExecution = await vscode.tasks.executeTask(consoleTask);
-                outputChannel.appendLine('[app-console] task started successfully');
+                consoleExecution = await vscode.tasks.executeTask(launchTask);
+                outputChannel.appendLine('[launch-app] task started successfully');
             } catch (error) {
                 const message = (error as { message?: string }).message;
-                outputChannel.appendLine(`[app-console] task failed: ${message}`);
+                outputChannel.appendLine(`[launch-app] task failed: ${message}`);
             }
         } else {
-            outputChannel.appendLine('[app-console] ERROR: app-console task not found in workspace');
+            outputChannel.appendLine('[launch-app] ERROR: launch-app task not found in workspace');
         }
     });
 

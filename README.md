@@ -26,10 +26,10 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 - Queries available iOS simulators and lets you pick one.
 - Generates standalone shell scripts in `.vscode/scripts/`:
   - `build.sh` — builds the project for the iOS Simulator.
-  - `build-and-debug.sh` — builds, boots the simulator, installs the app, and opens Simulator.
-  - `console.sh` — launches the app with a pty-connected console, streaming `print()` output to a dedicated VS Code terminal.
+  - `build-install.sh` — builds, boots the simulator, installs the app, and opens Simulator.
+  - `launch-app.sh` — launches the app with a pty-connected console, streaming `print()` output to a dedicated VS Code terminal.
 - Generates a minimal `tasks.json` referencing the scripts and a `launch.json` with an LLDB attach configuration for debugging (F5).
-- The `app-console` task is auto-triggered after a successful build-and-debug, launching the app and piping stdout/stderr via `--console-pty`.
+- The `launch-app` task is auto-triggered after a successful build-install, launching the app and piping stdout/stderr via `--console-pty`.
 - Scripts work standalone from any terminal; use ⇧⌘B to build and F5 to debug from VS Code.
 
 ### Installation
