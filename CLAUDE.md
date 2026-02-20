@@ -11,6 +11,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 No test framework or linter is configured.
 
+**Important**: After every code change, always compile, package, and install the extension into VS Code:
+```
+npm run compile && npm run package && code --install-extension *.vsix --force
+```
+
 ## Architecture
 
 VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.swift` and build task configurations. Requires macOS with Xcode installed.

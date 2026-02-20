@@ -20,7 +20,7 @@ import { parseResourcesForTarget } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { generateBuildScript, generateBuildAndDebugScript, generateTasksJson, generateLaunchJson } from './generators/buildTasks';
+import { generateBuildScript, generateBuildAndDebugScript, generateConsoleScript, generateTasksJson, generateLaunchJson } from './generators/buildTasks';
 import { listAvailableSimulators } from './utils/simulator';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
@@ -468,6 +468,7 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
 
     const buildScriptContent = generateBuildScript(buildTasksOptions);
     const buildAndDebugScriptContent = generateBuildAndDebugScript(buildTasksOptions);
+    const consoleScriptContent = generateConsoleScript(buildTasksOptions);
     const tasksContent = generateTasksJson();
     const launchContent = generateLaunchJson(resolvedProductName);
 
@@ -481,8 +482,9 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
     const launchPath = path.join(vscodeDir, 'launch.json');
     const buildScriptPath = path.join(scriptsDir, 'build.sh');
     const buildAndDebugScriptPath = path.join(scriptsDir, 'build-and-debug.sh');
+    const consoleScriptPath = path.join(scriptsDir, 'console.sh');
 
-    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildAndDebugScriptPath)) {
+    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildAndDebugScriptPath) || fs.existsSync(consoleScriptPath)) {
         const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
             placeHolder: '.vscode build files already exist. Overwrite?'
         });
@@ -493,10 +495,12 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
 
     await fsp.writeFile(buildScriptPath, buildScriptContent, 'utf8');
     await fsp.writeFile(buildAndDebugScriptPath, buildAndDebugScriptContent, 'utf8');
+    await fsp.writeFile(consoleScriptPath, consoleScriptContent, 'utf8');
     await fsp.writeFile(tasksPath, tasksContent, 'utf8');
     await fsp.writeFile(launchPath, launchContent, 'utf8');
     await fsp.chmod(buildScriptPath, 0o755);
     await fsp.chmod(buildAndDebugScriptPath, 0o755);
+    await fsp.chmod(consoleScriptPath, 0o755);
 
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(buildAndDebugScriptPath));
     await vscode.window.showTextDocument(document, { preview: false });
@@ -594,7 +598,37 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
-    context.subscriptions.push(generateCommand, generateWithOptionsCommand, generateBuildTasksCommand, watcher, onProjectChange);
+    const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
+
+    const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
+        const taskName = event.execution.task.name;
+        outputChannel.appendLine(`[task-end] "${taskName}" exited with code ${event.exitCode}`);
+        outputChannel.show(true);
+
+        if (taskName !== 'build-and-debug' || event.exitCode !== 0) {
+            return;
+        }
+
+        outputChannel.appendLine('[app-console] fetching workspace tasks...');
+        const tasks = await vscode.tasks.fetchTasks();
+        outputChannel.appendLine(`[app-console] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
+
+        const consoleTask = tasks.find((t) => t.name === 'app-console');
+        if (consoleTask) {
+            outputChannel.appendLine('[app-console] executing app-console task...');
+            try {
+                await vscode.tasks.executeTask(consoleTask);
+                outputChannel.appendLine('[app-console] task started successfully');
+            } catch (error) {
+                const message = (error as { message?: string }).message;
+                outputChannel.appendLine(`[app-console] task failed: ${message}`);
+            }
+        } else {
+            outputChannel.appendLine('[app-console] ERROR: app-console task not found in workspace');
+        }
+    });
+
+    context.subscriptions.push(generateCommand, generateWithOptionsCommand, generateBuildTasksCommand, watcher, onProjectChange, onTaskEnd);
 }
 
 export function deactivate(): void {}

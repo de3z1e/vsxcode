@@ -56,11 +56,16 @@ xcrun simctl terminate booted "$BUNDLE_IDENTIFIER" 2>/dev/null || true
 # Install app on simulator
 xcrun simctl install booted "$APP_PATH"
 
-# Launch app on simulator (suspended until debugger attaches)
-xcrun simctl launch --wait-for-debugger booted "$BUNDLE_IDENTIFIER"
-
 # Bring Simulator.app to front
 open -a Simulator
+`;
+}
+
+export function generateConsoleScript(options: BuildTasksOptions): string {
+    return `#!/bin/bash
+
+# Launch app and stream stdout/stderr via pty
+xcrun simctl launch --console-pty --wait-for-debugger booted "${options.bundleIdentifier}"
 `;
 }
 
@@ -91,6 +96,16 @@ export function generateTasksJson(): string {
                     panel: 'dedicated'
                 },
                 problemMatcher: ['$swiftc']
+            },
+            {
+                label: 'app-console',
+                type: 'shell',
+                command: '.vscode/scripts/console.sh',
+                presentation: {
+                    reveal: 'always',
+                    panel: 'dedicated'
+                },
+                problemMatcher: []
             },
             {
                 label: 'cleanup-debugserver',
