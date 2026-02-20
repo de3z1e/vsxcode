@@ -6,9 +6,18 @@ interface BuildTasksOptions {
     simulatorDevice: string;
 }
 
+// sed filter to colorize xcodebuild output (red errors, yellow warnings)
+const COLORIZE_BUILD = `sed \\
+    -e 's/\\(.*error:.*\\)/\\x1b[31m\\1\\x1b[0m/' \\
+    -e 's/\\(.*ERROR:.*\\)/\\x1b[31m\\1\\x1b[0m/' \\
+    -e 's/\\(.*warning:.*\\)/\\x1b[33m\\1\\x1b[0m/' \\
+    -e 's/\\(.*WARNING:.*\\)/\\x1b[33m\\1\\x1b[0m/' \\
+    -e 's/\\(.*BUILD FAILED.*\\)/\\x1b[31m\\1\\x1b[0m/' \\
+    -e 's/\\(.*failures)\\)/\\x1b[31m\\1\\x1b[0m/'`;
+
 export function generateBuildScript(options: BuildTasksOptions): string {
     return `#!/bin/bash
-set -e
+set -eo pipefail
 
 # Build configuration
 PROJECT_FILE="${options.projectFile}"
@@ -22,13 +31,13 @@ xcodebuild \\
     -configuration Debug \\
     -sdk iphonesimulator \\
     -derivedDataPath "$DERIVED_DATA_PATH" \\
-    build
+    build 2>&1 | ${COLORIZE_BUILD}
 `;
 }
 
 export function generateBuildInstallScript(options: BuildTasksOptions): string {
     return `#!/bin/bash
-set -e
+set -eo pipefail
 
 # Build configuration
 PROJECT_FILE="${options.projectFile}"
@@ -45,7 +54,7 @@ xcodebuild \\
     -configuration Debug \\
     -sdk iphonesimulator \\
     -derivedDataPath "$DERIVED_DATA_PATH" \\
-    build
+    build 2>&1 | ${COLORIZE_BUILD}
 
 # Boot simulator (ignore error if already booted)
 xcrun simctl boot "$SIMULATOR_DEVICE" 2>/dev/null || true
