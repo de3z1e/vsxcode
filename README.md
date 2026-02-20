@@ -30,6 +30,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
   - `launch-app.sh` — launches the app with a pty-connected console, streaming `print()` output to a dedicated VS Code terminal.
 - Generates a minimal `tasks.json` referencing the scripts and a `launch.json` with an LLDB attach configuration for debugging (F5).
 - The `launch-app` task is auto-triggered after a successful build-install, launching the app and piping stdout/stderr via `--console-pty`.
+- Build output is colorized: errors and `BUILD FAILED` in red, warnings in yellow.
 - Scripts work standalone from any terminal; use ⇧⌘B to build and F5 to debug from VS Code.
 
 ### Installation
