@@ -127,12 +127,13 @@ export function generateLaunchJson(productName: string): string {
         version: '0.2.0',
         configurations: [
             {
-                type: 'lldb',
+                type: 'lldb-dap',
                 request: 'attach',
                 name: `Debug ${productName}`,
-                program: productName,
                 preLaunchTask: 'build-install',
-                waitFor: true
+                attachCommands: [
+                    `process attach --name ${productName} --waitfor`
+                ]
             }
         ]
     };

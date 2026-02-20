@@ -23,6 +23,9 @@
         "xcode",
         "spm"
     ],
+    "extensionDependencies": [
+        "swiftlang.swift-vscode"
+    ],
     "activationEvents": [
         "onDebug",
         "workspaceContains:**/*.xcodeproj"

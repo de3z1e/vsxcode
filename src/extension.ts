@@ -293,6 +293,45 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         defaultLocalization: defaultLocalization || undefined
     });
 
+    // Populate SourceKit-LSP settings for iOS simulator target resolution
+    const iosPlatform = platforms.find((p) => p.platform === 'iOS');
+    if (iosPlatform) {
+        try {
+            const cp = await import('child_process');
+            const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
+            const sdkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk`;
+            const serverArguments = [
+                '-Xswiftc', '-sdk',
+                '-Xswiftc', sdkPath,
+                '-Xswiftc', '-target',
+                '-Xswiftc', `arm64-apple-ios${iosPlatform.version}-simulator`,
+                '-Xswiftc', '-F',
+                '-Xswiftc', `${sdkPath}/System/Library/Frameworks`
+            ];
+
+            const vscodeDir = path.join(rootPath, '.vscode');
+            if (!fs.existsSync(vscodeDir)) {
+                await fsp.mkdir(vscodeDir, { recursive: true });
+            }
+            const settingsPath = path.join(vscodeDir, 'settings.json');
+            let existingSettings: Record<string, unknown> = {};
+            if (fs.existsSync(settingsPath)) {
+                try {
+                    const raw = await fsp.readFile(settingsPath, 'utf8');
+                    existingSettings = JSON.parse(raw);
+                } catch {
+                    // Malformed settings.json — overwrite the key only
+                }
+            }
+            existingSettings['swift.sourcekit-lsp.serverArguments'] = serverArguments;
+            await fsp.writeFile(settingsPath, JSON.stringify(existingSettings, null, 2) + '\n', 'utf8');
+        } catch {
+            vscode.window.showWarningMessage(
+                'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
+            );
+        }
+    }
+
     const packagePath = path.join(rootPath, 'Package.swift');
 
     if (fs.existsSync(packagePath)) {
@@ -508,13 +547,13 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
         `Build scripts generated for ${selectedTarget.name} on ${simulatorPick.label}`
     );
 
-    if (!vscode.extensions.getExtension('vadimcn.vscode-lldb')) {
+    if (!vscode.extensions.getExtension('llvm-vs-code-extensions.lldb-dap')) {
         const install = await vscode.window.showWarningMessage(
-            'CodeLLDB extension is required for debugging. Install it?',
+            'LLDB DAP extension is required for debugging. Install it?',
             'Install', 'Dismiss'
         );
         if (install === 'Install') {
-            vscode.commands.executeCommand('workbench.extensions.installExtension', 'vadimcn.vscode-lldb');
+            vscode.commands.executeCommand('workbench.extensions.installExtension', 'llvm-vs-code-extensions.lldb-dap');
         }
     }
 }

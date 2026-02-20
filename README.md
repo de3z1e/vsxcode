@@ -17,6 +17,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 - Detects the first `.xcodeproj` in the workspace (or lets you pick when multiple exist).
 - Extracts Swift tools version, platform deployment targets, targets, and product metadata.
 - Includes per-target swift settings (`.define`, `.unsafeFlags`, `.swiftLanguageMode`), linked system frameworks, resources, header search paths, target dependencies, and excluded files.
+- Automatically configures SourceKit-LSP server arguments in `.vscode/settings.json` for iOS simulator target resolution (SDK path, target triple, framework search path).
 - Shows a diff view before overwriting an existing `Package.swift`.
 - Auto-prompts to regenerate when the `.pbxproj` file changes.
 
@@ -28,10 +29,15 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
   - `build.sh` — builds the project for the iOS Simulator.
   - `build-install.sh` — builds, boots the simulator, installs the app, and opens Simulator.
   - `launch-app.sh` — launches the app with a pty-connected console, streaming `print()` output to a dedicated VS Code terminal.
-- Generates a minimal `tasks.json` referencing the scripts and a `launch.json` with an LLDB attach configuration for debugging (F5).
+- Generates a minimal `tasks.json` referencing the scripts and a `launch.json` with an LLDB DAP attach configuration for debugging (F5).
 - The `launch-app` task is auto-triggered after a successful build-install, launching the app and piping stdout/stderr via `--console-pty`.
 - Build output is colorized: errors and `BUILD FAILED` in red, warnings in yellow.
 - Scripts work standalone from any terminal; use ⇧⌘B to build and F5 to debug from VS Code.
+
+**Dependencies**
+
+- [Swift for VS Code](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode) — automatically installed as a dependency for SourceKit-LSP support.
+- [LLDB DAP](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.lldb-dap) — prompted for install when generating build tasks (required for debugging).
 
 ### Installation
 
