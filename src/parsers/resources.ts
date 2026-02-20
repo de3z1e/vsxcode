@@ -2,6 +2,7 @@ import type { ResourceOutput } from '../types/interfaces';
 import { PROCESSABLE_RESOURCE_EXTENSIONS } from '../types/constants';
 import { cleanup } from '../utils/version';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export function determineResourceType(filePath: string): '.process' | '.copy' {
     const ext = path.extname(filePath).toLowerCase();
@@ -39,33 +40,67 @@ export function parseResourcesBuildPhase(
     return fileRefs;
 }
 
-export function buildResourceOutputs(fileNames: string[]): ResourceOutput[] {
+function findFileInDirectory(dir: string, fileName: string): string | null {
+    try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.name === fileName) {
+                return dir;
+            }
+            if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                const found = findFileInDirectory(path.join(dir, entry.name), fileName);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+    } catch {
+        // directory not readable
+    }
+    return null;
+}
+
+export function resolveResourcePaths(
+    fileNames: string[],
+    targetAbsolutePath: string
+): ResourceOutput[] {
     if (fileNames.length === 0) {
         return [];
     }
 
-    const dirSet = new Set<string>();
-    const individualFiles: ResourceOutput[] = [];
+    const outputs: ResourceOutput[] = [];
+    const addedPaths = new Set<string>();
 
     for (const fileName of fileNames) {
-        const ext = path.extname(fileName).toLowerCase();
         const resourceType = determineResourceType(fileName);
+        const containingDir = findFileInDirectory(targetAbsolutePath, fileName);
 
-        if (PROCESSABLE_RESOURCE_EXTENSIONS.has(ext)) {
-            dirSet.add('Resources');
-        } else {
-            individualFiles.push({ type: resourceType, path: fileName });
+        if (!containingDir) {
+            // File not found on disk — use bare name as fallback
+            if (!addedPaths.has(fileName)) {
+                outputs.push({ type: resourceType, path: fileName });
+                addedPaths.add(fileName);
+            }
+            continue;
         }
-    }
 
-    const outputs: ResourceOutput[] = [];
+        const relativePath = path.relative(targetAbsolutePath, path.join(containingDir, fileName));
+        const normalizedPath = relativePath.split(path.sep).join('/');
 
-    if (dirSet.has('Resources')) {
-        outputs.push({ type: '.process', path: 'Resources' });
-    }
-
-    for (const file of individualFiles) {
-        outputs.push(file);
+        if (resourceType === '.process') {
+            // For processable resources at the target root, use the file directly
+            // For processable resources in a subdirectory, use the file path
+            if (!addedPaths.has(normalizedPath)) {
+                outputs.push({ type: '.process', path: normalizedPath });
+                addedPaths.add(normalizedPath);
+            }
+        } else {
+            // For non-processable resources in a subdirectory, use the full relative path
+            if (!addedPaths.has(normalizedPath)) {
+                outputs.push({ type: '.copy', path: normalizedPath });
+                addedPaths.add(normalizedPath);
+            }
+        }
     }
 
     return outputs;
@@ -73,11 +108,19 @@ export function buildResourceOutputs(fileNames: string[]): ResourceOutput[] {
 
 export function parseResourcesForTarget(
     pbxContents: string,
-    resourcesBuildPhaseId: string | undefined
+    resourcesBuildPhaseId: string | undefined,
+    targetAbsolutePath?: string
 ): ResourceOutput[] {
     if (!resourcesBuildPhaseId) {
         return [];
     }
     const fileNames = parseResourcesBuildPhase(pbxContents, resourcesBuildPhaseId);
-    return buildResourceOutputs(fileNames);
+    if (targetAbsolutePath) {
+        return resolveResourcePaths(fileNames, targetAbsolutePath);
+    }
+    // Fallback: bare filenames with type inference
+    return fileNames.map((fileName) => ({
+        type: determineResourceType(fileName),
+        path: fileName
+    }));
 }

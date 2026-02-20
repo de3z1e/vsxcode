@@ -2,7 +2,7 @@
     "name": "swift-package-helper",
     "displayName": "Swift Package Helper",
     "description": "Xcode project integration for VS Code — IntelliSense, build tasks, and simulator debugging.",
-    "version": "1.3.1",
+    "version": "2.0.0",
     "publisher": "de3z1e",
     "icon": "images/icon.png",
     "license": "MIT",
@@ -30,10 +30,34 @@
     ],
     "activationEvents": [
         "onDebug",
-        "workspaceContains:**/*.xcodeproj"
+        "workspaceContains:**/*.pbxproj"
     ],
     "main": "./out/extension.js",
     "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "swiftPackageHelper",
+                    "title": "Swift Package Helper",
+                    "icon": "images/icon.png"
+                }
+            ]
+        },
+        "views": {
+            "swiftPackageHelper": [
+                {
+                    "id": "swiftPackageHelper.sidebar",
+                    "name": "Xcode Build",
+                    "when": "workspaceFolderCount > 0"
+                }
+            ]
+        },
+        "viewsWelcome": [
+            {
+                "view": "swiftPackageHelper.sidebar",
+                "contents": "No Xcode project found in this workspace."
+            }
+        ],
         "commands": [
             {
                 "command": "swiftPackageHelper.createFromXcodeproj",
@@ -45,7 +69,74 @@
             },
             {
                 "command": "swiftPackageHelper.generateBuildTasks",
-                "title": "Swift: Generate VS Code Build Tasks"
+                "title": "Swift: Configure Build Tasks"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.changeProject",
+                "title": "Change Project"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.changeTarget",
+                "title": "Change Target"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.changeScheme",
+                "title": "Change Scheme"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.changeBundleId",
+                "title": "Change Bundle Identifier"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.selectSimulator",
+                "title": "Select Simulator"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.build",
+                "title": "Build",
+                "icon": "$(tools)"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.buildAndRun",
+                "title": "Build & Run",
+                "icon": "$(debug-alt)"
+            },
+            {
+                "command": "swiftPackageHelper.sidebar.refresh",
+                "title": "Refresh",
+                "icon": "$(refresh)"
+            }
+        ],
+        "menus": {
+            "view/title": [
+                {
+                    "command": "swiftPackageHelper.sidebar.build",
+                    "when": "view == swiftPackageHelper.sidebar",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "swiftPackageHelper.sidebar.buildAndRun",
+                    "when": "view == swiftPackageHelper.sidebar",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "swiftPackageHelper.sidebar.refresh",
+                    "when": "view == swiftPackageHelper.sidebar",
+                    "group": "navigation@3"
+                }
+            ]
+        },
+        "taskDefinitions": [
+            {
+                "type": "xcode-build",
+                "required": ["task"],
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "enum": ["build", "build-install", "launch-app"],
+                        "description": "The Xcode build task to run"
+                    }
+                }
             }
         ],
         "keybindings": [

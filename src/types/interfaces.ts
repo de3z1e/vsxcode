@@ -136,3 +136,12 @@ export interface TargetDependencyInfo {
     targetId: string;
     targetName: string;
 }
+
+export interface BuildTaskConfig {
+    projectFile: string;
+    schemeName: string;
+    targetName: string;
+    productName: string;
+    bundleIdentifier: string;
+    simulatorDevice: string;
+}

@@ -53,7 +53,10 @@ export async function detectSwiftToolsVersion(): Promise<string | null> {
             const { stdout } = await execFile(entry.command, entry.args, { encoding: 'utf8' });
             const version = parseSwiftToolsVersion(stdout);
             if (version) {
-                return version;
+                // Use major.minor only — patch versions can cause
+                // compatibility issues with different toolchain builds
+                const parts = version.split('.');
+                return parts.slice(0, 2).join('.');
             }
         } catch (error) {
             // Ignore and try next candidate.

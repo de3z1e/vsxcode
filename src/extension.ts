@@ -20,8 +20,11 @@ import { parseResourcesForTarget } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { generateBuildScript, generateBuildInstallScript, generateLaunchAppScript, generateTasksJson, generateLaunchJson } from './generators/buildTasks';
 import { listAvailableSimulators } from './utils/simulator';
+import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
+import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
+import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
+import type { BuildTaskConfig } from './types/interfaces';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
 import { PLATFORM_KEYS, DEFAULT_PLATFORM } from './types/constants';
@@ -131,7 +134,7 @@ function generateCSettings(headerSearchPaths: string[] | undefined): string[] {
     return filtered.map((p) => `.headerSearchPath("${p}")`);
 }
 
-async function generatePackageSwift(rootPath: string, configurationName: string = 'Debug'): Promise<void> {
+async function generatePackageSwift(rootPath: string, configurationName: string = 'Debug', silent: boolean = false): Promise<void> {
     const entries = await fsp.readdir(rootPath, { withFileTypes: true });
     const xcodeProjects = entries.filter(
         (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
@@ -141,7 +144,7 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
     }
 
     let selectedProject = xcodeProjects[0].name;
-    if (xcodeProjects.length > 1) {
+    if (xcodeProjects.length > 1 && !silent) {
         const pick = await vscode.window.showQuickPick(
             xcodeProjects.map((entry) => entry.name),
             { placeHolder: 'Select the Xcode project to read' }
@@ -210,7 +213,7 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
             productName: target.productName,
             productType: target.productType,
             spmType: testTarget ? '.testTarget' as const : '.target' as const,
-            path: determineTargetPath(rootPath, target.name, testTarget),
+            path: determineTargetPath(rootPath, target.name, testTarget, target.productName),
             isTest: testTarget,
             dependencies: uniqueDependencies
         };
@@ -252,7 +255,8 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
 
         const swiftSettings = generateSwiftSettings(projectBuildSettings, targetSettings, configurationName);
         const linkedFrameworks = parseLinkedFrameworksForTarget(pbxContents, buildPhases.frameworksBuildPhaseId);
-        const resources = parseResourcesForTarget(pbxContents, buildPhases.resourcesBuildPhaseId);
+        const targetAbsolutePath = path.join(rootPath, targetDef.path);
+        const resources = parseResourcesForTarget(pbxContents, buildPhases.resourcesBuildPhaseId, targetAbsolutePath);
         const excluded = parseExcludedFiles(pbxContents, nativeTarget.name);
 
         const headerPaths = targetSettings?.headerSearchPaths;
@@ -309,22 +313,8 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
                 '-Xswiftc', `${sdkPath}/System/Library/Frameworks`
             ];
 
-            const vscodeDir = path.join(rootPath, '.vscode');
-            if (!fs.existsSync(vscodeDir)) {
-                await fsp.mkdir(vscodeDir, { recursive: true });
-            }
-            const settingsPath = path.join(vscodeDir, 'settings.json');
-            let existingSettings: Record<string, unknown> = {};
-            if (fs.existsSync(settingsPath)) {
-                try {
-                    const raw = await fsp.readFile(settingsPath, 'utf8');
-                    existingSettings = JSON.parse(raw);
-                } catch {
-                    // Malformed settings.json — overwrite the key only
-                }
-            }
-            existingSettings['swift.sourcekit-lsp.serverArguments'] = serverArguments;
-            await fsp.writeFile(settingsPath, JSON.stringify(existingSettings, null, 2) + '\n', 'utf8');
+            const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
+            await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
         } catch {
             vscode.window.showWarningMessage(
                 'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
@@ -337,43 +327,49 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
     if (fs.existsSync(packagePath)) {
         const existingContents = await fsp.readFile(packagePath, 'utf8');
         if (existingContents === packageContents) {
-            vscode.window.showInformationMessage('Package.swift is already up to date.');
+            if (!silent) {
+                vscode.window.showInformationMessage('Package.swift is already up to date.');
+            }
             return;
         }
 
-        const existingUri = vscode.Uri.file(packagePath);
-        const previewUri = vscode.Uri.parse(`untitled:Package.swift.preview`);
-        const previewDoc = await vscode.workspace.openTextDocument(previewUri);
-        const previewEditor = await vscode.window.showTextDocument(previewDoc, { preview: true });
-        await previewEditor.edit((edit) => {
-            edit.insert(new vscode.Position(0, 0), packageContents);
-        });
+        if (!silent) {
+            const existingUri = vscode.Uri.file(packagePath);
+            const previewUri = vscode.Uri.parse(`untitled:Package.swift.preview`);
+            const previewDoc = await vscode.workspace.openTextDocument(previewUri);
+            const previewEditor = await vscode.window.showTextDocument(previewDoc, { preview: true });
+            await previewEditor.edit((edit) => {
+                edit.insert(new vscode.Position(0, 0), packageContents);
+            });
 
-        await vscode.commands.executeCommand(
-            'vscode.diff',
-            existingUri,
-            previewUri,
-            'Package.swift: Current vs Generated'
-        );
+            await vscode.commands.executeCommand(
+                'vscode.diff',
+                existingUri,
+                previewUri,
+                'Package.swift: Current vs Generated'
+            );
 
-        const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
-            placeHolder: 'Package.swift already exists. Overwrite with generated version?'
-        });
+            const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
+                placeHolder: 'Package.swift already exists. Overwrite with generated version?'
+            });
 
-        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 
-        if (overwrite !== 'Overwrite') {
-            return;
+            if (overwrite !== 'Overwrite') {
+                return;
+            }
         }
     }
 
     await fsp.writeFile(packagePath, packageContents, 'utf8');
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(packagePath));
-    await vscode.window.showTextDocument(document, { preview: false });
-    vscode.window.showInformationMessage(`Package.swift generated from ${selectedProject}`);
+    if (!silent) {
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(packagePath));
+        await vscode.window.showTextDocument(document, { preview: false });
+        vscode.window.showInformationMessage(`Package.swift generated from ${selectedProject}`);
+    }
 }
 
-async function generateBuildTasks(rootPath: string): Promise<void> {
+async function configureBuildTasks(rootPath: string, workspaceState: vscode.Memento): Promise<void> {
     const entries = await fsp.readdir(rootPath, { withFileTypes: true });
     const xcodeProjects = entries.filter(
         (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
@@ -497,54 +493,19 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
         }
     }
 
-    const buildTasksOptions = {
+    const buildTaskConfig: BuildTaskConfig = {
         projectFile: selectedProject,
         schemeName,
+        targetName: selectedTarget.name,
         productName: resolvedProductName,
         bundleIdentifier,
         simulatorDevice: simulatorPick.label
     };
 
-    const buildScriptContent = generateBuildScript(buildTasksOptions);
-    const buildInstallScriptContent = generateBuildInstallScript(buildTasksOptions);
-    const launchAppScriptContent = generateLaunchAppScript(buildTasksOptions);
-    const tasksContent = generateTasksJson();
-    const launchContent = generateLaunchJson(resolvedProductName);
+    await workspaceState.update('buildTaskConfig', buildTaskConfig);
 
-    const vscodeDir = path.join(rootPath, '.vscode');
-    const scriptsDir = path.join(vscodeDir, 'scripts');
-    if (!fs.existsSync(scriptsDir)) {
-        await fsp.mkdir(scriptsDir, { recursive: true });
-    }
-
-    const tasksPath = path.join(vscodeDir, 'tasks.json');
-    const launchPath = path.join(vscodeDir, 'launch.json');
-    const buildScriptPath = path.join(scriptsDir, 'build.sh');
-    const buildInstallScriptPath = path.join(scriptsDir, 'build-install.sh');
-    const launchAppScriptPath = path.join(scriptsDir, 'launch-app.sh');
-
-    if (fs.existsSync(tasksPath) || fs.existsSync(launchPath) || fs.existsSync(buildScriptPath) || fs.existsSync(buildInstallScriptPath) || fs.existsSync(launchAppScriptPath)) {
-        const overwrite = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], {
-            placeHolder: '.vscode build files already exist. Overwrite?'
-        });
-        if (overwrite !== 'Overwrite') {
-            return;
-        }
-    }
-
-    await fsp.writeFile(buildScriptPath, buildScriptContent, 'utf8');
-    await fsp.writeFile(buildInstallScriptPath, buildInstallScriptContent, 'utf8');
-    await fsp.writeFile(launchAppScriptPath, launchAppScriptContent, 'utf8');
-    await fsp.writeFile(tasksPath, tasksContent, 'utf8');
-    await fsp.writeFile(launchPath, launchContent, 'utf8');
-    await fsp.chmod(buildScriptPath, 0o755);
-    await fsp.chmod(buildInstallScriptPath, 0o755);
-    await fsp.chmod(launchAppScriptPath, 0o755);
-
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(buildInstallScriptPath));
-    await vscode.window.showTextDocument(document, { preview: false });
     vscode.window.showInformationMessage(
-        `Build scripts generated for ${selectedTarget.name} on ${simulatorPick.label}`
+        `Build tasks configured for ${selectedTarget.name} on ${simulatorPick.label}`
     );
 
     vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
@@ -561,14 +522,52 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-    // Enable Cmd+R keybinding if build tasks were previously generated
+    const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
+
+    // Enable Cmd+R keybinding if build tasks were previously configured
+    const existingConfig = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+    if (existingConfig) {
+        vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
+    }
+
+    // Register TaskProvider and DebugConfigurationProvider
+    const taskProvider = vscode.tasks.registerTaskProvider(
+        TASK_TYPE,
+        new XcodeBuildTaskProvider(context.workspaceState)
+    );
+    const debugProvider = vscode.debug.registerDebugConfigurationProvider(
+        'lldb-dap',
+        new XcodeDebugConfigProvider(context.workspaceState),
+        vscode.DebugConfigurationProviderTriggerKind.Dynamic
+    );
+
+    // Register sidebar tree view
+    const sidebarProvider = new SidebarProvider(context.workspaceState);
+    const treeView = vscode.window.createTreeView('swiftPackageHelper.sidebar', {
+        treeDataProvider: sidebarProvider,
+    });
+
+    // Auto-configure on activation (non-blocking)
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders && workspaceFolders.length > 0) {
-        const launchJsonPath = path.join(workspaceFolders[0].uri.fsPath, '.vscode', 'launch.json');
-        if (fs.existsSync(launchJsonPath)) {
-            vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
-        }
+        const rootPath = workspaceFolders[0].uri.fsPath;
+        autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
+        generatePackageSwift(rootPath, 'Debug', true).catch((error) => {
+            const message = (error as { message?: string }).message || String(error);
+            outputChannel.appendLine(`[auto-gen] Package.swift failed: ${message}`);
+            outputChannel.show(true);
+        });
     }
+
+    // Helper to patch config and refresh sidebar
+    async function updateConfig(patch: Partial<BuildTaskConfig>): Promise<void> {
+        const current = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+        if (!current) { return; }
+        await context.workspaceState.update('buildTaskConfig', { ...current, ...patch });
+        sidebarProvider.notifyConfigChanged();
+    }
+
+    // ── Package.swift commands ────────────────────────────────
 
     const generateCommand = vscode.commands.registerCommand(
         'swiftPackageHelper.createFromXcodeproj',
@@ -578,8 +577,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!workspaceFolders || workspaceFolders.length === 0) {
                     throw new Error('Open a workspace folder before running this command.');
                 }
-                const rootPath = workspaceFolders[0].uri.fsPath;
-                await generatePackageSwift(rootPath);
+                await generatePackageSwift(workspaceFolders[0].uri.fsPath);
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
                 vscode.window.showErrorMessage(message);
@@ -595,21 +593,19 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!workspaceFolders || workspaceFolders.length === 0) {
                     throw new Error('Open a workspace folder before running this command.');
                 }
-                const rootPath = workspaceFolders[0].uri.fsPath;
-
                 const config = await vscode.window.showQuickPick(['Debug', 'Release'], {
                     placeHolder: 'Select build configuration for settings extraction'
                 });
-                if (!config) {
-                    return;
-                }
-                await generatePackageSwift(rootPath, config);
+                if (!config) { return; }
+                await generatePackageSwift(workspaceFolders[0].uri.fsPath, config);
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
                 vscode.window.showErrorMessage(message);
             }
         }
     );
+
+    // ── Manual configure command (fallback) ───────────────────
 
     const generateBuildTasksCommand = vscode.commands.registerCommand(
         'swiftPackageHelper.generateBuildTasks',
@@ -619,8 +615,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!workspaceFolders || workspaceFolders.length === 0) {
                     throw new Error('Open a workspace folder before running this command.');
                 }
-                const rootPath = workspaceFolders[0].uri.fsPath;
-                await generateBuildTasks(rootPath);
+                await configureBuildTasks(workspaceFolders[0].uri.fsPath, context.workspaceState);
+                sidebarProvider.refresh();
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
                 vscode.window.showErrorMessage(message);
@@ -628,27 +624,159 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    // ── Sidebar commands ──────────────────────────────────────
+
+    const changeProjectCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.changeProject',
+        async () => {
+            const data = sidebarProvider.getProjectData();
+            if (!data || data.xcodeProjects.length <= 1) { return; }
+            const pick = await vscode.window.showQuickPick(data.xcodeProjects, {
+                placeHolder: 'Select Xcode project'
+            });
+            if (pick) {
+                await updateConfig({ projectFile: pick });
+                sidebarProvider.refresh();
+            }
+        }
+    );
+
+    const changeTargetCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.changeTarget',
+        async () => {
+            const data = sidebarProvider.getProjectData();
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            if (!data || !config) { return; }
+            const picks = data.targets.map((t) => t.name);
+            const pick = await vscode.window.showQuickPick(picks, {
+                placeHolder: 'Select target'
+            });
+            if (pick) {
+                const target = data.targets.find((t) => t.name === pick)!;
+                const rootPath = vscode.workspace.workspaceFolders![0].uri.fsPath;
+                const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
+                let bundleIdentifier = config.bundleIdentifier;
+                let productName = target.productName || target.name;
+                try {
+                    const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+                    if (target.buildConfigurationListId) {
+                        const settings = getBuildSettingsForTarget(
+                            pbxContents, target.buildConfigurationListId, 'Debug'
+                        );
+                        if (settings?.bundleIdentifier) {
+                            bundleIdentifier = settings.bundleIdentifier;
+                        }
+                        if (settings?.productName && !settings.productName.includes('$(')) {
+                            productName = settings.productName;
+                        }
+                    }
+                } catch { /* use existing values */ }
+                await updateConfig({ targetName: pick, productName, bundleIdentifier });
+            }
+        }
+    );
+
+    const changeSchemeCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.changeScheme',
+        async () => {
+            const data = sidebarProvider.getProjectData();
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            if (!data || !config) { return; }
+            const projectName = path.basename(config.projectFile, '.xcodeproj');
+            const targetNames = data.targets.map((t) => t.name);
+            const options = [...new Set([...data.schemes, projectName, ...targetNames])];
+            const pick = await vscode.window.showQuickPick(options, {
+                placeHolder: 'Select scheme'
+            });
+            if (pick) {
+                await updateConfig({ schemeName: pick });
+            }
+        }
+    );
+
+    const changeBundleIdCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.changeBundleId',
+        async () => {
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            if (!config) { return; }
+            const input = await vscode.window.showInputBox({
+                prompt: 'Enter bundle identifier',
+                value: config.bundleIdentifier,
+                placeHolder: 'com.example.MyApp'
+            });
+            if (input !== undefined) {
+                await updateConfig({ bundleIdentifier: input });
+            }
+        }
+    );
+
+    const selectSimulatorCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.selectSimulator',
+        async () => {
+            const data = sidebarProvider.getProjectData();
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            if (!data || !config) { return; }
+            const picks = data.simulators.map((s) => {
+                const runtime = sidebarProvider.formatRuntime(s.runtime);
+                const booted = s.state === 'Booted' ? ' (Booted)' : '';
+                return {
+                    label: s.name,
+                    description: `${runtime}${booted}`,
+                    picked: s.name === config.simulatorDevice
+                };
+            });
+            const pick = await vscode.window.showQuickPick(picks, {
+                placeHolder: 'Select simulator device'
+            });
+            if (pick) {
+                await updateConfig({ simulatorDevice: pick.label });
+            }
+        }
+    );
+
+    const buildCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.build',
+        async () => {
+            const tasks = await vscode.tasks.fetchTasks({ type: 'xcode-build' });
+            const buildTask = tasks.find((t) => t.name === 'build');
+            if (buildTask) {
+                await vscode.tasks.executeTask(buildTask);
+            } else {
+                vscode.window.showErrorMessage('Build task not available. Check configuration.');
+            }
+        }
+    );
+
+    const buildAndRunCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.buildAndRun',
+        () => vscode.commands.executeCommand('workbench.action.debug.start')
+    );
+
+    const refreshCmd = vscode.commands.registerCommand(
+        'swiftPackageHelper.sidebar.refresh',
+        async () => {
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            await sidebarProvider.loadProjectData(config);
+            sidebarProvider.refresh();
+        }
+    );
+
+    // ── File watcher ──────────────────────────────────────────
+
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.pbxproj');
     const onProjectChange = watcher.onDidChange(async () => {
-        const action = await vscode.window.showInformationMessage(
-            'Xcode project file changed. Regenerate Package.swift?',
-            'Regenerate',
-            'Dismiss'
-        );
-        if (action === 'Regenerate') {
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (workspaceFolders && workspaceFolders.length > 0) {
-                try {
-                    await generatePackageSwift(workspaceFolders[0].uri.fsPath);
-                } catch (error) {
-                    const message = (error as { message?: string }).message as string;
-                    vscode.window.showErrorMessage(message);
-                }
-            }
+        sidebarProvider.refresh();
+        const wsFolders = vscode.workspace.workspaceFolders;
+        if (wsFolders && wsFolders.length > 0) {
+            generatePackageSwift(wsFolders[0].uri.fsPath, 'Debug', true).catch((error) => {
+                const message = (error as { message?: string }).message || String(error);
+                outputChannel.appendLine(`[file-watcher] Package.swift regen failed: ${message}`);
+            });
         }
     });
 
-    const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
+    // ── Task chaining and debug cleanup ───────────────────────
+
     let consoleExecution: vscode.TaskExecution | undefined;
 
     const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
@@ -690,7 +818,28 @@ export function activate(context: vscode.ExtensionContext): void {
         cp.exec('pkill -f debugserver', () => {});
     });
 
-    context.subscriptions.push(generateCommand, generateWithOptionsCommand, generateBuildTasksCommand, watcher, onProjectChange, onTaskEnd, onDebugEnd);
+    // ── Register all disposables ──────────────────────────────
+
+    context.subscriptions.push(
+        generateCommand, generateWithOptionsCommand, generateBuildTasksCommand,
+        taskProvider, debugProvider, treeView,
+        changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
+        selectSimulatorCmd, buildCmd, buildAndRunCmd, refreshCmd,
+        watcher, onProjectChange, onTaskEnd, onDebugEnd,
+        outputChannel
+    );
+
+    // One-time migration notice for users with old file-based build tasks
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        const oldScriptsExist = fs.existsSync(path.join(workspaceFolders[0].uri.fsPath, '.vscode', 'scripts', 'build.sh'));
+        const noticeShown = context.workspaceState.get<boolean>('migrationNoticeShown');
+        if (oldScriptsExist && !noticeShown) {
+            vscode.window.showInformationMessage(
+                'Swift Package Helper now uses integrated build tasks. You can safely delete .vscode/scripts/ and the build entries in tasks.json/launch.json. Run "Swift: Configure Build Tasks" to set up the new system.'
+            );
+            context.workspaceState.update('migrationNoticeShown', true);
+        }
+    }
 }
 
 export function deactivate(): void {}
