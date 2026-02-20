@@ -34,6 +34,13 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 - Build output is colorized: errors and `BUILD FAILED` in red, warnings in yellow.
 - Scripts work standalone from any terminal; use ⇧⌘B to build and F5 to debug from VS Code.
 
+**Keyboard Shortcuts**
+
+| Shortcut | Context | Action |
+|----------|---------|--------|
+| ⌘R | No active debug session | Start debugging (build, install, and launch on simulator) |
+| ⌘R | During debug session | Stop current session and restart |
+
 **Dependencies**
 
 - [Swift for VS Code](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode) — automatically installed as a dependency for SourceKit-LSP support.
@@ -42,7 +49,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 ### Installation
 
 - Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-1.2.1.vsix`.
+- Install the bundled package directly: `code --install-extension swift-package-helper-1.3.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -50,7 +57,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-1.2.1.vsix
+code --install-extension swift-package-helper-1.3.0.vsix
 ```
 
 The `vsce package` step writes the new `.vsix` file to the project root. Update the filename in the final command if the version number changes.
