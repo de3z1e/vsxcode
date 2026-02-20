@@ -52,7 +52,7 @@
             {
                 "key": "cmd+r",
                 "command": "workbench.action.debug.start",
-                "when": "!inDebugMode"
+                "when": "swiftPackageHelper.buildTasksConfigured && !inDebugMode"
             },
             {
                 "key": "cmd+r",
@@ -63,7 +63,7 @@
                         {"command": "workbench.action.debug.start", "delay": 1000}
                     ]
                 },
-                "when": "inDebugMode"
+                "when": "swiftPackageHelper.buildTasksConfigured && inDebugMode"
             }
         ]
     },

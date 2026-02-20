@@ -547,6 +547,8 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
         `Build scripts generated for ${selectedTarget.name} on ${simulatorPick.label}`
     );
 
+    vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
+
     if (!vscode.extensions.getExtension('llvm-vs-code-extensions.lldb-dap')) {
         const install = await vscode.window.showWarningMessage(
             'LLDB DAP extension is required for debugging. Install it?',
@@ -559,6 +561,15 @@ async function generateBuildTasks(rootPath: string): Promise<void> {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+    // Enable Cmd+R keybinding if build tasks were previously generated
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        const launchJsonPath = path.join(workspaceFolders[0].uri.fsPath, '.vscode', 'launch.json');
+        if (fs.existsSync(launchJsonPath)) {
+            vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
+        }
+    }
+
     const generateCommand = vscode.commands.registerCommand(
         'swiftPackageHelper.createFromXcodeproj',
         async () => {
