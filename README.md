@@ -42,7 +42,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 ### Installation
 
 - Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-1.1.0.vsix`.
+- Install the bundled package directly: `code --install-extension swift-package-helper-1.2.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -50,7 +50,7 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-1.1.0.vsix
+code --install-extension swift-package-helper-1.2.0.vsix
 ```
 
 The `vsce package` step writes the new `.vsix` file to the project root. Update the filename in the final command if the version number changes.
