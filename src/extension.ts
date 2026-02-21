@@ -835,7 +835,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const noticeShown = context.workspaceState.get<boolean>('migrationNoticeShown');
         if (oldScriptsExist && !noticeShown) {
             vscode.window.showInformationMessage(
-                'Swift Package Helper now uses integrated build tasks. You can safely delete .vscode/scripts/ and the build entries in tasks.json/launch.json. Run "Swift: Configure Build Tasks" to set up the new system.'
+                'Swift Package Helper now uses integrated build tasks. You can safely delete .vscode/scripts/ and the build entries in tasks.json/launch.json.'
             );
             context.workspaceState.update('migrationNoticeShown', true);
         }

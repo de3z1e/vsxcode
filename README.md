@@ -1,55 +1,70 @@
-# Swift Package Helper VS Code Command
+# Swift Package Helper
 
-This lightweight workspace extension bridges Xcode projects and VS Code. Run commands from the command palette (⇧⌘P) to generate a `Package.swift` for full IntelliSense support and create build tasks that let you build and run iOS apps on the simulator directly from VS Code.
+Xcode project integration for VS Code — IntelliSense, build tasks, and simulator debugging. The extension automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build and run iOS apps on the simulator directly from VS Code.
+
+### How It Works
+
+Open a folder containing an `.xcodeproj` and the extension handles the rest:
+
+1. **Auto-generates `Package.swift`** from the Xcode project on activation, with correct target paths, resources, dependencies, and Swift settings.
+2. **Auto-configures build tasks** with sensible defaults (target, scheme, simulator, bundle ID).
+3. **Configures SourceKit-LSP** for iOS simulator target resolution so IntelliSense works for UIKit and other iOS frameworks.
+4. **Silently regenerates** `Package.swift` whenever the `.pbxproj` file changes.
+
+### Sidebar
+
+The extension adds a panel to the Activity Bar with configurable build settings:
+
+- **Project** — select which `.xcodeproj` to use (when multiple exist)
+- **Target** — select the build target
+- **Scheme** — select the build scheme
+- **Bundle ID** — edit the bundle identifier
+- **Simulator** — select from available iOS simulators (shows booted state)
+
+Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 
 ### Commands
 
 | Command | Description |
 |---------|-------------|
-| **Swift: Generate Package.swift from Xcode Project** | Generates `Package.swift` from the active `.xcodeproj` using the Debug configuration. |
+| **Swift: Generate Package.swift from Xcode Project** | Generates `Package.swift` using the Debug configuration with a diff view. |
 | **Swift: Generate Package.swift from Xcode Project (with Options)** | Same as above but lets you choose Debug or Release configuration. |
-| **Swift: Generate VS Code Build Tasks** | Generates standalone build scripts, VS Code tasks, and a debug launch config for the iOS Simulator. |
+| **Swift: Configure Build Tasks** | Manually configure build target, scheme, simulator, and bundle ID. |
 
-### Capability
-
-**Package.swift Generation**
+### Package.swift Generation
 
 - Detects the first `.xcodeproj` in the workspace (or lets you pick when multiple exist).
 - Extracts Swift tools version, platform deployment targets, targets, and product metadata.
+- Resolves target source paths on disk, including `productName` directory lookup.
+- Resolves resource file paths on disk relative to the target directory.
 - Includes per-target swift settings (`.define`, `.unsafeFlags`, `.swiftLanguageMode`), linked system frameworks, resources, header search paths, target dependencies, and excluded files.
-- Automatically configures SourceKit-LSP server arguments in `.vscode/settings.json` for iOS simulator target resolution (SDK path, target triple, framework search path).
-- Shows a diff view before overwriting an existing `Package.swift`.
-- Auto-prompts to regenerate when the `.pbxproj` file changes.
+- Automatically configures SourceKit-LSP server arguments for iOS simulator target resolution (SDK path, target triple, framework search path).
+- Shows a diff view before overwriting when run manually from the command palette.
 
-**Build Tasks Generation**
+### Build Tasks
 
-- Parses the `.xcodeproj` to extract the target name, scheme, and bundle identifier.
-- Queries available iOS simulators and lets you pick one.
-- Generates standalone shell scripts in `.vscode/scripts/`:
-  - `build.sh` — builds the project for the iOS Simulator.
-  - `build-install.sh` — builds, boots the simulator, installs the app, and opens Simulator.
-  - `launch-app.sh` — launches the app with a pty-connected console, streaming `print()` output to a dedicated VS Code terminal.
-- Generates a minimal `tasks.json` referencing the scripts and a `launch.json` with an LLDB DAP attach configuration for debugging (F5).
-- The `launch-app` task is auto-triggered after a successful build-install, launching the app and piping stdout/stderr via `--console-pty`.
-- Build output is colorized: errors and `BUILD FAILED` in red, warnings in yellow.
-- Scripts work standalone from any terminal; use ⇧⌘B to build and F5 to debug from VS Code.
+Build tasks are integrated directly into the extension — no shell scripts, `tasks.json`, or `launch.json` files are written to the workspace.
 
-**Keyboard Shortcuts**
+- Uses VS Code's `TaskProvider` API to provide build, build-install, and launch-app tasks.
+- Uses `DebugConfigurationProvider` with LLDB DAP for simulator debugging.
+- Build configuration is stored in VS Code's workspace state (persists across sessions).
+- Build output is colorized: errors in red, warnings in yellow.
+
+### Keyboard Shortcuts
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
 | ⌘R | No active debug session | Start debugging (build, install, and launch on simulator) |
 | ⌘R | During debug session | Stop current session and restart |
 
-**Dependencies**
+### Dependencies
 
-- [Swift for VS Code](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode) — automatically installed as a dependency for SourceKit-LSP support.
-- [LLDB DAP](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.lldb-dap) — prompted for install when generating build tasks (required for debugging).
+- [Swift for VS Code](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode) — automatically installed as a dependency. Provides SourceKit-LSP support and includes LLDB DAP for debugging.
 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-1.3.1.vsix`.
+- Install the bundled package directly: `code --install-extension swift-package-helper-2.0.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -57,17 +72,5 @@ This lightweight workspace extension bridges Xcode projects and VS Code. Run com
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-1.3.1.vsix
+code --install-extension swift-package-helper-2.0.0.vsix
 ```
-
-The `vsce package` step writes the new `.vsix` file to the project root. Update the filename in the final command if the version number changes.
-
-### Usage
-
-1. Open the folder that contains your `.xcodeproj` in VS Code.
-2. Launch the command palette (⇧⌘P) and run **Swift: Generate Package.swift from Xcode Project**.
-3. Select the project if prompted when multiple `.xcodeproj` files are present.
-4. Confirm overwriting when prompted; `Package.swift` is created or refreshed with the project's settings.
-5. Optionally, run **Swift: Generate VS Code Build Tasks** to set up simulator builds and debugging.
-
-The extension uses Xcode's project metadata, so run it on macOS with Xcode installed for best results.
