@@ -48,6 +48,7 @@
                 {
                     "id": "swiftPackageHelper.sidebar",
                     "name": "Xcode Build",
+                    "icon": "images/sidebar.svg",
                     "when": "workspaceFolderCount > 0"
                 }
             ]
