@@ -713,10 +713,14 @@ export function activate(context: vscode.ExtensionContext): void {
     const selectSimulatorCmd = vscode.commands.registerCommand(
         'swiftPackageHelper.sidebar.selectSimulator',
         async () => {
-            const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-            if (!data || !config) { return; }
-            const picks = data.simulators.map((s) => {
+            if (!config) { return; }
+            const simulators = await listAvailableSimulators();
+            if (simulators.length === 0) {
+                vscode.window.showWarningMessage('No simulators found.');
+                return;
+            }
+            const picks = simulators.map((s) => {
                 const runtime = sidebarProvider.formatRuntime(s.runtime);
                 const booted = s.state === 'Booted' ? ' (Booted)' : '';
                 return {
