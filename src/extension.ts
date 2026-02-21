@@ -16,7 +16,7 @@ import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependenci
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
 import { getBuildSettingsForTarget, getProjectBuildSettings } from './parsers/buildSettings';
 import { parseLinkedFrameworksForTarget } from './parsers/frameworks';
-import { parseResourcesForTarget } from './parsers/resources';
+import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
@@ -259,6 +259,12 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         const resources = parseResourcesForTarget(pbxContents, buildPhases.resourcesBuildPhaseId, targetAbsolutePath);
         const excluded = parseExcludedFiles(pbxContents, nativeTarget.name);
 
+        const { additionalExcludes, additionalResources } = scanForUnhandledFiles(
+            targetAbsolutePath, resources, excluded
+        );
+        const allResources = [...resources, ...additionalResources];
+        const allExcludes = [...excluded, ...additionalExcludes];
+
         const headerPaths = targetSettings?.headerSearchPaths;
         const cSettings = generateCSettings(headerPaths);
 
@@ -279,11 +285,11 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
             name: targetDef.name,
             path: targetDef.path,
             dependencies: targetDef.dependencies.length > 0 ? targetDef.dependencies : undefined,
-            resources: resources.length > 0 ? resources : undefined,
+            resources: allResources.length > 0 ? allResources : undefined,
             swiftSettings: swiftSettings.length > 0 ? swiftSettings : undefined,
             cSettings: cSettings.length > 0 ? cSettings : undefined,
             linkerSettings: linkerSettings.length > 0 ? linkerSettings : undefined,
-            exclude: excluded.length > 0 ? excluded : undefined
+            exclude: allExcludes.length > 0 ? allExcludes : undefined
         };
     });
 

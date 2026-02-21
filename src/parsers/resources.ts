@@ -1,5 +1,11 @@
 import type { ResourceOutput } from '../types/interfaces';
-import { PROCESSABLE_RESOURCE_EXTENSIONS } from '../types/constants';
+import {
+    PROCESSABLE_RESOURCE_EXTENSIONS,
+    SPM_SOURCE_EXTENSIONS,
+    SPM_AUTO_EXCLUDE_FILENAMES,
+    SPM_AUTO_EXCLUDE_EXTENSIONS,
+    SPM_RESOURCE_DIR_EXTENSIONS
+} from '../types/constants';
 import { cleanup } from '../utils/version';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -104,6 +110,66 @@ export function resolveResourcePaths(
     }
 
     return outputs;
+}
+
+export function scanForUnhandledFiles(
+    targetAbsolutePath: string,
+    existingResources: ResourceOutput[],
+    existingExcludes: string[]
+): { additionalExcludes: string[]; additionalResources: ResourceOutput[] } {
+    const additionalExcludes: string[] = [];
+    const additionalResources: ResourceOutput[] = [];
+
+    const existingResourcePaths = new Set(existingResources.map((r) => r.path));
+    const existingExcludeSet = new Set(existingExcludes);
+
+    function scan(dir: string, relativePath: string): void {
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+
+        for (const entry of entries) {
+            if (entry.name.startsWith('.')) {
+                continue;
+            }
+
+            const fullPath = path.join(dir, entry.name);
+            const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+            const ext = path.extname(entry.name).toLowerCase();
+
+            if (entry.isDirectory()) {
+                if (SPM_RESOURCE_DIR_EXTENSIONS.has(ext)) {
+                    if (!existingResourcePaths.has(relPath) && !existingExcludeSet.has(relPath)) {
+                        const type = PROCESSABLE_RESOURCE_EXTENSIONS.has(ext) ? '.process' : '.copy';
+                        additionalResources.push({ type, path: relPath });
+                    }
+                } else {
+                    scan(fullPath, relPath);
+                }
+            } else {
+                if (SPM_SOURCE_EXTENSIONS.has(ext)) {
+                    continue;
+                }
+                if (existingResourcePaths.has(relPath) || existingExcludeSet.has(relPath)) {
+                    continue;
+                }
+                if (SPM_AUTO_EXCLUDE_FILENAMES.has(entry.name) || SPM_AUTO_EXCLUDE_EXTENSIONS.has(ext)) {
+                    additionalExcludes.push(relPath);
+                }
+            }
+        }
+    }
+
+    try {
+        scan(targetAbsolutePath, '');
+    } catch {
+        // directory not accessible
+    }
+
+    return { additionalExcludes, additionalResources };
 }
 
 export function parseResourcesForTarget(
