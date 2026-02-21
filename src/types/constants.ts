@@ -40,7 +40,8 @@ export const PROCESSABLE_RESOURCE_EXTENSIONS = new Set([
     '.stringsdict',
     '.intentdefinition',
     '.xcmappingmodel',
-    '.xcdatamodeld'
+    '.xcdatamodeld',
+    '.lproj'
 ]);
 
 // Extensions that SPM treats as source files (no explicit handling needed)

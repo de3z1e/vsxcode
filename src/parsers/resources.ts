@@ -142,7 +142,9 @@ export function scanForUnhandledFiles(
 
             if (entry.isDirectory()) {
                 if (SPM_RESOURCE_DIR_EXTENSIONS.has(ext)) {
-                    if (!existingResourcePaths.has(relPath) && !existingExcludeSet.has(relPath)) {
+                    const dirPrefix = relPath + '/';
+                    const hasChildResource = [...existingResourcePaths].some((p) => p.startsWith(dirPrefix));
+                    if (!hasChildResource && !existingResourcePaths.has(relPath) && !existingExcludeSet.has(relPath)) {
                         const type = PROCESSABLE_RESOURCE_EXTENSIONS.has(ext) ? '.process' : '.copy';
                         additionalResources.push({ type, path: relPath });
                     }
