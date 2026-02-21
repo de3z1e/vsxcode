@@ -39,7 +39,7 @@
                 {
                     "id": "swiftPackageHelper",
                     "title": "Swift Package Helper",
-                    "icon": "images/icon.png"
+                    "icon": "images/sidebar.svg"
                 }
             ]
         },
@@ -167,6 +167,7 @@
     "files": [
         "out",
         "images/icon.png",
+        "images/sidebar.svg",
         "README.md",
         "LICENSE"
     ],
