@@ -20,6 +20,7 @@ export function buildCommandLine(config: BuildTaskConfig): string {
         '-configuration Debug',
         '-sdk iphonesimulator',
         `-derivedDataPath "${derivedData}"`,
+        ...(config.strictConcurrency ? [`SWIFT_STRICT_CONCURRENCY=${config.strictConcurrency}`] : []),
         `build 2>&1 | ${COLORIZE_BUILD}`,
     ].join(' ');
 }
@@ -34,6 +35,7 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
         '-configuration Debug',
         '-sdk iphonesimulator',
         `-derivedDataPath "${derivedData}"`,
+        ...(config.strictConcurrency ? [`SWIFT_STRICT_CONCURRENCY=${config.strictConcurrency}`] : []),
         `build 2>&1 | ${COLORIZE_BUILD}`,
         `&& xcrun simctl boot "${config.simulatorDevice}" 2>/dev/null || true`,
         `&& xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,

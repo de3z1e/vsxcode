@@ -14,7 +14,8 @@ type SidebarItemType =
     | 'config-target'
     | 'config-scheme'
     | 'config-bundleId'
-    | 'config-simulator';
+    | 'config-simulator'
+    | 'config-strictConcurrency';
 
 export class SidebarItem extends vscode.TreeItem {
     constructor(
@@ -104,6 +105,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 'swiftPackageHelper.sidebar.changeScheme', 'play-circle'),
             this.createConfigItem('config-bundleId', 'Bundle ID', config.bundleIdentifier,
                 'swiftPackageHelper.sidebar.changeBundleId', 'tag'),
+            this.createConfigItem('config-strictConcurrency', 'Strict Concurrency', config.strictConcurrency || 'Default',
+                'swiftPackageHelper.sidebar.changeStrictConcurrency', 'shield'),
             this.createConfigItem('config-simulator', 'Simulator', config.simulatorDevice,
                 'swiftPackageHelper.sidebar.selectSimulator', 'device-mobile'),
         ];
@@ -215,6 +218,7 @@ export async function autoConfigureBuildTasks(
 
         let bundleIdentifier = '';
         let resolvedProductName = target.productName || target.name;
+        let strictConcurrency: string | undefined;
         if (target.buildConfigurationListId) {
             const settings = getBuildSettingsForTarget(
                 pbxContents, target.buildConfigurationListId, 'Debug'
@@ -223,10 +227,14 @@ export async function autoConfigureBuildTasks(
             if (settings?.productName && !settings.productName.includes('$(')) {
                 resolvedProductName = settings.productName;
             }
+            strictConcurrency = settings?.strictConcurrency;
         }
         if (!bundleIdentifier) {
             const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
             bundleIdentifier = projectSettings?.bundleIdentifier || '';
+            if (!strictConcurrency) {
+                strictConcurrency = projectSettings?.strictConcurrency;
+            }
         }
         if (!bundleIdentifier) {
             bundleIdentifier = `com.example.${target.name}`;
@@ -258,6 +266,7 @@ export async function autoConfigureBuildTasks(
             productName: resolvedProductName,
             bundleIdentifier,
             simulatorDevice: iphone.name,
+            strictConcurrency,
         };
         await workspaceState.update('buildTaskConfig', config);
 

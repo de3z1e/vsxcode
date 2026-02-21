@@ -61,6 +61,11 @@ export function parseBuildConfigurations(pbxContents: string): Map<string, Build
             settings.productName = cleanup(productNameSettingMatch[1]);
         }
 
+        const strictConcurrencyMatch = /SWIFT_STRICT_CONCURRENCY = ([^;]+);/.exec(settingsBlock);
+        if (strictConcurrencyMatch) {
+            settings.strictConcurrency = cleanup(strictConcurrencyMatch[1]);
+        }
+
         configs.set(configId, settings);
     }
 

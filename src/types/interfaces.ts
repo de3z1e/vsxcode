@@ -96,6 +96,7 @@ export interface BuildSettings {
     headerSearchPaths?: string[];
     bundleIdentifier?: string;
     productName?: string;
+    strictConcurrency?: string;
 }
 
 export interface SwiftSettingsOutput {
@@ -144,4 +145,5 @@ export interface BuildTaskConfig {
     productName: string;
     bundleIdentifier: string;
     simulatorDevice: string;
+    strictConcurrency?: string;
 }
