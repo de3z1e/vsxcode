@@ -134,11 +134,17 @@
         "taskDefinitions": [
             {
                 "type": "xcode-build",
-                "required": ["task"],
+                "required": [
+                    "task"
+                ],
                 "properties": {
                     "task": {
                         "type": "string",
-                        "enum": ["build", "build-install", "launch-app"],
+                        "enum": [
+                            "build",
+                            "build-install",
+                            "launch-app"
+                        ],
                         "description": "The Xcode build task to run"
                     }
                 }
@@ -156,7 +162,10 @@
                 "args": {
                     "commands": [
                         "workbench.action.debug.stop",
-                        {"command": "workbench.action.debug.start", "delay": 1000}
+                        {
+                            "command": "workbench.action.debug.start",
+                            "delay": 1000
+                        }
                     ]
                 },
                 "when": "swiftPackageHelper.buildTasksConfigured && inDebugMode"
@@ -167,7 +176,8 @@
         "compile": "tsc -p ./",
         "watch": "tsc -w -p ./",
         "prepublish": "npm run compile",
-        "package": "vsce package"
+        "package": "vsce package",
+        "test": "jest"
     },
     "files": [
         "out",
@@ -177,9 +187,12 @@
         "LICENSE"
     ],
     "devDependencies": {
+        "@types/jest": "^30.0.0",
         "@types/node": "^20.11.30",
         "@types/vscode": "^1.85.0",
         "@vscode/vsce": "^3.6.2",
+        "jest": "^30.2.0",
+        "ts-jest": "^29.4.6",
         "typescript": "^5.4.0"
     }
 }

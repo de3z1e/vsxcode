@@ -21,6 +21,8 @@
     ],
     "exclude": [
         "node_modules",
-        ".vscode-test"
+        ".vscode-test",
+        "src/**/*.test.ts",
+        "src/__fixtures__"
     ]
 }
