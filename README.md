@@ -20,7 +20,7 @@ The extension adds a panel to the Activity Bar with configurable build settings:
 - **Target** — select the build target
 - **Scheme** — select the build scheme
 - **Bundle ID** — edit the bundle identifier
-- **Device** — select from connected physical devices or available iOS simulators
+- **Device** — select from connected physical devices (USB or Wi-Fi) or available iOS simulators
 
 Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 
@@ -48,9 +48,11 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 
 - Uses VS Code's `TaskProvider` API to provide build, build-install, and launch-app tasks.
 - Uses `DebugConfigurationProvider` with LLDB DAP for simulator debugging.
-- Physical device builds use `xcrun devicectl` for app installation and launch (requires Xcode 15+).
+- Physical device builds support both USB and Wi-Fi connected devices. Uses `xcrun devicectl` for app installation and launch (requires Xcode 15+). Code signing uses the project's existing settings from Xcode.
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
+
+**Limitation:** Debugger attachment (lldb-dap) is not currently supported for physical device builds. ⌘R will build, install, and launch the app on device, but without a debug session. Simulator builds have full debugging support.
 
 ### Keyboard Shortcuts
 
