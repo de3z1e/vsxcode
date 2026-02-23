@@ -35,10 +35,10 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
         '-sdk iphonesimulator',
         `-derivedDataPath "${derivedData}"`,
         `build 2>&1 | ${COLORIZE_BUILD}`,
-        `&& xcrun simctl boot "${config.simulatorDevice}" 2>/dev/null || true`,
-        `&& xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
-        `&& xcrun simctl install booted "${appPath}"`,
-        '&& open -a Simulator',
+        `&& { xcrun simctl boot "${config.simulatorDevice}" 2>/dev/null || true`,
+        `; xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
+        `; xcrun simctl install booted "${appPath}"`,
+        '; open -a Simulator; }',
     ].join(' ');
 }
 
