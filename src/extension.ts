@@ -763,35 +763,10 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
-            const data = sidebarProvider.getProjectData();
-            let xcodeDefault: string | undefined;
-            if (data) {
-                const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                if (rootPath) {
-                    try {
-                        const pbxContents = await fsp.readFile(
-                            path.join(rootPath, config.projectFile, 'project.pbxproj'), 'utf8'
-                        );
-                        const target = data.targets.find((t) => t.name === config.targetName);
-                        if (target?.buildConfigurationListId) {
-                            const settings = getBuildSettingsForTarget(
-                                pbxContents, target.buildConfigurationListId, 'Debug'
-                            );
-                            xcodeDefault = settings?.strictConcurrency;
-                        }
-                        if (!xcodeDefault) {
-                            const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
-                            xcodeDefault = projectSettings?.strictConcurrency;
-                        }
-                    } catch { /* ignore */ }
-                }
-            }
-            if (!xcodeDefault) { xcodeDefault = 'minimal'; }
-            const suffix = (level: string) => xcodeDefault === level ? ' (Xcode default)' : '';
             const items = [
-                { label: 'minimal', description: `Only enforce Sendable where explicitly annotated${suffix('minimal')}` },
-                { label: 'targeted', description: `Enforce Sendable for code that adopts concurrency features${suffix('targeted')}` },
-                { label: 'complete', description: `Enforce Sendable everywhere — strictest mode${suffix('complete')}` },
+                { label: 'minimal', description: 'Only enforce Sendable where explicitly annotated' },
+                { label: 'targeted', description: 'Enforce Sendable for code that adopts concurrency features' },
+                { label: 'complete', description: 'Enforce Sendable everywhere — strictest mode' },
             ];
             const pick = await showQuickPickWithActive(items, 'Select strict concurrency level', config.strictConcurrency);
             if (pick) {
