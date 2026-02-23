@@ -1,6 +1,6 @@
 # Swift Package Helper
 
-Xcode project integration for VS Code — IntelliSense, build tasks, and device/simulator debugging. The extension automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build and run iOS apps on simulators and physical devices directly from VS Code.
+Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, and device/simulator debugging with a single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build and run iOS apps on simulators and physical devices directly from VS Code.
 
 ### How It Works
 
