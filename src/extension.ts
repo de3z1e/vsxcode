@@ -630,39 +630,18 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
-    // ── QuickPick helper (pre-selects current value) ───────────
-
-    function showQuickPickWithActive<T extends vscode.QuickPickItem>(
-        items: T[],
-        placeHolder: string,
-        currentLabel?: string
-    ): Promise<T | undefined> {
-        return new Promise((resolve) => {
-            const qp = vscode.window.createQuickPick<T>();
-            qp.items = items;
-            qp.placeholder = placeHolder;
-            if (currentLabel) {
-                const active = items.find((i) => i.label === currentLabel);
-                if (active) { qp.activeItems = [active]; }
-            }
-            qp.onDidAccept(() => { resolve(qp.selectedItems[0]); qp.dispose(); });
-            qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
-            qp.show();
-        });
-    }
-
     // ── Sidebar commands ──────────────────────────────────────
 
     const changeProjectCmd = vscode.commands.registerCommand(
         'swiftPackageHelper.sidebar.changeProject',
         async () => {
             const data = sidebarProvider.getProjectData();
-            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!data || data.xcodeProjects.length <= 1) { return; }
-            const items = data.xcodeProjects.map((p) => ({ label: p }));
-            const pick = await showQuickPickWithActive(items, 'Select Xcode project', config?.projectFile);
+            const pick = await vscode.window.showQuickPick(data.xcodeProjects, {
+                placeHolder: 'Select Xcode project'
+            });
             if (pick) {
-                await updateConfig({ projectFile: pick.label });
+                await updateConfig({ projectFile: pick });
                 sidebarProvider.refresh();
             }
         }
@@ -674,15 +653,16 @@ export function activate(context: vscode.ExtensionContext): void {
             const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!data || !config) { return; }
-            const items = data.targets.map((t) => ({ label: t.name }));
-            const pick = await showQuickPickWithActive(items, 'Select target', config.targetName);
+            const picks = data.targets.map((t) => t.name);
+            const pick = await vscode.window.showQuickPick(picks, {
+                placeHolder: 'Select target'
+            });
             if (pick) {
-                const target = data.targets.find((t) => t.name === pick.label)!;
+                const target = data.targets.find((t) => t.name === pick)!;
                 const rootPath = vscode.workspace.workspaceFolders![0].uri.fsPath;
                 const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
                 let bundleIdentifier = config.bundleIdentifier;
                 let productName = target.productName || target.name;
-                let strictConcurrency: string | undefined;
                 try {
                     const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
                     if (target.buildConfigurationListId) {
@@ -695,10 +675,9 @@ export function activate(context: vscode.ExtensionContext): void {
                         if (settings?.productName && !settings.productName.includes('$(')) {
                             productName = settings.productName;
                         }
-                        strictConcurrency = settings?.strictConcurrency;
                     }
                 } catch { /* use existing values */ }
-                await updateConfig({ targetName: pick.label, productName, bundleIdentifier, strictConcurrency });
+                await updateConfig({ targetName: pick, productName, bundleIdentifier });
             }
         }
     );
@@ -712,10 +691,11 @@ export function activate(context: vscode.ExtensionContext): void {
             const projectName = path.basename(config.projectFile, '.xcodeproj');
             const targetNames = data.targets.map((t) => t.name);
             const options = [...new Set([...data.schemes, projectName, ...targetNames])];
-            const items = options.map((o) => ({ label: o }));
-            const pick = await showQuickPickWithActive(items, 'Select scheme', config.schemeName);
+            const pick = await vscode.window.showQuickPick(options, {
+                placeHolder: 'Select scheme'
+            });
             if (pick) {
-                await updateConfig({ schemeName: pick.label });
+                await updateConfig({ schemeName: pick });
             }
         }
     );
@@ -746,31 +726,20 @@ export function activate(context: vscode.ExtensionContext): void {
                 vscode.window.showWarningMessage('No simulators found.');
                 return;
             }
-            const items = simulators.map((s) => {
+            const picks = simulators.map((s) => {
                 const runtime = sidebarProvider.formatRuntime(s.runtime);
                 const booted = s.state === 'Booted' ? ' (Booted)' : '';
-                return { label: s.name, description: `${runtime}${booted}` };
+                return {
+                    label: s.name,
+                    description: `${runtime}${booted}`,
+                    picked: s.name === config.simulatorDevice
+                };
             });
-            const pick = await showQuickPickWithActive(items, 'Select simulator device', config.simulatorDevice);
+            const pick = await vscode.window.showQuickPick(picks, {
+                placeHolder: 'Select simulator device'
+            });
             if (pick) {
                 await updateConfig({ simulatorDevice: pick.label });
-            }
-        }
-    );
-
-    const changeStrictConcurrencyCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.changeStrictConcurrency',
-        async () => {
-            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-            if (!config) { return; }
-            const items = [
-                { label: 'minimal', description: 'Only enforce Sendable where explicitly annotated' },
-                { label: 'targeted', description: 'Enforce Sendable for code that adopts concurrency features' },
-                { label: 'complete', description: 'Enforce Sendable everywhere — strictest mode' },
-            ];
-            const pick = await showQuickPickWithActive(items, 'Select strict concurrency level', config.strictConcurrency);
-            if (pick) {
-                await updateConfig({ strictConcurrency: pick.label });
             }
         }
     );
@@ -865,7 +834,7 @@ export function activate(context: vscode.ExtensionContext): void {
         generateCommand, generateWithOptionsCommand, generateBuildTasksCommand,
         taskProvider, debugProvider, treeView,
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
-        selectSimulatorCmd, changeStrictConcurrencyCmd, buildCmd, buildAndRunCmd, refreshCmd,
+        selectSimulatorCmd, buildCmd, buildAndRunCmd, refreshCmd,
         watcher, onProjectChange, onTaskEnd, onDebugEnd,
         outputChannel
     );

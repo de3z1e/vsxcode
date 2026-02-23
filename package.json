@@ -93,10 +93,6 @@
                 "title": "Select Simulator"
             },
             {
-                "command": "swiftPackageHelper.sidebar.changeStrictConcurrency",
-                "title": "Change Strict Concurrency"
-            },
-            {
                 "command": "swiftPackageHelper.sidebar.build",
                 "title": "Build",
                 "icon": "$(tools)"
