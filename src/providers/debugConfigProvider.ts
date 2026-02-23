@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { BuildTaskConfig } from '../types/interfaces';
 
 export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvider {
-    constructor(private workspaceState: vscode.Memento) {}
+    constructor(private workspaceState: vscode.Memento, private onDebugRequested?: () => void) {}
 
     provideDebugConfigurations(
         _folder: vscode.WorkspaceFolder | undefined,
@@ -35,9 +35,13 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
                 });
                 return undefined;
             }
+            this.onDebugRequested?.();
             return this.makeDebugConfig(config);
         }
 
+        if (debugConfiguration.preLaunchTask === 'xcode: build-install') {
+            this.onDebugRequested?.();
+        }
         return debugConfiguration;
     }
 

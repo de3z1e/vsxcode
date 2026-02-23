@@ -529,6 +529,10 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
     }
 }
 
+let consoleExecution: vscode.TaskExecution | undefined;
+let debugLaunchPending = false;
+let launchAppTerminatedByDebugEnd = false;
+
 export function activate(context: vscode.ExtensionContext): void {
     const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
 
@@ -545,7 +549,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
     const debugProvider = vscode.debug.registerDebugConfigurationProvider(
         'lldb-dap',
-        new XcodeDebugConfigProvider(context.workspaceState)
+        new XcodeDebugConfigProvider(context.workspaceState, () => { debugLaunchPending = true; })
     );
 
     // Register sidebar tree view
@@ -823,16 +827,27 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Task chaining and debug cleanup ───────────────────────
 
-    let consoleExecution: vscode.TaskExecution | undefined;
-
     const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
         const taskName = event.execution.task.name;
-        outputChannel.appendLine(`[task-end] "${taskName}" exited with code ${event.exitCode}`);
+        const exitCode = (taskName === 'launch-app' && launchAppTerminatedByDebugEnd && event.exitCode === undefined)
+            ? 0
+            : event.exitCode;
+        launchAppTerminatedByDebugEnd = false;
+
+        outputChannel.appendLine(`[task-end] "${taskName}" exited with code ${exitCode}`);
         outputChannel.show(true);
 
-        if (taskName !== 'build-install' || event.exitCode !== 0) {
+        if (taskName !== 'build-install' || exitCode !== 0) {
             return;
         }
+
+        // Only launch the app if build-install was triggered as a debug preLaunchTask.
+        // Skip if user ran build-install manually to avoid hanging on --wait-for-debugger.
+        if (!debugLaunchPending) {
+            outputChannel.appendLine('[launch-app] skipping — not triggered by debug session');
+            return;
+        }
+        debugLaunchPending = false;
 
         outputChannel.appendLine('[launch-app] fetching workspace tasks...');
         const tasks = await vscode.tasks.fetchTasks();
@@ -842,6 +857,11 @@ export function activate(context: vscode.ExtensionContext): void {
         if (launchTask) {
             outputChannel.appendLine('[launch-app] executing launch-app task...');
             try {
+                if (consoleExecution) {
+                    outputChannel.appendLine('[launch-app] terminating previous launch-app task');
+                    consoleExecution.terminate();
+                    consoleExecution = undefined;
+                }
                 consoleExecution = await vscode.tasks.executeTask(launchTask);
                 outputChannel.appendLine('[launch-app] task started successfully');
             } catch (error) {
@@ -854,14 +874,41 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async () => {
+        debugLaunchPending = false;
+
         if (consoleExecution) {
             outputChannel.appendLine('[debug-end] terminating console task');
+            launchAppTerminatedByDebugEnd = true;
             consoleExecution.terminate();
             consoleExecution = undefined;
         }
-        outputChannel.appendLine('[debug-end] cleaning up debugserver');
+
+        const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
         const cp = await import('child_process');
-        cp.exec('pkill -f debugserver', () => {});
+
+        // Cleanly terminate the app on the simulator — debugserver exits naturally when the app dies
+        if (config) {
+            outputChannel.appendLine(`[debug-end] terminating app "${config.bundleIdentifier}" on simulator`);
+            cp.exec(
+                `xcrun simctl terminate booted "${config.bundleIdentifier}"`,
+                (error) => {
+                    if (error) {
+                        outputChannel.appendLine(`[debug-end] simctl terminate: ${error.message}`);
+                    }
+                }
+            );
+        }
+
+        // Fallback: kill any residual debugserver after giving simctl terminate time to propagate
+        setTimeout(() => {
+            outputChannel.appendLine('[debug-end] cleaning up residual debugserver processes');
+            cp.exec('pkill -f debugserver', (error) => {
+                if (error && error.code !== 1) {
+                    // exit code 1 = no matching processes (normal after simctl terminate)
+                    outputChannel.appendLine(`[debug-end] pkill debugserver: ${error.message}`);
+                }
+            });
+        }, 1000);
     });
 
     // ── Register all disposables ──────────────────────────────
@@ -888,4 +935,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 }
 
-export function deactivate(): void {}
+export function deactivate(): void {
+    if (consoleExecution) {
+        consoleExecution.terminate();
+        consoleExecution = undefined;
+    }
+}
