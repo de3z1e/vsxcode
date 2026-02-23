@@ -131,7 +131,7 @@ export function parseTargetDependencies(pbxContents: string): Map<string, Target
 export function parseBuildPhaseIds(
     pbxContents: string,
     targetName: string
-): { frameworksBuildPhaseId?: string; resourcesBuildPhaseId?: string } {
+): { sourcesBuildPhaseId?: string; frameworksBuildPhaseId?: string; resourcesBuildPhaseId?: string } {
     const sectionRegex =
         /\/\* Begin PBXNativeTarget section \*\/([\s\S]*?)\/\* End PBXNativeTarget section \*\//;
     const sectionMatch = sectionRegex.exec(pbxContents);
@@ -155,10 +155,12 @@ export function parseBuildPhaseIds(
         }
         const phasesBlock = buildPhasesMatch[1];
 
+        const sourcesMatch = /([A-F0-9]+)\s*\/\*\s*Sources\s*\*\//.exec(phasesBlock);
         const frameworkMatch = /([A-F0-9]+)\s*\/\*\s*Frameworks\s*\*\//.exec(phasesBlock);
         const resourceMatch = /([A-F0-9]+)\s*\/\*\s*Resources\s*\*\//.exec(phasesBlock);
 
         return {
+            sourcesBuildPhaseId: sourcesMatch ? sourcesMatch[1] : undefined,
             frameworksBuildPhaseId: frameworkMatch ? frameworkMatch[1] : undefined,
             resourcesBuildPhaseId: resourceMatch ? resourceMatch[1] : undefined
         };

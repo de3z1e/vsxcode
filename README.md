@@ -10,6 +10,7 @@ Open a folder containing an `.xcodeproj` and the extension handles the rest:
 2. **Auto-configures build tasks** with sensible defaults (target, scheme, simulator, bundle ID).
 3. **Configures SourceKit-LSP** for iOS simulator target resolution so IntelliSense works for UIKit and other iOS frameworks.
 4. **Silently regenerates** `Package.swift` whenever the `.pbxproj` file changes.
+5. **Syncs Swift files to the Xcode project** — when `.swift` files are added or removed from a target directory, the `.xcodeproj` is updated automatically (PBXBuildFile, PBXFileReference, PBXGroup, and PBXSourcesBuildPhase entries).
 
 ### Sidebar
 
@@ -64,7 +65,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ### Installation
 
 - Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-2.0.3.vsix`.
+- Install the bundled package directly: `code --install-extension swift-package-helper-2.1.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -72,5 +73,5 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-2.0.3.vsix
+code --install-extension swift-package-helper-2.1.0.vsix
 ```

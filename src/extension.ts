@@ -24,6 +24,7 @@ import { listAvailableSimulators } from './utils/simulator';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
+import { createSwiftFileWatcher } from './sync/swiftFileSync';
 import type { BuildTaskConfig } from './types/interfaces';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
@@ -784,6 +785,16 @@ export function activate(context: vscode.ExtensionContext): void {
             });
         }
     });
+
+    // ── Swift file watcher (auto-sync to pbxproj) ─────────────
+
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        const swiftWatcherDisposables = createSwiftFileWatcher(
+            workspaceFolders[0].uri.fsPath,
+            outputChannel
+        );
+        context.subscriptions.push(...swiftWatcherDisposables);
+    }
 
     // ── Task chaining and debug cleanup ───────────────────────
 

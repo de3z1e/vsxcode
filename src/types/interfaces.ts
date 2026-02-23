@@ -115,6 +115,7 @@ export interface ResourceOutput {
 }
 
 export interface TargetBuildPhases {
+    sourcesBuildPhaseId?: string;
     frameworksBuildPhaseId?: string;
     resourcesBuildPhaseId?: string;
 }
