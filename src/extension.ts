@@ -545,8 +545,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
     const debugProvider = vscode.debug.registerDebugConfigurationProvider(
         'lldb-dap',
-        new XcodeDebugConfigProvider(context.workspaceState),
-        vscode.DebugConfigurationProviderTriggerKind.Dynamic
+        new XcodeDebugConfigProvider(context.workspaceState)
     );
 
     // Register sidebar tree view
@@ -762,7 +761,31 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const buildAndRunCmd = vscode.commands.registerCommand(
         'swiftPackageHelper.sidebar.buildAndRun',
-        () => vscode.commands.executeCommand('workbench.action.debug.start')
+        async () => {
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            if (!config) {
+                vscode.window.showErrorMessage(
+                    'No build configuration found. Run "Swift: Configure Build Tasks" first.',
+                    'Configure'
+                ).then((action) => {
+                    if (action === 'Configure') {
+                        vscode.commands.executeCommand('swiftPackageHelper.generateBuildTasks');
+                    }
+                });
+                return;
+            }
+            const debugConfig: vscode.DebugConfiguration = {
+                type: 'lldb-dap',
+                request: 'attach',
+                name: `Debug ${config.productName}`,
+                preLaunchTask: 'xcode: build-install',
+                attachCommands: [
+                    `process attach --name ${config.productName} --waitfor`
+                ]
+            };
+            const folder = vscode.workspace.workspaceFolders?.[0];
+            await vscode.debug.startDebugging(folder, debugConfig);
+        }
     );
 
     const refreshCmd = vscode.commands.registerCommand(
