@@ -13,12 +13,14 @@ const COLORIZE_BUILD = [
 
 export function buildCommandLine(config: BuildTaskConfig): string {
     const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
+    const udid = config.simulatorUdid || config.simulatorDevice;
     return [
         'set -eo pipefail; xcodebuild',
         `-project "${config.projectFile}"`,
         `-scheme "${config.schemeName}"`,
         '-configuration Debug',
         '-sdk iphonesimulator',
+        `-destination "id=${udid}"`,
         `-derivedDataPath "${derivedData}"`,
         `build 2>&1 | ${COLORIZE_BUILD}`,
     ].join(' ');
@@ -27,15 +29,17 @@ export function buildCommandLine(config: BuildTaskConfig): string {
 export function buildInstallCommandLine(config: BuildTaskConfig): string {
     const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
     const appPath = `${derivedData}/Build/Products/Debug-iphonesimulator/${config.productName}.app`;
+    const udid = config.simulatorUdid || config.simulatorDevice;
     return [
         'set -eo pipefail; xcodebuild',
         `-project "${config.projectFile}"`,
         `-scheme "${config.schemeName}"`,
         '-configuration Debug',
         '-sdk iphonesimulator',
+        `-destination "id=${udid}"`,
         `-derivedDataPath "${derivedData}"`,
         `build 2>&1 | ${COLORIZE_BUILD}`,
-        `&& { xcrun simctl boot "${config.simulatorDevice}" 2>/dev/null || true`,
+        `&& { xcrun simctl boot "${udid}" 2>/dev/null || true`,
         `; xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
         `; xcrun simctl install booted "${appPath}"`,
         '; open -a Simulator; }',

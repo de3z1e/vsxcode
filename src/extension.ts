@@ -454,7 +454,7 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
     }
 
     const simulatorPick = await vscode.window.showQuickPick(
-        simulators.map((s) => ({ label: s.name, description: s.state, detail: s.runtime })),
+        simulators.map((s) => ({ label: s.name, description: s.state, detail: s.runtime, udid: s.udid })),
         { placeHolder: 'Select simulator device' }
     );
     if (!simulatorPick) {
@@ -506,7 +506,8 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         targetName: selectedTarget.name,
         productName: resolvedProductName,
         bundleIdentifier,
-        simulatorDevice: simulatorPick.label
+        simulatorDevice: simulatorPick.label,
+        simulatorUdid: simulatorPick.udid
     };
 
     await workspaceState.update('buildTaskConfig', buildTaskConfig);
@@ -733,14 +734,15 @@ export function activate(context: vscode.ExtensionContext): void {
                 return {
                     label: s.name,
                     description: `${runtime}${booted}`,
-                    picked: s.name === config.simulatorDevice
+                    picked: s.name === config.simulatorDevice,
+                    udid: s.udid
                 };
             });
             const pick = await vscode.window.showQuickPick(picks, {
                 placeHolder: 'Select simulator device'
             });
             if (pick) {
-                await updateConfig({ simulatorDevice: pick.label });
+                await updateConfig({ simulatorDevice: pick.label, simulatorUdid: pick.udid });
             }
         }
     );

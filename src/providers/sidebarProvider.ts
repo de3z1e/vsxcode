@@ -258,6 +258,7 @@ export async function autoConfigureBuildTasks(
             productName: resolvedProductName,
             bundleIdentifier,
             simulatorDevice: iphone.name,
+            simulatorUdid: iphone.udid,
         };
         await workspaceState.update('buildTaskConfig', config);
 

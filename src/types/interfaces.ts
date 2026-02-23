@@ -145,4 +145,5 @@ export interface BuildTaskConfig {
     productName: string;
     bundleIdentifier: string;
     simulatorDevice: string;
+    simulatorUdid: string;
 }
