@@ -11,33 +11,55 @@ const COLORIZE_BUILD = [
     `-e 's/\\(.*failures)\\)/\\x1b[31m\\1\\x1b[0m/'`,
 ].join(' ');
 
-export function buildCommandLine(config: BuildTaskConfig): string {
+function xcodebuildArgs(config: BuildTaskConfig): string[] {
     const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
     const udid = config.simulatorUdid || config.simulatorDevice;
-    return [
+    const sdk = config.isPhysicalDevice ? 'iphoneos' : 'iphonesimulator';
+    const args = [
         'set -eo pipefail; xcodebuild',
         `-project "${config.projectFile}"`,
         `-scheme "${config.schemeName}"`,
         '-configuration Debug',
-        '-sdk iphonesimulator',
+        `-sdk ${sdk}`,
         `-destination "id=${udid}"`,
         `-derivedDataPath "${derivedData}"`,
+    ];
+    if (config.isPhysicalDevice) {
+        args.push('-allowProvisioningUpdates');
+    }
+    return args;
+}
+
+// For physical devices, devicectl uses CoreDevice identifier (not hardware UDID)
+function devicectlId(config: BuildTaskConfig): string {
+    return config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
+}
+
+export function buildCommandLine(config: BuildTaskConfig): string {
+    return [
+        ...xcodebuildArgs(config),
         `build 2>&1 | ${COLORIZE_BUILD}`,
     ].join(' ');
 }
 
 export function buildInstallCommandLine(config: BuildTaskConfig): string {
     const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
-    const appPath = `${derivedData}/Build/Products/Debug-iphonesimulator/${config.productName}.app`;
+
+    if (config.isPhysicalDevice) {
+        const appPath = `${derivedData}/Build/Products/Debug-iphoneos/${config.productName}.app`;
+        const devId = devicectlId(config);
+        return [
+            ...xcodebuildArgs(config),
+            `build 2>&1 | ${COLORIZE_BUILD}`,
+            `&& xcrun devicectl device install app --device "${devId}" "${appPath}"`,
+            `&& xcrun devicectl device process launch --device "${devId}" "${config.bundleIdentifier}"`,
+        ].join(' ');
+    }
+
     const udid = config.simulatorUdid || config.simulatorDevice;
+    const appPath = `${derivedData}/Build/Products/Debug-iphonesimulator/${config.productName}.app`;
     return [
-        'set -eo pipefail; xcodebuild',
-        `-project "${config.projectFile}"`,
-        `-scheme "${config.schemeName}"`,
-        '-configuration Debug',
-        '-sdk iphonesimulator',
-        `-destination "id=${udid}"`,
-        `-derivedDataPath "${derivedData}"`,
+        ...xcodebuildArgs(config),
         `build 2>&1 | ${COLORIZE_BUILD}`,
         `&& { xcrun simctl boot "${udid}" 2>/dev/null || true`,
         `; xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
@@ -47,5 +69,9 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
 }
 
 export function launchAppCommandLine(config: BuildTaskConfig): string {
+    if (config.isPhysicalDevice) {
+        const devId = devicectlId(config);
+        return `xcrun devicectl device process launch --device "${devId}" --console "${config.bundleIdentifier}"`;
+    }
     return `xcrun simctl launch --console-pty --wait-for-debugger booted "${config.bundleIdentifier}"`;
 }

@@ -1,8 +1,8 @@
 {
     "name": "swift-package-helper",
     "displayName": "Swift Package Helper",
-    "description": "Xcode project integration for VS Code — IntelliSense, build tasks, and simulator debugging.",
-    "version": "2.1.3",
+    "description": "Xcode project integration for VS Code — IntelliSense, build tasks, and device/simulator debugging.",
+    "version": "2.2.0",
     "publisher": "de3z1e",
     "icon": "images/icon.png",
     "license": "MIT",
@@ -90,7 +90,7 @@
             },
             {
                 "command": "swiftPackageHelper.sidebar.selectSimulator",
-                "title": "Select Simulator"
+                "title": "Select Device"
             },
             {
                 "command": "swiftPackageHelper.sidebar.build",

@@ -146,4 +146,6 @@ export interface BuildTaskConfig {
     bundleIdentifier: string;
     simulatorDevice: string;
     simulatorUdid: string;
+    isPhysicalDevice?: boolean;
+    deviceIdentifier?: string;
 }

@@ -1,13 +1,13 @@
 # Swift Package Helper
 
-Xcode project integration for VS Code — IntelliSense, build tasks, and simulator debugging. The extension automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build and run iOS apps on the simulator directly from VS Code.
+Xcode project integration for VS Code — IntelliSense, build tasks, and device/simulator debugging. The extension automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build and run iOS apps on simulators and physical devices directly from VS Code.
 
 ### How It Works
 
 Open a folder containing an `.xcodeproj` and the extension handles the rest:
 
 1. **Auto-generates `Package.swift`** from the Xcode project on activation, with correct target paths, resources, dependencies, and Swift settings.
-2. **Auto-configures build tasks** with sensible defaults (target, scheme, simulator, bundle ID).
+2. **Auto-configures build tasks** with sensible defaults (target, scheme, device/simulator, bundle ID).
 3. **Configures SourceKit-LSP** for iOS simulator target resolution so IntelliSense works for UIKit and other iOS frameworks.
 4. **Silently regenerates** `Package.swift` whenever the `.pbxproj` file changes.
 5. **Syncs Swift files to the Xcode project** — when `.swift` files are added or removed from a target directory, the `.xcodeproj` is updated automatically (PBXBuildFile, PBXFileReference, PBXGroup, and PBXSourcesBuildPhase entries).
@@ -20,7 +20,7 @@ The extension adds a panel to the Activity Bar with configurable build settings:
 - **Target** — select the build target
 - **Scheme** — select the build scheme
 - **Bundle ID** — edit the bundle identifier
-- **Simulator** — select from available iOS simulators (shows booted state)
+- **Device** — select from connected physical devices or available iOS simulators
 
 Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 
@@ -30,7 +30,7 @@ Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 |---------|-------------|
 | **Swift: Generate Package.swift from Xcode Project** | Generates `Package.swift` using the Debug configuration with a diff view. |
 | **Swift: Generate Package.swift from Xcode Project (with Options)** | Same as above but lets you choose Debug or Release configuration. |
-| **Swift: Configure Build Tasks** | Manually configure build target, scheme, simulator, and bundle ID. |
+| **Swift: Configure Build Tasks** | Manually configure build target, scheme, device/simulator, and bundle ID. |
 
 ### Package.swift Generation
 
@@ -48,6 +48,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 
 - Uses VS Code's `TaskProvider` API to provide build, build-install, and launch-app tasks.
 - Uses `DebugConfigurationProvider` with LLDB DAP for simulator debugging.
+- Physical device builds use `xcrun devicectl` for app installation and launch (requires Xcode 15+).
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
 
@@ -55,7 +56,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
-| ⌘R | No active debug session | Start debugging (build, install, and launch on simulator) |
+| ⌘R | No active debug session | Build, install, and launch (simulator: with debugger; physical device: without debugger) |
 | ⌘R | During debug session | Stop current session and restart |
 
 ### Dependencies
@@ -65,7 +66,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ### Installation
 
 - Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-2.1.3.vsix`.
+- Install the bundled package directly: `code --install-extension swift-package-helper-2.2.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -73,5 +74,5 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-2.1.3.vsix
+code --install-extension swift-package-helper-2.2.0.vsix
 ```

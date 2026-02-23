@@ -20,7 +20,7 @@ import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resour
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { listAvailableSimulators } from './utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices } from './utils/simulator';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
@@ -448,15 +448,32 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         bundleIdentifier = input;
     }
 
-    const simulators = await listAvailableSimulators();
-    if (simulators.length === 0) {
-        throw new Error('No available iOS simulators found. Install simulators via Xcode.');
+    const [simulators, physicalDevices] = await Promise.all([
+        listAvailableSimulators(),
+        listPhysicalDevices(),
+    ]);
+    if (simulators.length === 0 && physicalDevices.length === 0) {
+        throw new Error('No available iOS devices found. Connect a device or install simulators via Xcode.');
     }
 
-    const simulatorPick = await vscode.window.showQuickPick(
-        simulators.map((s) => ({ label: s.name, description: s.state, detail: s.runtime, udid: s.udid })),
-        { placeHolder: 'Select simulator device' }
-    );
+    const devicePicks: (vscode.QuickPickItem & { udid: string; deviceIdentifier: string; isPhysical: boolean })[] = [];
+    if (physicalDevices.length > 0) {
+        devicePicks.push({ label: 'Physical Devices', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+        for (const d of physicalDevices) {
+            const transport = d.connectionType === 'wired' ? 'USB' : d.connectionType === 'localNetwork' ? 'Wi-Fi' : d.connectionType;
+            devicePicks.push({ label: d.name, description: `iOS ${d.osVersion} (${transport})`, udid: d.udid, deviceIdentifier: d.deviceIdentifier, isPhysical: true });
+        }
+    }
+    if (simulators.length > 0) {
+        devicePicks.push({ label: 'Simulators', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+        for (const s of simulators) {
+            devicePicks.push({ label: s.name, description: s.state, detail: s.runtime, udid: s.udid, deviceIdentifier: '', isPhysical: false });
+        }
+    }
+
+    const simulatorPick = await vscode.window.showQuickPick(devicePicks, {
+        placeHolder: 'Select device'
+    });
     if (!simulatorPick) {
         return;
     }
@@ -507,7 +524,9 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         productName: resolvedProductName,
         bundleIdentifier,
         simulatorDevice: simulatorPick.label,
-        simulatorUdid: simulatorPick.udid
+        simulatorUdid: simulatorPick.udid,
+        isPhysicalDevice: simulatorPick.isPhysical,
+        deviceIdentifier: simulatorPick.deviceIdentifier,
     };
 
     await workspaceState.update('buildTaskConfig', buildTaskConfig);
@@ -726,26 +745,71 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
-            const simulators = await listAvailableSimulators();
-            if (simulators.length === 0) {
-                vscode.window.showWarningMessage('No simulators found.');
+            const [simulators, physicalDevices] = await Promise.all([
+                listAvailableSimulators(),
+                listPhysicalDevices(),
+            ]);
+            if (simulators.length === 0 && physicalDevices.length === 0) {
+                vscode.window.showWarningMessage('No devices found.');
                 return;
             }
-            const picks = simulators.map((s) => {
-                const runtime = sidebarProvider.formatRuntime(s.runtime);
-                const booted = s.state === 'Booted' ? ' (Booted)' : '';
-                return {
-                    label: s.name,
-                    description: `${runtime}${booted}`,
-                    picked: s.name === config.simulatorDevice,
-                    udid: s.udid
-                };
-            });
-            const pick = await vscode.window.showQuickPick(picks, {
-                placeHolder: 'Select simulator device'
+            type DevicePick = vscode.QuickPickItem & { udid: string; deviceIdentifier: string; isPhysical: boolean };
+            const picks: DevicePick[] = [];
+            let activePick: DevicePick | undefined;
+            if (physicalDevices.length > 0) {
+                picks.push({ label: 'Physical Devices', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+                for (const d of physicalDevices) {
+                    const transport = d.connectionType === 'wired' ? 'USB' : d.connectionType === 'localNetwork' ? 'Wi-Fi' : d.connectionType;
+                    const item: DevicePick = {
+                        label: d.name,
+                        description: `iOS ${d.osVersion} (${transport})`,
+                        udid: d.udid,
+                        deviceIdentifier: d.deviceIdentifier,
+                        isPhysical: true,
+                    };
+                    if (d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier) {
+                        activePick = item;
+                    }
+                    picks.push(item);
+                }
+            }
+            if (simulators.length > 0) {
+                picks.push({ label: 'Simulators', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+                for (const s of simulators) {
+                    const runtime = sidebarProvider.formatRuntime(s.runtime);
+                    const booted = s.state === 'Booted' ? ' (Booted)' : '';
+                    const item: DevicePick = {
+                        label: s.name,
+                        description: `${runtime}${booted}`,
+                        udid: s.udid,
+                        deviceIdentifier: '',
+                        isPhysical: false,
+                    };
+                    if (s.udid === config.simulatorUdid) {
+                        activePick = item;
+                    }
+                    picks.push(item);
+                }
+            }
+            const pick = await new Promise<DevicePick | undefined>((resolve) => {
+                const qp = vscode.window.createQuickPick<DevicePick>();
+                qp.items = picks;
+                qp.placeholder = 'Select device';
+                if (activePick) {
+                    qp.activeItems = [activePick];
+                }
+                qp.onDidAccept(() => {
+                    resolve(qp.selectedItems[0]);
+                    qp.dispose();
+                });
+                qp.onDidHide(() => {
+                    resolve(undefined);
+                    qp.dispose();
+                });
+                qp.show();
             });
             if (pick) {
-                await updateConfig({ simulatorDevice: pick.label, simulatorUdid: pick.udid });
+                await updateConfig({ simulatorDevice: pick.label, simulatorUdid: pick.udid, deviceIdentifier: pick.deviceIdentifier, isPhysicalDevice: pick.isPhysical });
             }
         }
     );
@@ -778,17 +842,29 @@ export function activate(context: vscode.ExtensionContext): void {
                 });
                 return;
             }
-            const debugConfig: vscode.DebugConfiguration = {
-                type: 'lldb-dap',
-                request: 'attach',
-                name: `Debug ${config.productName}`,
-                preLaunchTask: 'xcode: build-install',
-                attachCommands: [
-                    `process attach --name ${config.productName} --waitfor`
-                ]
-            };
-            const folder = vscode.workspace.workspaceFolders?.[0];
-            await vscode.debug.startDebugging(folder, debugConfig);
+            if (config.isPhysicalDevice) {
+                // Physical device: build, install, and launch without debugger
+                const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
+                const buildInstallTask = tasks.find((t) => t.name === 'build-install');
+                if (buildInstallTask) {
+                    await vscode.tasks.executeTask(buildInstallTask);
+                } else {
+                    vscode.window.showErrorMessage('Build task not available. Check configuration.');
+                }
+            } else {
+                // Simulator: start debug session with lldb-dap attach
+                const debugConfig: vscode.DebugConfiguration = {
+                    type: 'lldb-dap',
+                    request: 'attach',
+                    name: `Debug ${config.productName}`,
+                    preLaunchTask: 'xcode: build-install',
+                    attachCommands: [
+                        `process attach --name ${config.productName} --waitfor`
+                    ]
+                };
+                const folder = vscode.workspace.workspaceFolders?.[0];
+                await vscode.debug.startDebugging(folder, debugConfig);
+            }
         }
     );
 
@@ -887,7 +963,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const cp = await import('child_process');
 
         // Cleanly terminate the app on the simulator — debugserver exits naturally when the app dies
-        if (config) {
+        if (config && !config.isPhysicalDevice) {
             outputChannel.appendLine(`[debug-end] terminating app "${config.bundleIdentifier}" on simulator`);
             cp.exec(
                 `xcrun simctl terminate booted "${config.bundleIdentifier}"`,

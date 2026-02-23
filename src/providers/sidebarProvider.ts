@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { promises as fsp } from 'fs';
 import type { BuildTaskConfig, NativeTarget } from '../types/interfaces';
-import { listAvailableSimulators, type SimulatorDevice } from '../utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices, type SimulatorDevice, type PhysicalDevice } from '../utils/simulator';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { getBuildSettingsForTarget, getProjectBuildSettings } from '../parsers/buildSettings';
 
@@ -34,6 +34,7 @@ export interface ProjectData {
     targets: NativeTarget[];
     schemes: string[];
     simulators: SimulatorDevice[];
+    physicalDevices: PhysicalDevice[];
 }
 
 // ── TreeDataProvider ─────────────────────────────────────────────
@@ -104,7 +105,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 'swiftPackageHelper.sidebar.changeScheme', 'play-circle'),
             this.createConfigItem('config-bundleId', 'Bundle ID', config.bundleIdentifier,
                 'swiftPackageHelper.sidebar.changeBundleId', 'tag'),
-            this.createConfigItem('config-simulator', 'Simulator', config.simulatorDevice,
+            this.createConfigItem('config-simulator', 'Device', config.simulatorDevice,
                 'swiftPackageHelper.sidebar.selectSimulator', 'device-mobile'),
         ];
     }
@@ -156,9 +157,12 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             } catch { /* no schemes dir */ }
         }
 
-        const simulators = await listAvailableSimulators();
+        const [simulators, physicalDevices] = await Promise.all([
+            listAvailableSimulators(),
+            listPhysicalDevices(),
+        ]);
 
-        this.projectData = { xcodeProjects, targets, schemes, simulators };
+        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices };
     }
 
     getProjectData(): ProjectData | null {
