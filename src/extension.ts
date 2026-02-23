@@ -20,7 +20,7 @@ import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resour
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { listAvailableSimulators, listPhysicalDevices } from './utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, devicectlLaunchStopped, devicectlTerminate } from './utils/simulator';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
@@ -551,6 +551,19 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
 let consoleExecution: vscode.TaskExecution | undefined;
 let debugLaunchPending = false;
 let launchAppTerminatedByDebugEnd = false;
+let physicalDevicePid: number | undefined;
+
+function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
+    return new Promise(async (resolve) => {
+        const listener = vscode.tasks.onDidEndTaskProcess((event) => {
+            if (event.execution.task === task || event.execution.task.name === task.name) {
+                listener.dispose();
+                resolve(event.exitCode);
+            }
+        });
+        await vscode.tasks.executeTask(task);
+    });
+}
 
 export function activate(context: vscode.ExtensionContext): void {
     const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
@@ -827,6 +840,78 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    // ── Physical device debug orchestration ────────────────────
+    async function buildAndDebugPhysicalDevice(config: BuildTaskConfig, channel: vscode.OutputChannel): Promise<void> {
+        // 1. Fetch and execute build task, wait for completion
+        const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
+        const buildTask = tasks.find((t) => t.name === 'build');
+        if (!buildTask) {
+            vscode.window.showErrorMessage('Build task not available. Check configuration.');
+            return;
+        }
+
+        channel.appendLine('[physical-debug] starting build...');
+        const exitCode = await executeTaskAndWait(buildTask);
+        if (exitCode !== 0) {
+            channel.appendLine(`[physical-debug] build failed with exit code ${exitCode}`);
+            return;
+        }
+        channel.appendLine('[physical-debug] build succeeded');
+
+        const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
+        const homeDir = require('os').homedir();
+        const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphoneos', `${config.productName}.app`);
+
+        // 2. Install app on device
+        try {
+            channel.appendLine(`[physical-debug] installing ${config.productName}.app on device...`);
+            await devicectlInstall(devId, appPath);
+            channel.appendLine('[physical-debug] install succeeded');
+        } catch (error) {
+            const message = (error as { message?: string }).message || String(error);
+            channel.appendLine(`[physical-debug] install failed: ${message}`);
+            vscode.window.showErrorMessage(`Failed to install app on device: ${message}`);
+            return;
+        }
+
+        // 3. Launch app suspended, capture PID
+        let pid: number;
+        try {
+            channel.appendLine(`[physical-debug] launching ${config.bundleIdentifier} suspended...`);
+            pid = await devicectlLaunchStopped(devId, config.bundleIdentifier);
+            physicalDevicePid = pid;
+            channel.appendLine(`[physical-debug] app launched with PID ${pid}`);
+        } catch (error) {
+            const message = (error as { message?: string }).message || String(error);
+            channel.appendLine(`[physical-debug] launch failed: ${message}`);
+            vscode.window.showErrorMessage(`Failed to launch app on device: ${message}`);
+            return;
+        }
+
+        // 4. Attach debugger
+        const debugConfig: vscode.DebugConfiguration = {
+            type: 'lldb-dap',
+            request: 'attach',
+            name: `Debug ${config.productName} (Device)`,
+            program: appPath,
+            initCommands: [
+                'platform select remote-ios',
+            ],
+            attachCommands: [
+                `script lldb.debugger.HandleCommand('device select ${devId}')`,
+                `script lldb.debugger.HandleCommand('device process attach --pid ${pid}')`,
+            ],
+        };
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        channel.appendLine('[physical-debug] starting debug session...');
+        const started = await vscode.debug.startDebugging(folder, debugConfig);
+        if (!started) {
+            channel.appendLine('[physical-debug] debug session failed to start, terminating app');
+            await devicectlTerminate(devId, pid);
+            physicalDevicePid = undefined;
+        }
+    }
+
     const buildAndRunCmd = vscode.commands.registerCommand(
         'swiftPackageHelper.sidebar.buildAndRun',
         async () => {
@@ -843,14 +928,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
             if (config.isPhysicalDevice) {
-                // Physical device: build, install, and launch without debugger
-                const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
-                const buildInstallTask = tasks.find((t) => t.name === 'build-install');
-                if (buildInstallTask) {
-                    await vscode.tasks.executeTask(buildInstallTask);
-                } else {
-                    vscode.window.showErrorMessage('Build task not available. Check configuration.');
-                }
+                // Physical device: build, install, launch suspended, attach debugger
+                await buildAndDebugPhysicalDevice(config, outputChannel);
             } else {
                 // Simulator: start debug session with lldb-dap attach
                 const debugConfig: vscode.DebugConfiguration = {
@@ -961,6 +1040,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
         const cp = await import('child_process');
+
+        // Physical device: terminate app via devicectl
+        if (config?.isPhysicalDevice && physicalDevicePid) {
+            const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
+            outputChannel.appendLine(`[debug-end] terminating PID ${physicalDevicePid} on device`);
+            await devicectlTerminate(devId, physicalDevicePid);
+            physicalDevicePid = undefined;
+            return;
+        }
 
         // Cleanly terminate the app on the simulator — debugserver exits naturally when the app dies
         if (config && !config.isPhysicalDevice) {

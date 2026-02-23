@@ -52,13 +52,11 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
 
-**Limitation:** Debugger attachment (lldb-dap) is not currently supported for physical device builds. ⌘R will build, install, and launch the app on device, but without a debug session. Simulator builds have full debugging support.
-
 ### Keyboard Shortcuts
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
-| ⌘R | No active debug session | Build, install, and launch (simulator: with debugger; physical device: without debugger) |
+| ⌘R | No active debug session | Build, install, and launch with debugger attached |
 | ⌘R | During debug session | Stop current session and restart |
 
 ### Dependencies

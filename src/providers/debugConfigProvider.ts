@@ -9,7 +9,7 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
         _token?: vscode.CancellationToken
     ): vscode.DebugConfiguration[] {
         const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-        if (!config) {
+        if (!config || config.isPhysicalDevice) {
             return [];
         }
         return [this.makeDebugConfig(config)];
@@ -33,6 +33,12 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
                         vscode.commands.executeCommand('swiftPackageHelper.generateBuildTasks');
                     }
                 });
+                return undefined;
+            }
+            if (config.isPhysicalDevice) {
+                vscode.window.showInformationMessage(
+                    'Use Cmd+R to build and debug on a physical device.'
+                );
                 return undefined;
             }
             this.onDebugRequested?.();
