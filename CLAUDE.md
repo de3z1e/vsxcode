@@ -21,11 +21,11 @@ npm run compile && npm run package && code --install-extension *.vsix --force
 
 VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.swift` manifests and build/debug task configurations for iOS simulator development. Requires macOS with Xcode installed. No runtime dependencies — only VS Code API and Node.js built-ins.
 
-**Data flow**: Read `project.pbxproj` (ASCII plist) → regex-based parsing into structured data → formatted Swift/JSON output → diff view → user confirmation → write file.
+**Data flow**: Read `project.pbxproj` (ASCII plist) → regex-based parsing into structured data → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` via string manipulation.
 
 ### Entry Point
 
-`src/extension.ts` — Orchestrator (~850 lines) that registers all commands, providers, and watchers. Contains two main workflows:
+`src/extension.ts` — Orchestrator (~870 lines) that registers all commands, providers, and watchers. Contains two main workflows:
 
 1. **generatePackageSwift** — Parses pbxproj, builds Package.swift, configures SourceKit-LSP for iOS simulator SDK
 2. **configureBuildTasks** — Interactive setup of project/target/scheme/simulator, stores `BuildTaskConfig` to workspace state
@@ -56,14 +56,21 @@ src/
 │   ├── targets.ts               — PBXNativeTarget parsing, isTestTarget, target dependencies, build phase IDs
 │   ├── packages.ts              — XCRemoteSwiftPackageReference + XCLocalSwiftPackageReference + product deps
 │   ├── frameworks.ts            — PBXFrameworksBuildPhase parsing, framework name extraction
-│   └── resources.ts             — PBXResourcesBuildPhase parsing, resource type classification,
-│                                  scanForUnhandledFiles (filesystem scan for SPM compatibility)
+│   ├── resources.ts             — PBXResourcesBuildPhase parsing, resource type classification,
+│   │                              scanForUnhandledFiles (filesystem scan for SPM compatibility)
+│   └── groups.ts                — PBXGroup hierarchy parsing, path-to-group resolution
 ├── generators/
 │   ├── packageSwift.ts          — Main Package.swift builder (platforms, products, deps, targets)
 │   ├── swiftSettings.ts         — .define(), .unsafeFlags() from build settings
 │   ├── linkerSettings.ts        — .linkedFramework() from linked frameworks
 │   ├── resources.ts             — Resource entry formatting (.process/.copy)
 │   └── buildTasks.ts            — xcodebuild shell commands (build, build-install, launch-app)
+├── writers/
+│   └── pbxproj.ts               — pbxproj modification: add/remove PBXBuildFile, PBXFileReference,
+│                                  PBXGroup children, PBXSourcesBuildPhase entries; ID generation
+├── sync/
+│   └── swiftFileSync.ts         — FileSystemWatcher for *.swift, target-directory mapping,
+│                                  orchestrates pbxproj updates on file create/delete
 ├── providers/
 │   ├── taskProvider.ts          — vscode.TaskProvider for xcode-build task type (3 subtasks)
 │   ├── debugConfigProvider.ts   — vscode.DebugConfigurationProvider for lldb-dap attach configs
@@ -79,7 +86,8 @@ src/
 - **Build settings inheritance**: Debug/Release configs merge with project-level defaults via `mergeWithInherited`, respecting `$(inherited)`
 - **Resource classification**: Files classified as `.process` (compilable: xcassets, storyboard, xib, strings, xcdatamodeld) or `.copy` (everything else)
 - **Filesystem scanning**: After pbxproj parsing, `scanForUnhandledFiles` walks target directories to auto-exclude Xcode-specific files (Info.plist, .entitlements, .pch) and auto-include bundle-like resource directories (.xcdatamodeld, .xcassets, .lproj, etc.) that SPM can't auto-categorize
-- **Auto-sync**: FileSystemWatcher on `*.pbxproj` triggers silent Package.swift regeneration
+- **Auto-sync (pbxproj → Package.swift)**: FileSystemWatcher on `*.pbxproj` triggers silent Package.swift regeneration
+- **Auto-sync (Swift files → pbxproj)**: FileSystemWatcher on `*.swift` detects file create/delete in target directories and updates pbxproj (4 entries: PBXBuildFile, PBXFileReference, PBXGroup, PBXSourcesBuildPhase). Handles subdirectories via PBXGroup tree resolution. Debounced (300ms) with write serialization.
 - **Auto-configure**: On activation, auto-detects first project/target/simulator and stores `BuildTaskConfig` to workspace state
 - **Task chaining**: build-install completion triggers launch-app; debug session end kills debugserver
 - **SourceKit-LSP**: Auto-configures `swift.sourcekit-lsp.serverArguments` with iOS simulator SDK paths for intellisense
