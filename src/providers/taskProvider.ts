@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { BuildTaskConfig } from '../types/interfaces';
-import { buildCommandLine, buildInstallCommandLine, launchAppCommandLine } from '../generators/buildTasks';
+import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine } from '../generators/buildTasks';
 
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
@@ -20,7 +20,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         return [
             this.createBuildTask(config, folder),
             this.createBuildInstallTask(config, folder),
-            this.createLaunchAppTask(config, folder),
+            this.createRunAndDebugTask(config, folder),
         ];
     }
 
@@ -39,8 +39,8 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
                 return this.createBuildTask(config, folder);
             case 'build-install':
                 return this.createBuildInstallTask(config, folder);
-            case 'launch-app':
-                return this.createLaunchAppTask(config, folder);
+            case 'run-and-debug':
+                return this.createRunAndDebugTask(config, folder);
             default:
                 return undefined;
         }
@@ -75,11 +75,11 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         return task;
     }
 
-    private createLaunchAppTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
+    private createRunAndDebugTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
         const task = new vscode.Task(
-            { type: TASK_TYPE, task: 'launch-app' },
-            folder, 'launch-app', TASK_SOURCE,
-            new vscode.ShellExecution(launchAppCommandLine(config)),
+            { type: TASK_TYPE, task: 'run-and-debug' },
+            folder, 'run-and-debug', TASK_SOURCE,
+            new vscode.ShellExecution(runAndDebugCommandLine(config)),
             []
         );
         task.presentationOptions = {

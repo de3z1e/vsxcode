@@ -64,7 +64,7 @@ src/
 │   ├── swiftSettings.ts         — .define(), .unsafeFlags() from build settings
 │   ├── linkerSettings.ts        — .linkedFramework() from linked frameworks
 │   ├── resources.ts             — Resource entry formatting (.process/.copy)
-│   └── buildTasks.ts            — xcodebuild shell commands (build, build-install, launch-app)
+│   └── buildTasks.ts            — xcodebuild shell commands (build, build-install, run-and-debug)
 ├── writers/
 │   └── pbxproj.ts               — pbxproj modification: add/remove PBXBuildFile, PBXFileReference,
 │                                  PBXGroup children, PBXSourcesBuildPhase entries; ID generation
@@ -89,7 +89,7 @@ src/
 - **Auto-sync (pbxproj → Package.swift)**: FileSystemWatcher on `*.pbxproj` triggers silent Package.swift regeneration
 - **Auto-sync (Swift files → pbxproj)**: FileSystemWatcher on `*.swift` detects file create/delete in target directories and updates pbxproj (4 entries: PBXBuildFile, PBXFileReference, PBXGroup, PBXSourcesBuildPhase). Handles subdirectories via PBXGroup tree resolution. Debounced (300ms) with write serialization.
 - **Auto-configure**: On activation, auto-detects first project/target/simulator and stores `BuildTaskConfig` to workspace state
-- **Task chaining**: build-install completion triggers launch-app; debug session end kills debugserver
+- **Task chaining**: build-install completion triggers run-and-debug; debug session end kills debugserver
 - **SourceKit-LSP**: Auto-configures `swift.sourcekit-lsp.serverArguments` with iOS simulator SDK paths for intellisense
 - **Diff view**: Shows current vs generated Package.swift before overwriting
 - **Activation**: `workspaceContains:**/*.pbxproj` and `onDebug`
@@ -100,4 +100,4 @@ Swift settings (.define, .unsafeFlags, .swiftLanguageMode), linked frameworks (.
 
 ### Build & Debug Features
 
-Custom `xcode-build` task type with build/build-install/launch-app subtasks, lldb-dap debug attachment, simulator boot + app install via xcrun simctl, DerivedData isolation per scheme, Cmd+R keybinding, sidebar UI for configuration management.
+Custom `xcode-build` task type with build/build-install/run-and-debug subtasks, lldb-dap debug attachment, simulator boot + app install via xcrun simctl, DerivedData isolation per scheme, Cmd+R keybinding, sidebar UI for configuration management.

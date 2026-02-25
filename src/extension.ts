@@ -1005,7 +1005,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
         const taskName = event.execution.task.name;
-        const exitCode = (taskName === 'launch-app' && launchAppTerminatedByDebugEnd && event.exitCode === undefined)
+        const exitCode = (taskName === 'run-and-debug' && launchAppTerminatedByDebugEnd && event.exitCode === undefined)
             ? 0
             : event.exitCode;
         launchAppTerminatedByDebugEnd = false;
@@ -1019,32 +1019,32 @@ export function activate(context: vscode.ExtensionContext): void {
         // Only launch the app if build-install was triggered as a debug preLaunchTask.
         // Skip if user ran build-install manually to avoid hanging on --wait-for-debugger.
         if (!debugLaunchPending) {
-            outputChannel.appendLine('[launch-app] skipping — not triggered by debug session');
+            outputChannel.appendLine('[run-and-debug] skipping — not triggered by debug session');
             return;
         }
         debugLaunchPending = false;
 
-        outputChannel.appendLine('[launch-app] fetching workspace tasks...');
+        outputChannel.appendLine('[run-and-debug] fetching workspace tasks...');
         const tasks = await vscode.tasks.fetchTasks();
-        outputChannel.appendLine(`[launch-app] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
+        outputChannel.appendLine(`[run-and-debug] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
 
-        const launchTask = tasks.find((t) => t.name === 'launch-app');
+        const launchTask = tasks.find((t) => t.name === 'run-and-debug');
         if (launchTask) {
-            outputChannel.appendLine('[launch-app] executing launch-app task...');
+            outputChannel.appendLine('[run-and-debug] executing run-and-debug task...');
             try {
                 if (consoleExecution) {
-                    outputChannel.appendLine('[launch-app] terminating previous launch-app task');
+                    outputChannel.appendLine('[run-and-debug] terminating previous run-and-debug task');
                     consoleExecution.terminate();
                     consoleExecution = undefined;
                 }
                 consoleExecution = await vscode.tasks.executeTask(launchTask);
-                outputChannel.appendLine('[launch-app] task started successfully');
+                outputChannel.appendLine('[run-and-debug] task started successfully');
             } catch (error) {
                 const message = (error as { message?: string }).message;
-                outputChannel.appendLine(`[launch-app] task failed: ${message}`);
+                outputChannel.appendLine(`[run-and-debug] task failed: ${message}`);
             }
         } else {
-            outputChannel.appendLine('[launch-app] ERROR: launch-app task not found in workspace');
+            outputChannel.appendLine('[run-and-debug] ERROR: run-and-debug task not found in workspace');
         }
     });
 

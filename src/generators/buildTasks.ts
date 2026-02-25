@@ -68,7 +68,7 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
     ].join(' ');
 }
 
-export function launchAppCommandLine(config: BuildTaskConfig): string {
+export function runAndDebugCommandLine(config: BuildTaskConfig): string {
     if (config.isPhysicalDevice) {
         const devId = devicectlId(config);
         return `xcrun devicectl device process launch --device "${devId}" --console "${config.bundleIdentifier}"`;

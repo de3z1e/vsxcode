@@ -46,7 +46,7 @@ Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 
 Build tasks are integrated directly into the extension — no shell scripts, `tasks.json`, or `launch.json` files are written to the workspace.
 
-- Uses VS Code's `TaskProvider` API to provide build, build-install, and launch-app tasks.
+- Uses VS Code's `TaskProvider` API to provide build, build-install, and run-and-debug tasks.
 - Uses `DebugConfigurationProvider` with LLDB DAP for simulator debugging.
 - Physical device builds support both USB and Wi-Fi connected devices. Uses `xcrun devicectl` for app installation and launch (requires Xcode 15+). Code signing uses the project's existing settings from Xcode.
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
@@ -66,7 +66,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ### Installation
 
 - Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-2.2.1.vsix`.
+- Install the bundled package directly: `code --install-extension swift-package-helper-2.2.2.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -74,5 +74,5 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-2.2.1.vsix
+code --install-extension swift-package-helper-2.2.2.vsix
 ```
