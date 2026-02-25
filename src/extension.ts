@@ -568,6 +568,46 @@ function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
 export function activate(context: vscode.ExtensionContext): void {
     const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
 
+    // Always register sidebar (shows welcome message when no project found)
+    const sidebarProvider = new SidebarProvider(context.workspaceState);
+    const treeView = vscode.window.createTreeView('swiftPackageHelper.sidebar', {
+        treeDataProvider: sidebarProvider,
+    });
+
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        context.subscriptions.push(treeView, outputChannel);
+        return;
+    }
+    const rootPath = workspaceFolders[0].uri.fsPath;
+
+    function hasXcodeProject(): boolean {
+        try {
+            const entries = fs.readdirSync(rootPath, { withFileTypes: true });
+            return entries.some(
+                (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    if (!hasXcodeProject()) {
+        // Watch for .xcodeproj creation, then fully activate
+        const xcodeprojWatcher = vscode.workspace.createFileSystemWatcher('**/*.xcodeproj');
+        const onXcodeprojCreated = xcodeprojWatcher.onDidCreate(() => {
+            xcodeprojWatcher.dispose();
+            onXcodeprojCreated.dispose();
+            setupFullExtension();
+        });
+        context.subscriptions.push(treeView, outputChannel, xcodeprojWatcher, onXcodeprojCreated);
+        return;
+    }
+
+    setupFullExtension();
+
+    function setupFullExtension(): void {
+
     // Enable Cmd+R keybinding if build tasks were previously configured
     const existingConfig = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
     if (existingConfig) {
@@ -584,23 +624,9 @@ export function activate(context: vscode.ExtensionContext): void {
         new XcodeDebugConfigProvider(context.workspaceState, () => { debugLaunchPending = true; })
     );
 
-    // Register sidebar tree view
-    const sidebarProvider = new SidebarProvider(context.workspaceState);
-    const treeView = vscode.window.createTreeView('swiftPackageHelper.sidebar', {
-        treeDataProvider: sidebarProvider,
-    });
-
     // Auto-configure on activation (non-blocking)
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (workspaceFolders && workspaceFolders.length > 0) {
-        const rootPath = workspaceFolders[0].uri.fsPath;
-        autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
-        generatePackageSwift(rootPath, 'Debug', true).catch((error) => {
-            const message = (error as { message?: string }).message || String(error);
-            outputChannel.appendLine(`[auto-gen] Package.swift failed: ${message}`);
-            outputChannel.show(true);
-        });
-    }
+    autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
+    generatePackageSwift(rootPath, 'Debug', true).catch(() => {});
 
     // Helper to patch config and refresh sidebar
     async function updateConfig(patch: Partial<BuildTaskConfig>): Promise<void> {
@@ -972,13 +998,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Swift file watcher (auto-sync to pbxproj) ─────────────
 
-    if (workspaceFolders && workspaceFolders.length > 0) {
-        const swiftWatcherDisposables = createSwiftFileWatcher(
-            workspaceFolders[0].uri.fsPath,
-            outputChannel
-        );
-        context.subscriptions.push(...swiftWatcherDisposables);
-    }
+    const swiftWatcherDisposables = createSwiftFileWatcher(rootPath, outputChannel);
+    context.subscriptions.push(...swiftWatcherDisposables);
 
     // ── Task chaining and debug cleanup ───────────────────────
 
@@ -1087,16 +1108,16 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     // One-time migration notice for users with old file-based build tasks
-    if (workspaceFolders && workspaceFolders.length > 0) {
-        const oldScriptsExist = fs.existsSync(path.join(workspaceFolders[0].uri.fsPath, '.vscode', 'scripts', 'build.sh'));
-        const noticeShown = context.workspaceState.get<boolean>('migrationNoticeShown');
-        if (oldScriptsExist && !noticeShown) {
-            vscode.window.showInformationMessage(
-                'Swift Package Helper now uses integrated build tasks. You can safely delete .vscode/scripts/ and the build entries in tasks.json/launch.json.'
-            );
-            context.workspaceState.update('migrationNoticeShown', true);
-        }
+    const oldScriptsExist = fs.existsSync(path.join(rootPath, '.vscode', 'scripts', 'build.sh'));
+    const noticeShown = context.workspaceState.get<boolean>('migrationNoticeShown');
+    if (oldScriptsExist && !noticeShown) {
+        vscode.window.showInformationMessage(
+            'Swift Package Helper now uses integrated build tasks. You can safely delete .vscode/scripts/ and the build entries in tasks.json/launch.json.'
+        );
+        context.workspaceState.update('migrationNoticeShown', true);
     }
+
+    } // end setupFullExtension
 }
 
 export function deactivate(): void {
