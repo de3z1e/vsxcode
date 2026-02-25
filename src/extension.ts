@@ -1011,7 +1011,6 @@ export function activate(context: vscode.ExtensionContext): void {
         launchAppTerminatedByDebugEnd = false;
 
         outputChannel.appendLine(`[task-end] "${taskName}" exited with code ${exitCode}`);
-        outputChannel.show(true);
 
         if (taskName !== 'build-install' || exitCode !== 0) {
             return;
