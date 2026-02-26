@@ -558,13 +558,24 @@ function printToSharedPanel(message: string, color = '33'): void {
         folder,
         'Print Message',
         'swift-package-helper',
-        new vscode.ShellExecution(`printf '\\e[${color}m${message}\\e[0m\\n\\n'`),
+        new vscode.CustomExecution(async () => {
+            const writeEmitter = new vscode.EventEmitter<string>();
+            const closeEmitter = new vscode.EventEmitter<number | void>();
+            return {
+                onDidWrite: writeEmitter.event,
+                onDidClose: closeEmitter.event,
+                open: () => {
+                    writeEmitter.fire(`\r\n\x1b[${color}m${message}\x1b[0m\r\n\r\n`);
+                    closeEmitter.fire(0);
+                },
+                close: () => {},
+            };
+        }),
     );
     task.presentationOptions = {
         reveal: vscode.TaskRevealKind.Always,
         panel: vscode.TaskPanelKind.Shared,
         showReuseMessage: false,
-        echo: false,
     };
     vscode.tasks.executeTask(task);
 }
