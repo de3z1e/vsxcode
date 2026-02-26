@@ -551,10 +551,22 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
 let consoleExecution: vscode.TaskExecution | undefined;
 
 function printToSharedPanel(message: string, color = '33'): void {
-    const terminal = vscode.window.activeTerminal;
-    if (terminal) {
-        terminal.sendText(`printf '\\e[${color}m${message}\\e[0m\\n\\n'`);
-    }
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return;
+    const task = new vscode.Task(
+        { type: 'shell' },
+        folder,
+        'Print Message',
+        'swift-package-helper',
+        new vscode.ShellExecution(`printf '\\e[${color}m${message}\\e[0m\\n\\n'`),
+    );
+    task.presentationOptions = {
+        reveal: vscode.TaskRevealKind.Always,
+        panel: vscode.TaskPanelKind.Shared,
+        showReuseMessage: false,
+        echo: false,
+    };
+    vscode.tasks.executeTask(task);
 }
 
 function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
@@ -1030,7 +1042,7 @@ export function activate(context: vscode.ExtensionContext): void {
             );
             if (!unlocked) {
                 log('[physical-debug] cancelled waiting for device unlock');
-                buildTaskProvider.writeToConsole('\r\n\x1b[33mApp launch cancelled.\x1b[0m\r\n\r\n');
+                printToSharedPanel('App launch cancelled.');
                 return;
             }
             log('[physical-debug] device unlocked');
