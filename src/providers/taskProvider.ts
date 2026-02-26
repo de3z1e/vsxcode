@@ -23,6 +23,7 @@ class TaskTerminal implements vscode.Pseudoterminal {
         this.process = cp.spawn('/bin/zsh', ['-c', this.commandLine], {
             cwd: this.cwd,
             env: process.env,
+            detached: true,
         });
 
         const handleData = (data: Buffer) => {
@@ -38,7 +39,9 @@ class TaskTerminal implements vscode.Pseudoterminal {
     }
 
     close(): void {
-        this.process?.kill();
+        if (this.process?.pid) {
+            try { process.kill(-this.process.pid); } catch { /* already exited */ }
+        }
     }
 }
 
