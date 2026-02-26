@@ -6,6 +6,29 @@ import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine } fro
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
 
+// Colorize xcodebuild output: red errors, yellow warnings, green success
+const BUILD_COLORS: [RegExp, string][] = [
+    [/^(.*error:.*)$/gm, '\x1b[31m$1\x1b[0m'],
+    [/^(.*ERROR:.*)$/gm, '\x1b[31m$1\x1b[0m'],
+    [/^(.*warning:.*)$/gm, '\x1b[33m$1\x1b[0m'],
+    [/^(.*WARNING:.*)$/gm, '\x1b[33m$1\x1b[0m'],
+    [/^(.*BUILD FAILED.*)$/gm, '\x1b[31m$1\x1b[0m'],
+    [/^(.*BUILD SUCCEEDED.*)$/gm, '\x1b[32m$1\x1b[0m'],
+    [/^(.*failures\).*)$/gm, '\x1b[31m$1\x1b[0m'],
+];
+
+function colorizeBuildOutput(text: string): string {
+    for (const [pattern, replacement] of BUILD_COLORS) {
+        text = text.replace(pattern, replacement);
+    }
+    return text;
+}
+
+interface TaskTerminalOptions {
+    colorize?: boolean;
+    messages?: { success: string; failure: (code: number) => string };
+}
+
 class TaskTerminal implements vscode.Pseudoterminal {
     private writeEmitter = new vscode.EventEmitter<string>();
     private closeEmitter = new vscode.EventEmitter<number | void>();
@@ -17,7 +40,7 @@ class TaskTerminal implements vscode.Pseudoterminal {
     constructor(
         private commandLine: string,
         private cwd: string,
-        private messages?: { success: string; failure: (code: number) => string },
+        private options?: TaskTerminalOptions,
     ) {}
 
     open(): void {
@@ -29,11 +52,15 @@ class TaskTerminal implements vscode.Pseudoterminal {
 
         let hasOutput = false;
         const handleData = (data: Buffer) => {
-            if (!hasOutput && this.messages) {
+            if (!hasOutput && this.options?.messages) {
                 hasOutput = true;
-                this.writeEmitter.fire(`\x1b[32m${this.messages.success}\x1b[0m\r\n\r\n`);
+                this.writeEmitter.fire(`\x1b[32m${this.options.messages.success}\x1b[0m\r\n\r\n`);
             }
-            this.writeEmitter.fire(data.toString().replace(/\r?\n/g, '\r\n'));
+            let text = data.toString().replace(/\r?\n/g, '\r\n');
+            if (this.options?.colorize) {
+                text = colorizeBuildOutput(text);
+            }
+            this.writeEmitter.fire(text);
         };
 
         this.process.stdout?.on('data', handleData);
@@ -41,8 +68,8 @@ class TaskTerminal implements vscode.Pseudoterminal {
 
         this.process.on('close', (code) => {
             const exitCode = code ?? 1;
-            if (!hasOutput && exitCode !== 0 && this.messages) {
-                this.writeEmitter.fire(`\r\n\x1b[31m${this.messages.failure(exitCode)}\x1b[0m\r\n`);
+            if (!hasOutput && exitCode !== 0 && this.options?.messages) {
+                this.writeEmitter.fire(`\r\n\x1b[31m${this.options.messages.failure(exitCode)}\x1b[0m\r\n`);
             }
             this.closeEmitter.fire(exitCode);
         });
@@ -101,7 +128,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'build' },
             folder, 'Build', TASK_SOURCE,
-            new vscode.CustomExecution(async () => new TaskTerminal(buildCommandLine(config), cwd)),
+            new vscode.CustomExecution(async () => new TaskTerminal(buildCommandLine(config), cwd, { colorize: true })),
             '$swiftc'
         );
         task.group = vscode.TaskGroup.Build;
@@ -117,7 +144,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'build-install' },
             folder, 'Build and Install', TASK_SOURCE,
-            new vscode.CustomExecution(async () => new TaskTerminal(buildInstallCommandLine(config), cwd)),
+            new vscode.CustomExecution(async () => new TaskTerminal(buildInstallCommandLine(config), cwd, { colorize: true })),
             '$swiftc'
         );
         task.presentationOptions = {
@@ -133,8 +160,10 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             { type: TASK_TYPE, task: 'run-and-debug' },
             folder, 'Run and Debug', TASK_SOURCE,
             new vscode.CustomExecution(async () => new TaskTerminal(runAndDebugCommandLine(config), cwd, {
-                success: 'App launched successfully.',
-                failure: (code) => `Failed to launch app (exit code ${code}).`,
+                messages: {
+                    success: 'App launched successfully.',
+                    failure: (code) => `Failed to launch app (exit code ${code}).`,
+                },
             })),
             []
         );

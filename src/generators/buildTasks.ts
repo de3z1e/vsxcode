@@ -1,16 +1,5 @@
 import type { BuildTaskConfig } from '../types/interfaces';
 
-// sed filter to colorize xcodebuild output (red errors, yellow warnings)
-const COLORIZE_BUILD = [
-    'sed',
-    `-e 's/\\(.*error:.*\\)/\\x1b[31m\\1\\x1b[0m/'`,
-    `-e 's/\\(.*ERROR:.*\\)/\\x1b[31m\\1\\x1b[0m/'`,
-    `-e 's/\\(.*warning:.*\\)/\\x1b[33m\\1\\x1b[0m/'`,
-    `-e 's/\\(.*WARNING:.*\\)/\\x1b[33m\\1\\x1b[0m/'`,
-    `-e 's/\\(.*BUILD FAILED.*\\)/\\x1b[31m\\1\\x1b[0m/'`,
-    `-e 's/\\(.*failures)\\)/\\x1b[31m\\1\\x1b[0m/'`,
-].join(' ');
-
 function xcodebuildArgs(config: BuildTaskConfig): string[] {
     const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
     const udid = config.simulatorUdid || config.simulatorDevice;
@@ -38,7 +27,7 @@ function devicectlId(config: BuildTaskConfig): string {
 export function buildCommandLine(config: BuildTaskConfig): string {
     return [
         ...xcodebuildArgs(config),
-        `build 2>&1 | ${COLORIZE_BUILD}`,
+        'build 2>&1',
     ].join(' ');
 }
 
@@ -50,7 +39,7 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
         const devId = devicectlId(config);
         return [
             ...xcodebuildArgs(config),
-            `build 2>&1 | ${COLORIZE_BUILD}`,
+            'build 2>&1',
             `&& xcrun devicectl device install app --device "${devId}" "${appPath}"`,
             `&& xcrun devicectl device process launch --device "${devId}" "${config.bundleIdentifier}"`,
         ].join(' ');
@@ -60,7 +49,7 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
     const appPath = `${derivedData}/Build/Products/Debug-iphonesimulator/${config.productName}.app`;
     return [
         ...xcodebuildArgs(config),
-        `build 2>&1 | ${COLORIZE_BUILD}`,
+        'build 2>&1',
         `&& { xcrun simctl boot "${udid}" 2>/dev/null || true`,
         `; xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
         `; xcrun simctl install booted "${appPath}"`,
