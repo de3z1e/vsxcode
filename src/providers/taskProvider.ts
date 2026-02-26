@@ -66,8 +66,8 @@ class TaskTerminal implements vscode.Pseudoterminal {
         this.process.stdout?.on('data', handleData);
         this.process.stderr?.on('data', handleData);
 
-        this.process.on('close', (code) => {
-            const exitCode = code ?? 1;
+        this.process.on('close', (code, signal) => {
+            const exitCode = signal === 'SIGTERM' ? 0 : (code ?? 1);
             if (!hasOutput && exitCode !== 0 && this.options?.messages) {
                 this.writeEmitter.fire(`\r\n\x1b[31m${this.options.messages.failure(exitCode)}\x1b[0m\r\n`);
             }
@@ -75,15 +75,26 @@ class TaskTerminal implements vscode.Pseudoterminal {
         });
     }
 
-    close(): void {
+    killProcess(): void {
         if (this.process?.pid) {
             try { process.kill(-this.process.pid); } catch { /* already exited */ }
         }
     }
+
+    close(): void {
+        this.killProcess();
+    }
 }
 
 export class XcodeBuildTaskProvider implements vscode.TaskProvider {
+    private activeConsoleTerminal?: TaskTerminal;
+
     constructor(private workspaceState: vscode.Memento) {}
+
+    /** Kill the Run and Debug process (task completes, terminal stays open). */
+    killConsoleProcess(): void {
+        this.activeConsoleTerminal?.killProcess();
+    }
 
     provideTasks(_token: vscode.CancellationToken): vscode.Task[] {
         const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
@@ -162,12 +173,16 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'run-and-debug' },
             folder, 'Run and Debug', TASK_SOURCE,
-            new vscode.CustomExecution(async () => new TaskTerminal(runAndDebugCommandLine(config), cwd, {
-                messages: {
-                    success: 'App launched successfully.',
-                    failure: (code) => `Failed to launch app (exit code ${code}).`,
-                },
-            })),
+            new vscode.CustomExecution(async () => {
+                const terminal = new TaskTerminal(runAndDebugCommandLine(config), cwd, {
+                    messages: {
+                        success: 'App launched successfully.',
+                        failure: (code) => `Failed to launch app (exit code ${code}).`,
+                    },
+                });
+                this.activeConsoleTerminal = terminal;
+                return terminal;
+            }),
             []
         );
         task.presentationOptions = {
