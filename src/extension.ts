@@ -1056,7 +1056,22 @@ export function activate(context: vscode.ExtensionContext): void {
             physicalDevicePid = undefined;
         }
 
-        // Kill the console process group — this terminates the app and ends the task.
+        // Simulator: terminate the app first, then kill the console process.
+        // simctl terminate tells the simulator runtime to stop the app (which is
+        // a separate process not in our group), then killConsoleProcess ends the
+        // monitoring process (simctl launch --console-pty) and completes the task.
+        if (config && !config.isPhysicalDevice) {
+            const cp = await import('child_process');
+            const udid = config.simulatorUdid || config.simulatorDevice;
+            log(`[debug-end] terminating app "${config.bundleIdentifier}" on simulator`);
+            await new Promise<void>((resolve) => {
+                cp.exec(
+                    `xcrun simctl terminate "${udid}" "${config.bundleIdentifier}"`,
+                    () => resolve()
+                );
+            });
+        }
+
         log('[debug-end] killing console process');
         buildTaskProvider.killConsoleProcess();
     });

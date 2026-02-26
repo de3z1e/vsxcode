@@ -77,7 +77,13 @@ class TaskTerminal implements vscode.Pseudoterminal {
 
     killProcess(): void {
         if (this.process?.pid) {
-            try { process.kill(-this.process.pid); } catch { /* already exited */ }
+            try { process.kill(-this.process.pid, 'SIGTERM'); } catch { /* already exited */ }
+            // SIGKILL fallback: simctl --console-pty busy-loops when the simulator
+            // dies and ignores SIGTERM, so force-kill after a short grace period.
+            const pid = this.process.pid;
+            setTimeout(() => {
+                try { process.kill(-pid, 'SIGKILL'); } catch { /* already exited */ }
+            }, 500);
         }
     }
 
