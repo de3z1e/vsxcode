@@ -1,6 +1,6 @@
 # Swift Package Helper
 
-Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, and device/simulator debugging with a single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build and run iOS apps on simulators and physical devices directly from VS Code.
+Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, and full debugging with breakpoints and console output on both simulators and physical devices, with a single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS apps directly from VS Code.
 
 ### How It Works
 
@@ -47,8 +47,9 @@ Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 Build tasks are integrated directly into the extension — no shell scripts, `tasks.json`, or `launch.json` files are written to the workspace.
 
 - Uses VS Code's `TaskProvider` API to provide build, build-install, and run-and-debug tasks.
-- Uses `DebugConfigurationProvider` with LLDB DAP for simulator debugging.
-- Physical device builds support both USB and Wi-Fi connected devices. Uses `xcrun devicectl` for app installation and launch (requires Xcode 15+). Code signing uses the project's existing settings from Xcode.
+- Full debug support with breakpoints and `print()` console output for both **simulator** and **physical device** builds.
+- Simulator debugging uses `simctl launch --console-pty --wait-for-debugger` with LLDB DAP attach.
+- Physical device debugging uses `devicectl --console --start-stopped` with LLDB DAP remote-ios attach. Supports USB and Wi-Fi connected devices (requires Xcode 15+). Code signing uses the project's existing settings from Xcode.
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
 
