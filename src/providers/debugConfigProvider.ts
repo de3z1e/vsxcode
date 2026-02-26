@@ -2,17 +2,13 @@ import * as vscode from 'vscode';
 import type { BuildTaskConfig } from '../types/interfaces';
 
 export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvider {
-    constructor(private workspaceState: vscode.Memento, private onDebugRequested?: () => void) {}
+    constructor(private workspaceState: vscode.Memento) {}
 
     provideDebugConfigurations(
         _folder: vscode.WorkspaceFolder | undefined,
         _token?: vscode.CancellationToken
     ): vscode.DebugConfiguration[] {
-        const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-        if (!config || config.isPhysicalDevice) {
-            return [];
-        }
-        return [this.makeDebugConfig(config)];
+        return [];
     }
 
     resolveDebugConfiguration(
@@ -20,10 +16,9 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
         debugConfiguration: vscode.DebugConfiguration,
         _token?: vscode.CancellationToken
     ): vscode.ProviderResult<vscode.DebugConfiguration> {
-        const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-
-        // User pressed F5 with no launch.json — provide our config
+        // User pressed F5 with no launch.json — delegate to buildAndRun
         if (!debugConfiguration.type && !debugConfiguration.request) {
+            const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) {
                 vscode.window.showErrorMessage(
                     'No build configuration found. Run "Swift: Configure Build Tasks" first.',
@@ -35,31 +30,11 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
                 });
                 return undefined;
             }
-            if (config.isPhysicalDevice) {
-                vscode.window.showInformationMessage(
-                    'Use Cmd+R to build and debug on a physical device.'
-                );
-                return undefined;
-            }
-            this.onDebugRequested?.();
-            return this.makeDebugConfig(config);
+            // Trigger the unified build-and-run flow for both simulator and device
+            vscode.commands.executeCommand('swiftPackageHelper.sidebar.buildAndRun');
+            return undefined;
         }
 
-        if (debugConfiguration.preLaunchTask === 'xcode: Build and Install') {
-            this.onDebugRequested?.();
-        }
         return debugConfiguration;
-    }
-
-    private makeDebugConfig(config: BuildTaskConfig): vscode.DebugConfiguration {
-        return {
-            type: 'lldb-dap',
-            request: 'attach',
-            name: `Debug ${config.productName}`,
-            preLaunchTask: 'xcode: Build and Install',
-            attachCommands: [
-                `process attach --name ${config.productName} --waitfor`
-            ]
-        };
     }
 }

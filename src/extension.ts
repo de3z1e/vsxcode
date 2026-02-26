@@ -549,7 +549,6 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
 }
 
 let consoleExecution: vscode.TaskExecution | undefined;
-let debugLaunchPending = false;
 
 function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
     return new Promise(async (resolve) => {
@@ -621,7 +620,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const taskProvider = vscode.tasks.registerTaskProvider(TASK_TYPE, buildTaskProvider);
     const debugProvider = vscode.debug.registerDebugConfigurationProvider(
         'lldb-dap',
-        new XcodeDebugConfigProvider(context.workspaceState, () => { debugLaunchPending = true; log('[debug-provider] debugLaunchPending set to true'); })
+        new XcodeDebugConfigProvider(context.workspaceState)
     );
 
     // Auto-configure on activation (non-blocking)
@@ -866,7 +865,91 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
-    // ── Physical device debug orchestration ────────────────────
+    // ── Debug orchestration ─────────────────────────────────────
+    async function buildAndDebugSimulator(config: BuildTaskConfig): Promise<void> {
+        // 1. Fetch and execute build task, wait for completion
+        const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
+        const buildTask = tasks.find((t) => t.name === 'Build');
+        if (!buildTask) {
+            vscode.window.showErrorMessage('Build task not available. Check configuration.');
+            return;
+        }
+
+        // Use shared panel so build output and console share the same terminal
+        buildTask.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
+            clear: true,
+        };
+
+        log('[simulator-debug] starting build...');
+        const exitCode = await executeTaskAndWait(buildTask);
+        if (exitCode !== 0) {
+            log(`[simulator-debug] build failed with exit code ${exitCode}`);
+            return;
+        }
+        log('[simulator-debug] build succeeded');
+
+        const udid = config.simulatorUdid || config.simulatorDevice;
+        const homeDir = require('os').homedir();
+        const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphonesimulator', `${config.productName}.app`);
+
+        // 2. Boot simulator and install app
+        const cp = await import('child_process');
+        log('[simulator-debug] booting simulator and installing app...');
+        await new Promise<void>((resolve, reject) => {
+            cp.exec(
+                [
+                    `xcrun simctl boot "${udid}" 2>/dev/null || true`,
+                    `xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
+                    `xcrun simctl install booted "${appPath}"`,
+                    'open -a Simulator',
+                ].join(' && '),
+                (error) => error ? reject(error) : resolve()
+            );
+        });
+        log('[simulator-debug] install succeeded');
+
+        // 3. Launch app with console streaming via task
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+            vscode.window.showErrorMessage('No workspace folder found.');
+            return;
+        }
+
+        if (consoleExecution) {
+            consoleExecution.terminate();
+            consoleExecution = undefined;
+        }
+
+        const allTasks = await vscode.tasks.fetchTasks();
+        const launchTask = allTasks.find((t) => t.name === 'Run and Debug');
+        if (!launchTask) {
+            log('[simulator-debug] ERROR: Run and Debug task not found');
+            return;
+        }
+        log('[simulator-debug] starting console task...');
+        consoleExecution = await vscode.tasks.executeTask(launchTask);
+
+        // 4. Attach debugger
+        const debugConfig: vscode.DebugConfiguration = {
+            type: 'lldb-dap',
+            request: 'attach',
+            name: `Debug ${config.productName}`,
+            attachCommands: [
+                `process attach --name ${config.productName} --waitfor`
+            ]
+        };
+        log('[simulator-debug] starting debug session...');
+        const started = await vscode.debug.startDebugging(folder, debugConfig);
+        if (!started) {
+            log('[simulator-debug] debug session failed to start');
+            consoleExecution?.terminate();
+            consoleExecution = undefined;
+        }
+    }
+
     async function buildAndDebugPhysicalDevice(config: BuildTaskConfig): Promise<void> {
         // 1. Fetch and execute build task, wait for completion
         const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
@@ -963,21 +1046,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
             if (config.isPhysicalDevice) {
-                // Physical device: build, install, launch suspended, attach debugger
                 await buildAndDebugPhysicalDevice(config);
             } else {
-                // Simulator: start debug session with lldb-dap attach
-                const debugConfig: vscode.DebugConfiguration = {
-                    type: 'lldb-dap',
-                    request: 'attach',
-                    name: `Debug ${config.productName}`,
-                    preLaunchTask: 'xcode: Build and Install',
-                    attachCommands: [
-                        `process attach --name ${config.productName} --waitfor`
-                    ]
-                };
-                const folder = vscode.workspace.workspaceFolders?.[0];
-                await vscode.debug.startDebugging(folder, debugConfig);
+                await buildAndDebugSimulator(config);
             }
         }
     );
@@ -1010,51 +1081,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const swiftWatcherDisposables = createSwiftFileWatcher(rootPath, log);
     context.subscriptions.push(...swiftWatcherDisposables);
 
-    // ── Task chaining and debug cleanup ───────────────────────
-
-    const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
-        const taskName = event.execution.task.name;
-        log(`[task-end] "${taskName}" exited with code ${event.exitCode}`);
-
-        if (taskName !== 'Build and Install' || event.exitCode !== 0) {
-            return;
-        }
-
-        // Only launch the app if build-install was triggered as a debug preLaunchTask.
-        // Skip if user ran build-install manually to avoid hanging on --wait-for-debugger.
-        if (!debugLaunchPending) {
-            log('[run-and-debug] skipping — not triggered by debug session');
-            return;
-        }
-        debugLaunchPending = false;
-
-        log('[run-and-debug] fetching workspace tasks...');
-        const tasks = await vscode.tasks.fetchTasks();
-        log(`[run-and-debug] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
-
-        const launchTask = tasks.find((t) => t.name === 'Run and Debug');
-        if (launchTask) {
-            log('[run-and-debug] executing run-and-debug task...');
-            try {
-                if (consoleExecution) {
-                    log('[run-and-debug] terminating previous run-and-debug task');
-                    consoleExecution.terminate();
-                    consoleExecution = undefined;
-                }
-                consoleExecution = await vscode.tasks.executeTask(launchTask);
-                log('[run-and-debug] task started successfully');
-            } catch (error) {
-                const message = (error as { message?: string }).message;
-                log(`[run-and-debug] task failed: ${message}`);
-            }
-        } else {
-            log('[run-and-debug] ERROR: run-and-debug task not found in workspace');
-        }
-    });
+    // ── Debug cleanup ──────────────────────────────────────────
 
     const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async () => {
-        debugLaunchPending = false;
-
         // Physical device: killing the console process (devicectl --console) terminates the app.
         // Next launch uses --terminate-existing as a safety net.
         const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
@@ -1092,7 +1121,7 @@ export function activate(context: vscode.ExtensionContext): void {
         taskProvider, debugProvider, treeView,
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
         selectSimulatorCmd, buildCmd, buildAndRunCmd, refreshCmd,
-        watcher, onProjectChange, onTaskEnd, onDebugStart, onDebugEnd,
+        watcher, onProjectChange, onDebugStart, onDebugEnd,
         outputChannel
     );
 
