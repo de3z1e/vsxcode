@@ -1056,10 +1056,8 @@ export function activate(context: vscode.ExtensionContext): void {
         debugLaunchPending = false;
 
         if (consoleExecution) {
-            log('[debug-end] terminating console task');
+            log('[debug-end] app will be terminated via simctl/devicectl');
             launchAppTerminatedByDebugEnd = true;
-            consoleExecution.terminate();
-            consoleExecution = undefined;
         }
 
         const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');

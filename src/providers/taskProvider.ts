@@ -135,6 +135,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         task.presentationOptions = {
             reveal: vscode.TaskRevealKind.Always,
             panel: vscode.TaskPanelKind.Dedicated,
+            clear: true
         };
         return task;
     }
@@ -149,7 +150,9 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         );
         task.presentationOptions = {
             reveal: vscode.TaskRevealKind.Always,
-            panel: vscode.TaskPanelKind.Dedicated,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
+            clear: true,
         };
         return task;
     }
@@ -169,7 +172,8 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         );
         task.presentationOptions = {
             reveal: vscode.TaskRevealKind.Always,
-            panel: vscode.TaskPanelKind.Dedicated,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
         };
         return task;
     }
