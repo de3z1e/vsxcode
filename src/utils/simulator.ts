@@ -76,37 +76,6 @@ export async function devicectlInstall(deviceId: string, appPath: string): Promi
     );
 }
 
-export async function devicectlLaunchStopped(deviceId: string, bundleId: string): Promise<number> {
-    const tmpFile = path.join(os.tmpdir(), `sph-launch-${Date.now()}.json`);
-    try {
-        await execFile(
-            'xcrun',
-            [
-                'devicectl', 'device', 'process', 'launch',
-                '--device', deviceId,
-                '--start-stopped',
-                '--terminate-existing',
-                '--json-output', tmpFile,
-                bundleId,
-            ],
-            { encoding: 'utf8' }
-        );
-        const content = await fsp.readFile(tmpFile, 'utf8');
-        const parsed = JSON.parse(content);
-        // Try known key paths for PID
-        const pid = parsed.result?.process?.processIdentifier
-            ?? parsed.result?.process?.pid
-            ?? parsed.result?.processIdentifier
-            ?? parsed.result?.pid;
-        if (typeof pid !== 'number') {
-            throw new Error(`Could not find PID in devicectl output: ${content}`);
-        }
-        return pid;
-    } finally {
-        try { await fsp.unlink(tmpFile); } catch { /* ignore */ }
-    }
-}
-
 export async function devicectlTerminate(deviceId: string, pid: number): Promise<void> {
     try {
         await execFile(

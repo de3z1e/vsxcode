@@ -20,7 +20,7 @@ import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resour
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, devicectlLaunchStopped, devicectlTerminate } from './utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices, devicectlInstall } from './utils/simulator';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
@@ -550,7 +550,6 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
 
 let consoleExecution: vscode.TaskExecution | undefined;
 let debugLaunchPending = false;
-let physicalDevicePid: number | undefined;
 
 function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
     return new Promise(async (resolve) => {
@@ -901,21 +900,23 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
-        // 3. Launch app suspended, capture PID
-        let pid: number;
-        try {
-            log(`[physical-debug] launching ${config.bundleIdentifier} suspended...`);
-            pid = await devicectlLaunchStopped(devId, config.bundleIdentifier);
-            physicalDevicePid = pid;
-            log(`[physical-debug] app launched with PID ${pid}`);
-        } catch (error) {
-            const message = (error as { message?: string }).message || String(error);
-            log(`[physical-debug] launch failed: ${message}`);
-            vscode.window.showErrorMessage(`Failed to launch app on device: ${message}`);
+        // 3. Launch app with console streaming via task
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+            vscode.window.showErrorMessage('No workspace folder found.');
             return;
         }
 
-        // 4. Attach debugger
+        if (consoleExecution) {
+            consoleExecution.terminate();
+            consoleExecution = undefined;
+        }
+
+        const debugConsoleTask = buildTaskProvider.createPhysicalDebugTask(config, folder);
+        log('[physical-debug] starting debug console task...');
+        consoleExecution = await vscode.tasks.executeTask(debugConsoleTask);
+
+        // 4. Attach debugger by name (--waitfor finds the --start-stopped process)
         const debugConfig: vscode.DebugConfiguration = {
             type: 'lldb-dap',
             request: 'attach',
@@ -926,16 +927,15 @@ export function activate(context: vscode.ExtensionContext): void {
             ],
             attachCommands: [
                 `script lldb.debugger.HandleCommand('device select ${devId}')`,
-                `script lldb.debugger.HandleCommand('device process attach --pid ${pid}')`,
+                `script lldb.debugger.HandleCommand('device process attach --name ${config.productName} --waitfor --include-existing')`,
             ],
         };
-        const folder = vscode.workspace.workspaceFolders?.[0];
         log('[physical-debug] starting debug session...');
         const started = await vscode.debug.startDebugging(folder, debugConfig);
         if (!started) {
-            log('[physical-debug] debug session failed to start, terminating app');
-            await devicectlTerminate(devId, pid);
-            physicalDevicePid = undefined;
+            log('[physical-debug] debug session failed to start');
+            consoleExecution?.terminate();
+            consoleExecution = undefined;
         }
     }
 
@@ -1047,14 +1047,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async () => {
         debugLaunchPending = false;
 
-        // Physical device: terminate app via devicectl
+        // Physical device: killing the console process (devicectl --console) terminates the app.
+        // Next launch uses --terminate-existing as a safety net.
         const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-        if (config?.isPhysicalDevice && physicalDevicePid) {
-            const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
-            log(`[debug-end] terminating PID ${physicalDevicePid} on device`);
-            await devicectlTerminate(devId, physicalDevicePid);
-            physicalDevicePid = undefined;
-        }
 
         // Simulator: terminate the app first, then kill the console process.
         // simctl terminate tells the simulator runtime to stop the app (which is

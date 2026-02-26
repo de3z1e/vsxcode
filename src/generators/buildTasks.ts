@@ -67,3 +67,8 @@ export function runAndDebugCommandLine(config: BuildTaskConfig): string {
     }
     return `xcrun simctl launch --console-pty --wait-for-debugger booted "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
 }
+
+export function debugConsoleCommandLine(config: BuildTaskConfig): string {
+    const devId = devicectlId(config);
+    return `xcrun devicectl device process launch --device "${devId}" --console --start-stopped --terminate-existing "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
+}

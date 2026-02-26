@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import type { BuildTaskConfig } from '../types/interfaces';
-import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine } from '../generators/buildTasks';
+import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine } from '../generators/buildTasks';
 
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
@@ -170,6 +170,31 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             panel: vscode.TaskPanelKind.Shared,
             showReuseMessage: false,
             clear: true,
+        };
+        return task;
+    }
+
+    createPhysicalDebugTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
+        const cwd = folder.uri.fsPath;
+        const task = new vscode.Task(
+            { type: TASK_TYPE, task: 'run-and-debug' },
+            folder, 'Run and Debug', TASK_SOURCE,
+            new vscode.CustomExecution(async () => {
+                const terminal = new TaskTerminal(debugConsoleCommandLine(config), cwd, {
+                    messages: {
+                        success: 'App launched successfully.',
+                        failure: (code) => `Failed to launch app (exit code ${code}).`,
+                    },
+                });
+                this.activeConsoleTerminal = terminal;
+                return terminal;
+            }),
+            []
+        );
+        task.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
         };
         return task;
     }
