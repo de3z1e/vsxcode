@@ -87,6 +87,10 @@ class TaskTerminal implements vscode.Pseudoterminal {
         }
     }
 
+    write(text: string): void {
+        this.writeEmitter.fire(text);
+    }
+
     close(): void {
         this.killProcess();
     }
@@ -100,6 +104,11 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     /** Kill the Run and Debug process (task completes, terminal stays open). */
     killConsoleProcess(): void {
         this.activeConsoleTerminal?.killProcess();
+    }
+
+    /** Write text to the active console terminal. */
+    writeToConsole(text: string): void {
+        this.activeConsoleTerminal?.write(text);
     }
 
     provideTasks(_token: vscode.CancellationToken): vscode.Task[] {
@@ -180,12 +189,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             { type: TASK_TYPE, task: 'run-and-debug' },
             folder, 'Run and Debug', TASK_SOURCE,
             new vscode.CustomExecution(async () => {
-                const terminal = new TaskTerminal(debugConsoleCommandLine(config), cwd, {
-                    messages: {
-                        success: 'App launched successfully.',
-                        failure: (code) => `Failed to launch app (exit code ${code}).`,
-                    },
-                });
+                const terminal = new TaskTerminal(debugConsoleCommandLine(config), cwd);
                 this.activeConsoleTerminal = terminal;
                 return terminal;
             }),

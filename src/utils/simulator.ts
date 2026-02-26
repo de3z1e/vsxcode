@@ -88,6 +88,28 @@ export async function devicectlTerminate(deviceId: string, pid: number): Promise
     }
 }
 
+export async function checkDeviceReady(deviceId: string): Promise<{ ready: boolean; message?: string }> {
+    try {
+        const { stdout, stderr } = await execFile(
+            'xcrun',
+            ['lldb', '--batch', '-o', 'platform select remote-ios', '-o', `device select ${deviceId}`, '-o', 'quit'],
+            { encoding: 'utf8' }
+        );
+        const output = stdout + stderr;
+        if (output.includes('needs to be unlocked')) {
+            return { ready: false, message: 'Device needs to be unlocked.' };
+        }
+        return { ready: true };
+    } catch (error) {
+        const message = String((error as { stderr?: string }).stderr || error);
+        if (message.includes('needs to be unlocked')) {
+            return { ready: false, message: 'Device needs to be unlocked.' };
+        }
+        // Other errors — let the debug session handle them
+        return { ready: true };
+    }
+}
+
 export async function listPhysicalDevices(): Promise<PhysicalDevice[]> {
     const tmpFile = path.join(os.tmpdir(), `sph-devices-${Date.now()}.json`);
     try {

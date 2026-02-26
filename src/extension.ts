@@ -20,7 +20,7 @@ import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resour
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { listAvailableSimulators, listPhysicalDevices, devicectlInstall } from './utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady } from './utils/simulator';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
@@ -550,6 +550,13 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
 
 let consoleExecution: vscode.TaskExecution | undefined;
 
+function printToSharedPanel(message: string, color = '33'): void {
+    const terminal = vscode.window.activeTerminal;
+    if (terminal) {
+        terminal.sendText(`printf '\\e[${color}m${message}\\e[0m\\n\\n'`);
+    }
+}
+
 function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
     return new Promise(async (resolve) => {
         const listener = vscode.tasks.onDidEndTaskProcess((event) => {
@@ -991,13 +998,45 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
-        // 3. Launch app with console streaming via task
+        // 3. Verify device is unlocked before launching
         const folder = vscode.workspace.workspaceFolders?.[0];
         if (!folder) {
             vscode.window.showErrorMessage('No workspace folder found.');
             return;
         }
 
+        log('[physical-debug] checking device readiness...');
+        const initialCheck = await checkDeviceReady(devId);
+        if (!initialCheck.ready) {
+            log(`[physical-debug] device not ready: ${initialCheck.message}`);
+            const unlocked = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'Device is locked. Waiting for unlock…',
+                    cancellable: true,
+                },
+                async (_progress, token) => {
+                    while (!token.isCancellationRequested) {
+                        await new Promise<void>((resolve) => {
+                            const timeout = setTimeout(resolve, 3000);
+                            token.onCancellationRequested(() => { clearTimeout(timeout); resolve(); });
+                        });
+                        if (token.isCancellationRequested) return false;
+                        const check = await checkDeviceReady(devId);
+                        if (check.ready) return true;
+                    }
+                    return false;
+                }
+            );
+            if (!unlocked) {
+                log('[physical-debug] cancelled waiting for device unlock');
+                buildTaskProvider.writeToConsole('\r\n\x1b[33mApp launch cancelled.\x1b[0m\r\n\r\n');
+                return;
+            }
+            log('[physical-debug] device unlocked');
+        }
+
+        // 4. Launch app with console streaming via task
         if (consoleExecution) {
             consoleExecution.terminate();
             consoleExecution = undefined;
@@ -1007,7 +1046,30 @@ export function activate(context: vscode.ExtensionContext): void {
         log('[physical-debug] starting debug console task...');
         consoleExecution = await vscode.tasks.executeTask(debugConsoleTask);
 
-        // 4. Attach debugger by name (--waitfor finds the --start-stopped process)
+        // 5. Wait for console task to settle — detect early failures (locked device, etc.)
+        const earlyExit = await Promise.race<number | null>([
+            new Promise<number>((resolve) => {
+                const listener = vscode.tasks.onDidEndTaskProcess((event) => {
+                    if (event.execution.task.name === 'Run and Debug') {
+                        listener.dispose();
+                        resolve(event.exitCode ?? 1);
+                    }
+                });
+                setTimeout(() => listener.dispose(), 3500);
+            }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]);
+
+        if (earlyExit !== null) {
+            log(`[physical-debug] console task exited early with code ${earlyExit}`);
+            consoleExecution = undefined;
+            buildTaskProvider.writeToConsole('\r\n\x1b[33mApp launch exited.\x1b[0m\r\n\r\n');
+            return;
+        }
+        log('[physical-debug] console task is running');
+        buildTaskProvider.writeToConsole('\r\n\x1b[32mApp launched successfully.\x1b[0m\r\n\r\n');
+
+        // 6. Attach debugger by name (--waitfor finds the --start-stopped process)
         const debugConfig: vscode.DebugConfiguration = {
             type: 'lldb-dap',
             request: 'attach',
@@ -1025,6 +1087,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const started = await vscode.debug.startDebugging(folder, debugConfig);
         if (!started) {
             log('[physical-debug] debug session failed to start');
+            buildTaskProvider.writeToConsole('\r\n\x1b[33mApp launch cancelled.\x1b[0m\r\n\r\n');
             consoleExecution?.terminate();
             consoleExecution = undefined;
         }
