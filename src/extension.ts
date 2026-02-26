@@ -876,6 +876,14 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
+        // Use shared panel so build output and console share the same terminal
+        buildTask.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
+            clear: true,
+        };
+
         log('[physical-debug] starting build...');
         const exitCode = await executeTaskAndWait(buildTask);
         if (exitCode !== 0) {
