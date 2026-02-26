@@ -68,10 +68,13 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
     ].join(' ');
 }
 
+// perl filter that prepends a locale-formatted timestamp ([2:26:21 PM]) to each line
+const TIMESTAMP_LINES = `perl -pe 'BEGIN { $| = 1 } use POSIX qw(strftime); my $t = strftime("%l:%M:%S %p", localtime); $t =~ s/^\\s+//; $_ = "[" . $t . "] " . $_'`;
+
 export function runAndDebugCommandLine(config: BuildTaskConfig): string {
     if (config.isPhysicalDevice) {
         const devId = devicectlId(config);
-        return `xcrun devicectl device process launch --device "${devId}" --console "${config.bundleIdentifier}"`;
+        return `xcrun devicectl device process launch --device "${devId}" --console "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
     }
-    return `xcrun simctl launch --console-pty --wait-for-debugger booted "${config.bundleIdentifier}"`;
+    return `xcrun simctl launch --console-pty --wait-for-debugger booted "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
 }

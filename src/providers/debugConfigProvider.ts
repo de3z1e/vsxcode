@@ -45,7 +45,7 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
             return this.makeDebugConfig(config);
         }
 
-        if (debugConfiguration.preLaunchTask === 'xcode: build-install') {
+        if (debugConfiguration.preLaunchTask === 'xcode: Build and Install') {
             this.onDebugRequested?.();
         }
         return debugConfiguration;
@@ -56,7 +56,7 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
             type: 'lldb-dap',
             request: 'attach',
             name: `Debug ${config.productName}`,
-            preLaunchTask: 'xcode: build-install',
+            preLaunchTask: 'xcode: Build and Install',
             attachCommands: [
                 `process attach --name ${config.productName} --waitfor`
             ]

@@ -106,11 +106,11 @@ function findPbxprojPath(rootPath: string): string | null {
 
 export function createSwiftFileWatcher(
     rootPath: string,
-    outputChannel: vscode.OutputChannel
+    log: (message: string) => void
 ): vscode.Disposable[] {
     const pbxprojPath = findPbxprojPath(rootPath);
     if (!pbxprojPath) {
-        outputChannel.appendLine('[swift-sync] No xcodeproj found, skipping Swift file watcher');
+        log('[swift-sync] No xcodeproj found, skipping Swift file watcher');
         return [];
     }
 
@@ -130,7 +130,7 @@ export function createSwiftFileWatcher(
                 await operation();
             } catch (error) {
                 const message = (error as { message?: string }).message || String(error);
-                outputChannel.appendLine(`[swift-sync] Error: ${message}`);
+                log(`[swift-sync] Error: ${message}`);
             } finally {
                 isWriting = false;
             }
@@ -146,7 +146,7 @@ export function createSwiftFileWatcher(
 
             // Skip if file already registered in pbxproj
             if (findFileReferenceId(pbxContents, fileName)) {
-                outputChannel.appendLine(`[swift-sync] ${fileName} already in pbxproj, skipping`);
+                log(`[swift-sync] ${fileName} already in pbxproj, skipping`);
                 return;
             }
 
@@ -163,7 +163,7 @@ export function createSwiftFileWatcher(
 
             const groupId = resolveGroupForFile(filePath, mapping, groups, mainGroupId);
             if (!groupId) {
-                outputChannel.appendLine(
+                log(
                     `[swift-sync] No matching PBXGroup for ${path.relative(rootPath, filePath)}, skipping`
                 );
                 return;
@@ -173,7 +173,7 @@ export function createSwiftFileWatcher(
                 pbxContents, fileName, groupId, mapping.sourcesBuildPhaseId
             );
             await fsp.writeFile(pbxprojPath, result, 'utf8');
-            outputChannel.appendLine(
+            log(
                 `[swift-sync] Added ${fileName} to ${mapping.targetName}`
             );
         });
@@ -195,12 +195,12 @@ export function createSwiftFileWatcher(
             if (!result) { return; }
 
             await fsp.writeFile(pbxprojPath, result, 'utf8');
-            outputChannel.appendLine(
+            log(
                 `[swift-sync] Removed ${fileName} from pbxproj`
             );
         });
     });
 
-    outputChannel.appendLine('[swift-sync] Swift file watcher active');
+    log('[swift-sync] Swift file watcher active');
     return [watcher, onCreate, onDelete];
 }

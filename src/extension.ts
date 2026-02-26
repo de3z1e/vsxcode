@@ -567,6 +567,10 @@ function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
 
 export function activate(context: vscode.ExtensionContext): void {
     const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
+    const log = (message: string): void => {
+        const timestamp = new Date().toLocaleTimeString();
+        outputChannel.appendLine(`[${timestamp}] ${message}`);
+    };
 
     // Always register sidebar (shows welcome message when no project found)
     const sidebarProvider = new SidebarProvider(context.workspaceState);
@@ -621,7 +625,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
     const debugProvider = vscode.debug.registerDebugConfigurationProvider(
         'lldb-dap',
-        new XcodeDebugConfigProvider(context.workspaceState, () => { debugLaunchPending = true; })
+        new XcodeDebugConfigProvider(context.workspaceState, () => { debugLaunchPending = true; log('[debug-provider] debugLaunchPending set to true'); })
     );
 
     // Auto-configure on activation (non-blocking)
@@ -857,7 +861,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'swiftPackageHelper.sidebar.build',
         async () => {
             const tasks = await vscode.tasks.fetchTasks({ type: 'xcode-build' });
-            const buildTask = tasks.find((t) => t.name === 'build');
+            const buildTask = tasks.find((t) => t.name === 'Build');
             if (buildTask) {
                 await vscode.tasks.executeTask(buildTask);
             } else {
@@ -867,22 +871,22 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     // ── Physical device debug orchestration ────────────────────
-    async function buildAndDebugPhysicalDevice(config: BuildTaskConfig, channel: vscode.OutputChannel): Promise<void> {
+    async function buildAndDebugPhysicalDevice(config: BuildTaskConfig): Promise<void> {
         // 1. Fetch and execute build task, wait for completion
         const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
-        const buildTask = tasks.find((t) => t.name === 'build');
+        const buildTask = tasks.find((t) => t.name === 'Build');
         if (!buildTask) {
             vscode.window.showErrorMessage('Build task not available. Check configuration.');
             return;
         }
 
-        channel.appendLine('[physical-debug] starting build...');
+        log('[physical-debug] starting build...');
         const exitCode = await executeTaskAndWait(buildTask);
         if (exitCode !== 0) {
-            channel.appendLine(`[physical-debug] build failed with exit code ${exitCode}`);
+            log(`[physical-debug] build failed with exit code ${exitCode}`);
             return;
         }
-        channel.appendLine('[physical-debug] build succeeded');
+        log('[physical-debug] build succeeded');
 
         const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
         const homeDir = require('os').homedir();
@@ -890,12 +894,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
         // 2. Install app on device
         try {
-            channel.appendLine(`[physical-debug] installing ${config.productName}.app on device...`);
+            log(`[physical-debug] installing ${config.productName}.app on device...`);
             await devicectlInstall(devId, appPath);
-            channel.appendLine('[physical-debug] install succeeded');
+            log('[physical-debug] install succeeded');
         } catch (error) {
             const message = (error as { message?: string }).message || String(error);
-            channel.appendLine(`[physical-debug] install failed: ${message}`);
+            log(`[physical-debug] install failed: ${message}`);
             vscode.window.showErrorMessage(`Failed to install app on device: ${message}`);
             return;
         }
@@ -903,13 +907,13 @@ export function activate(context: vscode.ExtensionContext): void {
         // 3. Launch app suspended, capture PID
         let pid: number;
         try {
-            channel.appendLine(`[physical-debug] launching ${config.bundleIdentifier} suspended...`);
+            log(`[physical-debug] launching ${config.bundleIdentifier} suspended...`);
             pid = await devicectlLaunchStopped(devId, config.bundleIdentifier);
             physicalDevicePid = pid;
-            channel.appendLine(`[physical-debug] app launched with PID ${pid}`);
+            log(`[physical-debug] app launched with PID ${pid}`);
         } catch (error) {
             const message = (error as { message?: string }).message || String(error);
-            channel.appendLine(`[physical-debug] launch failed: ${message}`);
+            log(`[physical-debug] launch failed: ${message}`);
             vscode.window.showErrorMessage(`Failed to launch app on device: ${message}`);
             return;
         }
@@ -929,10 +933,10 @@ export function activate(context: vscode.ExtensionContext): void {
             ],
         };
         const folder = vscode.workspace.workspaceFolders?.[0];
-        channel.appendLine('[physical-debug] starting debug session...');
+        log('[physical-debug] starting debug session...');
         const started = await vscode.debug.startDebugging(folder, debugConfig);
         if (!started) {
-            channel.appendLine('[physical-debug] debug session failed to start, terminating app');
+            log('[physical-debug] debug session failed to start, terminating app');
             await devicectlTerminate(devId, pid);
             physicalDevicePid = undefined;
         }
@@ -955,14 +959,14 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             if (config.isPhysicalDevice) {
                 // Physical device: build, install, launch suspended, attach debugger
-                await buildAndDebugPhysicalDevice(config, outputChannel);
+                await buildAndDebugPhysicalDevice(config);
             } else {
                 // Simulator: start debug session with lldb-dap attach
                 const debugConfig: vscode.DebugConfiguration = {
                     type: 'lldb-dap',
                     request: 'attach',
                     name: `Debug ${config.productName}`,
-                    preLaunchTask: 'xcode: build-install',
+                    preLaunchTask: 'xcode: Build and Install',
                     attachCommands: [
                         `process attach --name ${config.productName} --waitfor`
                     ]
@@ -991,60 +995,60 @@ export function activate(context: vscode.ExtensionContext): void {
         if (wsFolders && wsFolders.length > 0) {
             generatePackageSwift(wsFolders[0].uri.fsPath, 'Debug', true).catch((error) => {
                 const message = (error as { message?: string }).message || String(error);
-                outputChannel.appendLine(`[file-watcher] Package.swift regen failed: ${message}`);
+                log(`[file-watcher] Package.swift regen failed: ${message}`);
             });
         }
     });
 
     // ── Swift file watcher (auto-sync to pbxproj) ─────────────
 
-    const swiftWatcherDisposables = createSwiftFileWatcher(rootPath, outputChannel);
+    const swiftWatcherDisposables = createSwiftFileWatcher(rootPath, log);
     context.subscriptions.push(...swiftWatcherDisposables);
 
     // ── Task chaining and debug cleanup ───────────────────────
 
     const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
         const taskName = event.execution.task.name;
-        const exitCode = (taskName === 'run-and-debug' && launchAppTerminatedByDebugEnd && event.exitCode === undefined)
+        const exitCode = (taskName === 'Run and Debug' && launchAppTerminatedByDebugEnd && event.exitCode === undefined)
             ? 0
             : event.exitCode;
         launchAppTerminatedByDebugEnd = false;
 
-        outputChannel.appendLine(`[task-end] "${taskName}" exited with code ${exitCode}`);
+        log(`[task-end] "${taskName}" exited with code ${exitCode}`);
 
-        if (taskName !== 'build-install' || exitCode !== 0) {
+        if (taskName !== 'Build and Install' || exitCode !== 0) {
             return;
         }
 
         // Only launch the app if build-install was triggered as a debug preLaunchTask.
         // Skip if user ran build-install manually to avoid hanging on --wait-for-debugger.
         if (!debugLaunchPending) {
-            outputChannel.appendLine('[run-and-debug] skipping — not triggered by debug session');
+            log('[run-and-debug] skipping — not triggered by debug session');
             return;
         }
         debugLaunchPending = false;
 
-        outputChannel.appendLine('[run-and-debug] fetching workspace tasks...');
+        log('[run-and-debug] fetching workspace tasks...');
         const tasks = await vscode.tasks.fetchTasks();
-        outputChannel.appendLine(`[run-and-debug] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
+        log(`[run-and-debug] found ${tasks.length} tasks: ${tasks.map((t) => t.name).join(', ')}`);
 
-        const launchTask = tasks.find((t) => t.name === 'run-and-debug');
+        const launchTask = tasks.find((t) => t.name === 'Run and Debug');
         if (launchTask) {
-            outputChannel.appendLine('[run-and-debug] executing run-and-debug task...');
+            log('[run-and-debug] executing run-and-debug task...');
             try {
                 if (consoleExecution) {
-                    outputChannel.appendLine('[run-and-debug] terminating previous run-and-debug task');
+                    log('[run-and-debug] terminating previous run-and-debug task');
                     consoleExecution.terminate();
                     consoleExecution = undefined;
                 }
                 consoleExecution = await vscode.tasks.executeTask(launchTask);
-                outputChannel.appendLine('[run-and-debug] task started successfully');
+                log('[run-and-debug] task started successfully');
             } catch (error) {
                 const message = (error as { message?: string }).message;
-                outputChannel.appendLine(`[run-and-debug] task failed: ${message}`);
+                log(`[run-and-debug] task failed: ${message}`);
             }
         } else {
-            outputChannel.appendLine('[run-and-debug] ERROR: run-and-debug task not found in workspace');
+            log('[run-and-debug] ERROR: run-and-debug task not found in workspace');
         }
     });
 
@@ -1052,7 +1056,7 @@ export function activate(context: vscode.ExtensionContext): void {
         debugLaunchPending = false;
 
         if (consoleExecution) {
-            outputChannel.appendLine('[debug-end] terminating console task');
+            log('[debug-end] terminating console task');
             launchAppTerminatedByDebugEnd = true;
             consoleExecution.terminate();
             consoleExecution = undefined;
@@ -1064,7 +1068,7 @@ export function activate(context: vscode.ExtensionContext): void {
         // Physical device: terminate app via devicectl
         if (config?.isPhysicalDevice && physicalDevicePid) {
             const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
-            outputChannel.appendLine(`[debug-end] terminating PID ${physicalDevicePid} on device`);
+            log(`[debug-end] terminating PID ${physicalDevicePid} on device`);
             await devicectlTerminate(devId, physicalDevicePid);
             physicalDevicePid = undefined;
             return;
@@ -1072,12 +1076,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
         // Cleanly terminate the app on the simulator — debugserver exits naturally when the app dies
         if (config && !config.isPhysicalDevice) {
-            outputChannel.appendLine(`[debug-end] terminating app "${config.bundleIdentifier}" on simulator`);
+            log(`[debug-end] terminating app "${config.bundleIdentifier}" on simulator`);
             cp.exec(
                 `xcrun simctl terminate booted "${config.bundleIdentifier}"`,
                 (error) => {
                     if (error) {
-                        outputChannel.appendLine(`[debug-end] simctl terminate: ${error.message}`);
+                        log(`[debug-end] simctl terminate: ${error.message}`);
                     }
                 }
             );
@@ -1085,14 +1089,20 @@ export function activate(context: vscode.ExtensionContext): void {
 
         // Fallback: kill any residual debugserver after giving simctl terminate time to propagate
         setTimeout(() => {
-            outputChannel.appendLine('[debug-end] cleaning up residual debugserver processes');
+            log('[debug-end] cleaning up residual debugserver processes');
             cp.exec('pkill -f debugserver', (error) => {
                 if (error && error.code !== 1) {
                     // exit code 1 = no matching processes (normal after simctl terminate)
-                    outputChannel.appendLine(`[debug-end] pkill debugserver: ${error.message}`);
+                    log(`[debug-end] pkill debugserver: ${error.message}`);
                 }
             });
         }, 1000);
+    });
+
+    const onDebugStart = vscode.debug.onDidStartDebugSession((session) => {
+        const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+        const target = config?.isPhysicalDevice ? 'device' : 'simulator';
+        log(`[run-and-debug] ${session.name} — debugger attached to ${target}`);
     });
 
     // ── Register all disposables ──────────────────────────────
@@ -1102,7 +1112,7 @@ export function activate(context: vscode.ExtensionContext): void {
         taskProvider, debugProvider, treeView,
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
         selectSimulatorCmd, buildCmd, buildAndRunCmd, refreshCmd,
-        watcher, onProjectChange, onTaskEnd, onDebugEnd,
+        watcher, onProjectChange, onTaskEnd, onDebugStart, onDebugEnd,
         outputChannel
     );
 

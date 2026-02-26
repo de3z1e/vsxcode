@@ -1,9 +1,46 @@
 import * as vscode from 'vscode';
+import * as cp from 'child_process';
 import type { BuildTaskConfig } from '../types/interfaces';
 import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine } from '../generators/buildTasks';
 
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
+
+class TaskTerminal implements vscode.Pseudoterminal {
+    private writeEmitter = new vscode.EventEmitter<string>();
+    private closeEmitter = new vscode.EventEmitter<number | void>();
+    onDidWrite = this.writeEmitter.event;
+    onDidClose = this.closeEmitter.event;
+
+    private process?: cp.ChildProcess;
+
+    constructor(
+        private commandLine: string,
+        private cwd: string,
+    ) {}
+
+    open(): void {
+        this.process = cp.spawn('/bin/zsh', ['-c', this.commandLine], {
+            cwd: this.cwd,
+            env: process.env,
+        });
+
+        const handleData = (data: Buffer) => {
+            this.writeEmitter.fire(data.toString().replace(/\r?\n/g, '\r\n'));
+        };
+
+        this.process.stdout?.on('data', handleData);
+        this.process.stderr?.on('data', handleData);
+
+        this.process.on('close', (code) => {
+            this.closeEmitter.fire(code ?? 1);
+        });
+    }
+
+    close(): void {
+        this.process?.kill();
+    }
+}
 
 export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     constructor(private workspaceState: vscode.Memento) {}
@@ -47,10 +84,11 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     }
 
     private createBuildTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
+        const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'build' },
-            folder, 'build', TASK_SOURCE,
-            new vscode.ShellExecution(buildCommandLine(config)),
+            folder, 'Build', TASK_SOURCE,
+            new vscode.CustomExecution(async () => new TaskTerminal(buildCommandLine(config), cwd)),
             '$swiftc'
         );
         task.group = vscode.TaskGroup.Build;
@@ -62,10 +100,11 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     }
 
     private createBuildInstallTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
+        const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'build-install' },
-            folder, 'build-install', TASK_SOURCE,
-            new vscode.ShellExecution(buildInstallCommandLine(config)),
+            folder, 'Build and Install', TASK_SOURCE,
+            new vscode.CustomExecution(async () => new TaskTerminal(buildInstallCommandLine(config), cwd)),
             '$swiftc'
         );
         task.presentationOptions = {
@@ -76,10 +115,11 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     }
 
     private createRunAndDebugTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
+        const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'run-and-debug' },
-            folder, 'run-and-debug', TASK_SOURCE,
-            new vscode.ShellExecution(runAndDebugCommandLine(config)),
+            folder, 'Run and Debug', TASK_SOURCE,
+            new vscode.CustomExecution(async () => new TaskTerminal(runAndDebugCommandLine(config), cwd)),
             []
         );
         task.presentationOptions = {
