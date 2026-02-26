@@ -550,7 +550,6 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
 
 let consoleExecution: vscode.TaskExecution | undefined;
 let debugLaunchPending = false;
-let launchAppTerminatedByDebugEnd = false;
 let physicalDevicePid: number | undefined;
 
 function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
@@ -1007,20 +1006,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const onTaskEnd = vscode.tasks.onDidEndTaskProcess(async (event) => {
         const taskName = event.execution.task.name;
-        const exitCode = (taskName === 'Run and Debug' && launchAppTerminatedByDebugEnd && event.exitCode === undefined)
-            ? 0
-            : event.exitCode;
-        launchAppTerminatedByDebugEnd = false;
+        log(`[task-end] "${taskName}" exited with code ${event.exitCode}`);
 
-        log(`[task-end] "${taskName}" exited with code ${exitCode}`);
-
-        // App died (e.g. simulator closed) — stop the debug session so cleanup runs
-        if (taskName === 'Run and Debug' && !launchAppTerminatedByDebugEnd && vscode.debug.activeDebugSession) {
-            log('[task-end] Run and Debug exited unexpectedly, stopping debug session');
-            await vscode.debug.stopDebugging();
-        }
-
-        if (taskName !== 'Build and Install' || exitCode !== 0) {
+        if (taskName !== 'Build and Install' || event.exitCode !== 0) {
             return;
         }
 
@@ -1059,14 +1047,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async () => {
         debugLaunchPending = false;
 
-        if (consoleExecution) {
-            launchAppTerminatedByDebugEnd = true;
-        }
-
-        const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-        const cp = await import('child_process');
-
         // Physical device: terminate app via devicectl
+        const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
         if (config?.isPhysicalDevice && physicalDevicePid) {
             const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
             log(`[debug-end] terminating PID ${physicalDevicePid} on device`);
@@ -1074,28 +1056,9 @@ export function activate(context: vscode.ExtensionContext): void {
             physicalDevicePid = undefined;
         }
 
-        // Kill the console process or terminate the app on the simulator.
-        // When consoleExecution is active, killConsoleProcess() kills the entire
-        // process group (including the app), so simctl terminate is unnecessary.
-        if (consoleExecution) {
-            log('[debug-end] killing console process');
-            buildTaskProvider.killConsoleProcess();
-        } else if (config && !config.isPhysicalDevice) {
-            log(`[debug-end] terminating app "${config.bundleIdentifier}" on simulator`);
-            cp.exec(
-                `xcrun simctl terminate booted "${config.bundleIdentifier}"`,
-                (error) => {
-                    if (error) {
-                        log(`[debug-end] simctl terminate: ${error.message}`);
-                    }
-                }
-            );
-        }
-
-        // Fallback: kill any residual debugserver after giving terminate time to propagate
-        setTimeout(() => {
-            cp.exec('pkill -f debugserver', () => {});
-        }, 1000);
+        // Kill the console process group — this terminates the app and ends the task.
+        log('[debug-end] killing console process');
+        buildTaskProvider.killConsoleProcess();
     });
 
     const onDebugStart = vscode.debug.onDidStartDebugSession((session) => {
