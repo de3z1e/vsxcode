@@ -17,6 +17,7 @@ class TaskTerminal implements vscode.Pseudoterminal {
     constructor(
         private commandLine: string,
         private cwd: string,
+        private messages?: { success: string; failure: (code: number) => string },
     ) {}
 
     open(): void {
@@ -26,7 +27,12 @@ class TaskTerminal implements vscode.Pseudoterminal {
             detached: true,
         });
 
+        let hasOutput = false;
         const handleData = (data: Buffer) => {
+            if (!hasOutput && this.messages) {
+                hasOutput = true;
+                this.writeEmitter.fire(`\x1b[32m${this.messages.success}\x1b[0m\r\n\r\n`);
+            }
             this.writeEmitter.fire(data.toString().replace(/\r?\n/g, '\r\n'));
         };
 
@@ -34,7 +40,11 @@ class TaskTerminal implements vscode.Pseudoterminal {
         this.process.stderr?.on('data', handleData);
 
         this.process.on('close', (code) => {
-            this.closeEmitter.fire(code ?? 1);
+            const exitCode = code ?? 1;
+            if (!hasOutput && exitCode !== 0 && this.messages) {
+                this.writeEmitter.fire(`\r\n\x1b[31m${this.messages.failure(exitCode)}\x1b[0m\r\n`);
+            }
+            this.closeEmitter.fire(exitCode);
         });
     }
 
@@ -122,7 +132,10 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'run-and-debug' },
             folder, 'Run and Debug', TASK_SOURCE,
-            new vscode.CustomExecution(async () => new TaskTerminal(runAndDebugCommandLine(config), cwd)),
+            new vscode.CustomExecution(async () => new TaskTerminal(runAndDebugCommandLine(config), cwd, {
+                success: 'App launched successfully.',
+                failure: (code) => `Failed to launch app (exit code ${code}).`,
+            })),
             []
         );
         task.presentationOptions = {
