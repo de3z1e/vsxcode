@@ -549,6 +549,9 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
 }
 
 let consoleExecution: vscode.TaskExecution | undefined;
+let buildExecution: vscode.TaskExecution | undefined;
+let currentRunId = 0;
+let activeDebugSession: vscode.DebugSession | undefined;
 
 function printToSharedPanel(message: string, color = '33'): void {
     const folder = vscode.workspace.workspaceFolders?.[0];
@@ -580,7 +583,23 @@ function printToSharedPanel(message: string, color = '33'): void {
     vscode.tasks.executeTask(task);
 }
 
-function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
+async function cancelActiveRun(): Promise<void> {
+    currentRunId++;
+
+    if (vscode.debug.activeDebugSession) {
+        await vscode.debug.stopDebugging();
+    }
+    if (consoleExecution) {
+        consoleExecution.terminate();
+        consoleExecution = undefined;
+    }
+    if (buildExecution) {
+        buildExecution.terminate();
+        buildExecution = undefined;
+    }
+}
+
+function executeTaskAndWait(task: vscode.Task, onStart?: (exec: vscode.TaskExecution) => void): Promise<number | undefined> {
     return new Promise(async (resolve) => {
         const listener = vscode.tasks.onDidEndTaskProcess((event) => {
             if (event.execution.task === task || event.execution.task.name === task.name) {
@@ -588,7 +607,8 @@ function executeTaskAndWait(task: vscode.Task): Promise<number | undefined> {
                 resolve(event.exitCode);
             }
         });
-        await vscode.tasks.executeTask(task);
+        const execution = await vscode.tasks.executeTask(task);
+        onStart?.(execution);
     });
 }
 
@@ -885,10 +905,11 @@ export function activate(context: vscode.ExtensionContext): void {
     const buildCmd = vscode.commands.registerCommand(
         'swiftPackageHelper.sidebar.build',
         async () => {
+            await cancelActiveRun();
             const tasks = await vscode.tasks.fetchTasks({ type: 'xcode-build' });
             const buildTask = tasks.find((t) => t.name === 'Build');
             if (buildTask) {
-                await vscode.tasks.executeTask(buildTask);
+                buildExecution = await vscode.tasks.executeTask(buildTask);
             } else {
                 vscode.window.showErrorMessage('Build task not available. Check configuration.');
             }
@@ -897,6 +918,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Debug orchestration ─────────────────────────────────────
     async function buildAndDebugSimulator(config: BuildTaskConfig): Promise<void> {
+        await cancelActiveRun();
+        const runId = currentRunId;
+
         // 1. Fetch and execute build task, wait for completion
         const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
         const buildTask = tasks.find((t) => t.name === 'Build');
@@ -914,7 +938,8 @@ export function activate(context: vscode.ExtensionContext): void {
         };
 
         log('[simulator-debug] starting build...');
-        const exitCode = await executeTaskAndWait(buildTask);
+        const exitCode = await executeTaskAndWait(buildTask, (exec) => { buildExecution = exec; });
+        if (runId !== currentRunId) return;
         if (exitCode !== 0) {
             log(`[simulator-debug] build failed with exit code ${exitCode}`);
             return;
@@ -939,6 +964,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 (error) => error ? reject(error) : resolve()
             );
         });
+        if (runId !== currentRunId) return;
         log('[simulator-debug] install succeeded');
 
         // 3. Launch app with console streaming via task
@@ -946,11 +972,6 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!folder) {
             vscode.window.showErrorMessage('No workspace folder found.');
             return;
-        }
-
-        if (consoleExecution) {
-            consoleExecution.terminate();
-            consoleExecution = undefined;
         }
 
         const allTasks = await vscode.tasks.fetchTasks();
@@ -961,6 +982,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         log('[simulator-debug] starting console task...');
         consoleExecution = await vscode.tasks.executeTask(launchTask);
+        if (runId !== currentRunId) return;
 
         // 4. Attach debugger
         const debugConfig: vscode.DebugConfiguration = {
@@ -977,10 +999,15 @@ export function activate(context: vscode.ExtensionContext): void {
             log('[simulator-debug] debug session failed to start');
             consoleExecution?.terminate();
             consoleExecution = undefined;
+        } else {
+            activeDebugSession = vscode.debug.activeDebugSession;
         }
     }
 
     async function buildAndDebugPhysicalDevice(config: BuildTaskConfig): Promise<void> {
+        await cancelActiveRun();
+        const runId = currentRunId;
+
         // 1. Fetch and execute build task, wait for completion
         const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
         const buildTask = tasks.find((t) => t.name === 'Build');
@@ -998,7 +1025,8 @@ export function activate(context: vscode.ExtensionContext): void {
         };
 
         log('[physical-debug] starting build...');
-        const exitCode = await executeTaskAndWait(buildTask);
+        const exitCode = await executeTaskAndWait(buildTask, (exec) => { buildExecution = exec; });
+        if (runId !== currentRunId) return;
         if (exitCode !== 0) {
             log(`[physical-debug] build failed with exit code ${exitCode}`);
             return;
@@ -1013,8 +1041,10 @@ export function activate(context: vscode.ExtensionContext): void {
         try {
             log(`[physical-debug] installing ${config.productName}.app on device...`);
             await devicectlInstall(devId, appPath);
+            if (runId !== currentRunId) return;
             log('[physical-debug] install succeeded');
         } catch (error) {
+            if (runId !== currentRunId) return;
             const message = (error as { message?: string }).message || String(error);
             log(`[physical-debug] install failed: ${message}`);
             vscode.window.showErrorMessage(`Failed to install app on device: ${message}`);
@@ -1030,6 +1060,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         log('[physical-debug] checking device readiness...');
         const initialCheck = await checkDeviceReady(devId);
+        if (runId !== currentRunId) return;
         if (!initialCheck.ready) {
             log(`[physical-debug] device not ready: ${initialCheck.message}`);
             const unlocked = await vscode.window.withProgress(
@@ -1039,18 +1070,19 @@ export function activate(context: vscode.ExtensionContext): void {
                     cancellable: true,
                 },
                 async (_progress, token) => {
-                    while (!token.isCancellationRequested) {
+                    while (!token.isCancellationRequested && runId === currentRunId) {
                         await new Promise<void>((resolve) => {
                             const timeout = setTimeout(resolve, 3000);
                             token.onCancellationRequested(() => { clearTimeout(timeout); resolve(); });
                         });
-                        if (token.isCancellationRequested) return false;
+                        if (token.isCancellationRequested || runId !== currentRunId) return false;
                         const check = await checkDeviceReady(devId);
                         if (check.ready) return true;
                     }
                     return false;
                 }
             );
+            if (runId !== currentRunId) return;
             if (!unlocked) {
                 log('[physical-debug] cancelled waiting for device unlock');
                 printToSharedPanel('App launch cancelled.');
@@ -1060,14 +1092,10 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         // 4. Launch app with console streaming via task
-        if (consoleExecution) {
-            consoleExecution.terminate();
-            consoleExecution = undefined;
-        }
-
         const debugConsoleTask = buildTaskProvider.createPhysicalDebugTask(config, folder);
         log('[physical-debug] starting debug console task...');
         consoleExecution = await vscode.tasks.executeTask(debugConsoleTask);
+        if (runId !== currentRunId) return;
 
         // 5. Wait for console task to settle — detect early failures (locked device, etc.)
         const earlyExit = await Promise.race<number | null>([
@@ -1083,6 +1111,7 @@ export function activate(context: vscode.ExtensionContext): void {
             new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
         ]);
 
+        if (runId !== currentRunId) return;
         if (earlyExit !== null) {
             log(`[physical-debug] console task exited early with code ${earlyExit}`);
             consoleExecution = undefined;
@@ -1113,6 +1142,8 @@ export function activate(context: vscode.ExtensionContext): void {
             buildTaskProvider.writeToConsole('\r\n\x1b[33mApp launch cancelled.\x1b[0m\r\n\r\n');
             consoleExecution?.terminate();
             consoleExecution = undefined;
+        } else {
+            activeDebugSession = vscode.debug.activeDebugSession;
         }
     }
 
@@ -1169,7 +1200,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Debug cleanup ──────────────────────────────────────────
 
-    const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async () => {
+    const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async (session) => {
+        if (session !== activeDebugSession) return;
+        activeDebugSession = undefined;
+
         // Physical device: killing the console process (devicectl --console) terminates the app.
         // Next launch uses --terminate-existing as a safety net.
         const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
@@ -1228,5 +1262,9 @@ export function deactivate(): void {
     if (consoleExecution) {
         consoleExecution.terminate();
         consoleExecution = undefined;
+    }
+    if (buildExecution) {
+        buildExecution.terminate();
+        buildExecution = undefined;
     }
 }
