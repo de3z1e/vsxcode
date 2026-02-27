@@ -1085,7 +1085,7 @@ export function activate(context: vscode.ExtensionContext): void {
             if (runId !== currentRunId) return;
             if (!unlocked) {
                 log('[physical-debug] cancelled waiting for device unlock');
-                printToSharedPanel('App launch cancelled.');
+                printToSharedPanel('** APP LAUNCH CANCELLED **');
                 return;
             }
             log('[physical-debug] device unlocked');
@@ -1115,11 +1115,11 @@ export function activate(context: vscode.ExtensionContext): void {
         if (earlyExit !== null) {
             log(`[physical-debug] console task exited early with code ${earlyExit}`);
             consoleExecution = undefined;
-            buildTaskProvider.writeToConsole('\r\n\x1b[33mApp launch exited.\x1b[0m\r\n\r\n');
+            buildTaskProvider.writeToConsole('\r\n\x1b[33m** APP LAUNCH EXITED **\x1b[0m\r\n\r\n');
             return;
         }
         log('[physical-debug] console task is running');
-        buildTaskProvider.writeToConsole('\r\n\x1b[32mApp launched successfully.\x1b[0m\r\n\r\n');
+        buildTaskProvider.writeToConsole('\r\n\x1b[32m** APP LAUNCH SUCCEEDED **\x1b[0m\r\n\r\n');
 
         // 6. Attach debugger by name (--waitfor finds the --start-stopped process)
         const debugConfig: vscode.DebugConfiguration = {
@@ -1139,7 +1139,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const started = await vscode.debug.startDebugging(folder, debugConfig);
         if (!started) {
             log('[physical-debug] debug session failed to start');
-            buildTaskProvider.writeToConsole('\r\n\x1b[33mApp launch cancelled.\x1b[0m\r\n\r\n');
+            buildTaskProvider.writeToConsole('\r\n\x1b[33m** APP LAUNCH CANCELLED **\x1b[0m\r\n\r\n');
             consoleExecution?.terminate();
             consoleExecution = undefined;
         } else {

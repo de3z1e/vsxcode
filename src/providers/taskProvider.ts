@@ -211,7 +211,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             new vscode.CustomExecution(async () => {
                 const terminal = new TaskTerminal(runAndDebugCommandLine(config), cwd, {
                     messages: {
-                        success: 'App launched successfully.',
+                        success: '** APP LAUNCH SUCCEEDED **',
                         failure: (code) => `Failed to launch app (exit code ${code}).`,
                     },
                 });
