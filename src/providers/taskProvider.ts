@@ -26,7 +26,6 @@ function colorizeBuildOutput(text: string): string {
 
 interface TaskTerminalOptions {
     colorize?: boolean;
-    messages?: { success: string; failure: (code: number) => string };
 }
 
 class TaskTerminal implements vscode.Pseudoterminal {
@@ -50,12 +49,7 @@ class TaskTerminal implements vscode.Pseudoterminal {
             detached: true,
         });
 
-        let hasOutput = false;
         const handleData = (data: Buffer) => {
-            if (!hasOutput && this.options?.messages) {
-                hasOutput = true;
-                this.writeEmitter.fire(`\x1b[32m${this.options.messages.success}\x1b[0m\r\n\r\n`);
-            }
             let text = data.toString().replace(/\r?\n/g, '\r\n');
             if (this.options?.colorize) {
                 text = colorizeBuildOutput(text);
@@ -68,9 +62,6 @@ class TaskTerminal implements vscode.Pseudoterminal {
 
         this.process.on('close', (code, signal) => {
             const exitCode = signal === 'SIGTERM' ? 0 : (code ?? 1);
-            if (!hasOutput && exitCode !== 0 && this.options?.messages) {
-                this.writeEmitter.fire(`\r\n\x1b[31m${this.options.messages.failure(exitCode)}\x1b[0m\r\n`);
-            }
             this.closeEmitter.fire(exitCode);
         });
     }
@@ -209,12 +200,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             { type: TASK_TYPE, task: 'run-and-debug' },
             folder, 'Run and Debug', TASK_SOURCE,
             new vscode.CustomExecution(async () => {
-                const terminal = new TaskTerminal(runAndDebugCommandLine(config), cwd, {
-                    messages: {
-                        success: '** APP LAUNCH SUCCEEDED **',
-                        failure: (code) => `Failed to launch app (exit code ${code}).`,
-                    },
-                });
+                const terminal = new TaskTerminal(runAndDebugCommandLine(config), cwd);
                 this.activeConsoleTerminal = terminal;
                 return terminal;
             }),

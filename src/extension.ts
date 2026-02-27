@@ -997,9 +997,12 @@ export function activate(context: vscode.ExtensionContext): void {
         const started = await vscode.debug.startDebugging(folder, debugConfig);
         if (!started) {
             log('[simulator-debug] debug session failed to start');
+            buildTaskProvider.writeToConsole('\r\n\x1b[31m** APP LAUNCH FAILED **\x1b[0m\r\n\r\n');
             consoleExecution?.terminate();
             consoleExecution = undefined;
         } else {
+            log('[simulator-debug] debug session started');
+            buildTaskProvider.writeToConsole('\r\n\x1b[32m** APP LAUNCH SUCCEEDED **\x1b[0m\r\n\r\n');
             activeDebugSession = vscode.debug.activeDebugSession;
         }
     }
