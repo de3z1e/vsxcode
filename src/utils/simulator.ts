@@ -60,9 +60,13 @@ export async function listAvailableSimulators(): Promise<SimulatorDevice[]> {
             }
         }
 
-        return devices.filter((d) =>
-            d.runtime.includes('iOS') || d.runtime.includes('iphone')
-        );
+        return devices
+            .filter((d) => d.runtime.includes('iOS') || d.runtime.includes('iphone'))
+            .sort((a, b) => {
+                const aBooted = a.state === 'Booted' ? 0 : 1;
+                const bBooted = b.state === 'Booted' ? 0 : 1;
+                return aBooted - bBooted;
+            });
     } catch {
         return [];
     }
