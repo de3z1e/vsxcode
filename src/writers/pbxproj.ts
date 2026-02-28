@@ -44,6 +44,28 @@ function detectIndent(lines: string[], fallback: string): string {
     return fallback;
 }
 
+/** Find the insertion offset within a pbxproj section to maintain ascending ID order. */
+function findIdOrderInsertOffset(
+    pbxContents: string,
+    sectionStartIdx: number,
+    sectionEndIdx: number,
+    newId: string
+): number {
+    const sectionBody = pbxContents.slice(sectionStartIdx, sectionEndIdx);
+    const lines = sectionBody.split('\n');
+    const idPattern = /^\s*([A-F0-9]{24})\s/;
+
+    let offset = sectionStartIdx;
+    for (const line of lines) {
+        const match = idPattern.exec(line);
+        if (match && match[1] > newId) {
+            return offset;
+        }
+        offset += line.length + 1;
+    }
+    return sectionEndIdx;
+}
+
 /** Find the alphabetical insertion offset among .swift entries only. */
 function findAlphabeticalInsertOffset(
     lines: string[],
@@ -100,7 +122,8 @@ export function addFileReference(
     const indent = detectIndent(lines.slice(1), '\t\t');
 
     const entry = `${indent}${fileRefId} /* ${fileName} */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ${formatPath(fileName)}; sourceTree = "<group>"; };\n`;
-    return pbxContents.slice(0, endIdx) + entry + pbxContents.slice(endIdx);
+    const insertAt = findIdOrderInsertOffset(pbxContents, startIdx, endIdx, fileRefId);
+    return pbxContents.slice(0, insertAt) + entry + pbxContents.slice(insertAt);
 }
 
 export function addBuildFile(
@@ -122,7 +145,8 @@ export function addBuildFile(
     const indent = detectIndent(lines.slice(1), '\t\t');
 
     const entry = `${indent}${buildFileId} /* ${fileName} in Sources */ = {isa = PBXBuildFile; fileRef = ${fileRefId} /* ${fileName} */; };\n`;
-    return pbxContents.slice(0, endIdx) + entry + pbxContents.slice(endIdx);
+    const insertAt = findIdOrderInsertOffset(pbxContents, startIdx, endIdx, buildFileId);
+    return pbxContents.slice(0, insertAt) + entry + pbxContents.slice(insertAt);
 }
 
 export function addToGroup(
