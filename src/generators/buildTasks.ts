@@ -51,8 +51,8 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
         ...xcodebuildArgs(config),
         'build 2>&1',
         `&& { xcrun simctl boot "${udid}" 2>/dev/null || true`,
-        `; xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
-        `; xcrun simctl install booted "${appPath}"`,
+        `; xcrun simctl terminate "${udid}" "${config.bundleIdentifier}" 2>/dev/null || true`,
+        `; xcrun simctl install "${udid}" "${appPath}"`,
         '; open -a Simulator; }',
     ].join(' ');
 }
@@ -65,7 +65,8 @@ export function runAndDebugCommandLine(config: BuildTaskConfig): string {
         const devId = devicectlId(config);
         return `xcrun devicectl device process launch --device "${devId}" --console "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
     }
-    return `xcrun simctl launch --console-pty --wait-for-debugger booted "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
+    const udid = config.simulatorUdid || config.simulatorDevice;
+    return `xcrun simctl launch --console-pty --wait-for-debugger "${udid}" "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
 }
 
 export function debugConsoleCommandLine(config: BuildTaskConfig): string {
