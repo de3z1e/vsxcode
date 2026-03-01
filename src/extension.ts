@@ -957,8 +957,8 @@ export function activate(context: vscode.ExtensionContext): void {
             cp.exec(
                 [
                     `xcrun simctl boot "${udid}" 2>/dev/null || true`,
-                    `xcrun simctl terminate booted "${config.bundleIdentifier}" 2>/dev/null || true`,
-                    `xcrun simctl install booted "${appPath}"`,
+                    `xcrun simctl terminate "${udid}" "${config.bundleIdentifier}" 2>/dev/null || true`,
+                    `xcrun simctl install "${udid}" "${appPath}"`,
                     'open -a Simulator',
                 ].join(' && '),
                 (error) => error ? reject(error) : resolve()
