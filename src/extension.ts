@@ -989,6 +989,7 @@ export function activate(context: vscode.ExtensionContext): void {
             type: 'lldb-dap',
             request: 'attach',
             name: `Debug ${config.productName}`,
+            stopOnEntry: false,
             attachCommands: [
                 `process attach --name ${config.productName} --waitfor`
             ]
@@ -1130,6 +1131,7 @@ export function activate(context: vscode.ExtensionContext): void {
             request: 'attach',
             name: `Debug ${config.productName} (Device)`,
             program: appPath,
+            stopOnEntry: false,
             initCommands: [
                 'platform select remote-ios',
             ],
