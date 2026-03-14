@@ -1134,10 +1134,11 @@ export function activate(context: vscode.ExtensionContext): void {
             stopOnEntry: false,
             initCommands: [
                 'platform select remote-ios',
+                'settings set target.process.stop-on-sharedlibrary-events false',
             ],
             attachCommands: [
-                `script lldb.debugger.HandleCommand('device select ${devId}')`,
-                `script lldb.debugger.HandleCommand('device process attach --name ${config.productName} --waitfor --include-existing')`,
+                `device select ${devId}`,
+                `device process attach --name ${config.productName} --waitfor --include-existing`,
             ],
         };
         log('[physical-debug] starting debug session...');
