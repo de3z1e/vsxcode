@@ -167,7 +167,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 const config = this.swiftLintProvider.getConfig();
-                const current = config.ruleConfigs[ruleId] || defaults;
+                const current = config.ruleConfigs[ruleId] || null;
 
                 this._view?.webview.postMessage({
                     type: 'ruleConfigData',
@@ -365,6 +365,8 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .gear-btn:hover{opacity:1}
 .gear-btn.active{opacity:1;color:var(--vscode-button-background)}
 .rule-config{padding:6px 14px 8px 50px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.1))}
+.config-modified{width:5px;height:5px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;visibility:visible}
+.config-modified.default{visibility:hidden}
 .config-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
 .config-row label{flex:1;opacity:.7;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .config-row input{width:80px;flex-shrink:0;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none;text-align:right}
@@ -652,22 +654,34 @@ function updateRuleIndicators(ruleId, hasCustomConfig) {
 function showRuleConfig(ruleId, defaults, current) {
   const panel = document.querySelector('[data-config="' + ruleId + '"]');
   if (!panel) return;
-  const entries = Object.entries(current || defaults || {});
+  const defs = defaults || {};
+  const vals = current || defs;
+  const entries = Object.entries(defs);
   if (!entries.length) { panel.innerHTML = '<div style="opacity:.5;font-size:11px;padding:4px 0">No configurable parameters</div>'; return; }
   let h = '';
-  for (const [key, val] of entries) {
-    const sv = String(val);
+  for (const [key, defRaw] of entries) {
+    const defVal = String(defRaw).trim();
+    const sv = String(vals[key] ?? defRaw).trim();
+    const changed = sv !== defVal;
     const isBool = sv === 'true' || sv === 'false';
-    h += '<div class="config-row"><label title="' + esc(key) + '">' + esc(key) + '</label>';
+    h += '<div class="config-row">';
+    h += '<span class="config-modified' + (changed ? '' : ' default') + '" data-dot="' + esc(key) + '"></span>';
+    h += '<label title="' + esc(key) + '">' + esc(key) + '</label>';
     if (isBool) {
-      h += '<select data-key="' + esc(key) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
+      h += '<select data-key="' + esc(key) + '" data-default="' + esc(defVal) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
     } else {
-      h += '<input type="text" data-key="' + esc(key) + '" value="' + esc(sv) + '">';
+      h += '<input type="text" data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" value="' + esc(sv) + '">';
     }
     h += '</div>';
   }
   h += '<div class="config-actions"><button class="btn-save" data-save="' + ruleId + '">Save</button><button class="btn-reset" data-reset="' + ruleId + '">Reset</button></div>';
   panel.innerHTML = h;
+
+  // Live dot updates on value change
+  panel.querySelectorAll('[data-key]').forEach(el => {
+    el.addEventListener('input', () => updateConfigDot(panel, el));
+    el.addEventListener('change', () => updateConfigDot(panel, el));
+  });
 
   panel.querySelector('[data-save]')?.addEventListener('click', () => {
     const config = {};
@@ -675,15 +689,18 @@ function showRuleConfig(ruleId, defaults, current) {
     vscode.postMessage({ type: 'updateRuleConfig', ruleId, config });
   });
   panel.querySelector('[data-reset]')?.addEventListener('click', () => {
-    // Repopulate fields with defaults locally first to avoid full re-render flash
-    if (defaults) {
-      panel.querySelectorAll('[data-key]').forEach(el => {
-        const def = defaults[el.dataset.key];
-        if (def !== undefined) { el.value = String(def); }
-      });
-    }
-    vscode.postMessage({ type: 'updateRuleConfig', ruleId, config: defaults || {} });
+    panel.querySelectorAll('[data-key]').forEach(el => {
+      const def = defs[el.dataset.key];
+      if (def !== undefined) { el.value = String(def); }
+      updateConfigDot(panel, el);
+    });
+    vscode.postMessage({ type: 'updateRuleConfig', ruleId, config: defs });
   });
+}
+
+function updateConfigDot(panel, el) {
+  const dot = panel.querySelector('[data-dot="' + el.dataset.key + '"]');
+  if (dot) { dot.classList.toggle('default', el.value.trim() === (el.dataset.default || '').trim()); }
 }
 </script>
 </body>
