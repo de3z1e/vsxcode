@@ -374,9 +374,7 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .config-row input:focus{border-color:var(--vscode-focusBorder)}
 .config-actions{display:flex;gap:6px;margin-top:6px}
 .config-actions button{padding:2px 10px;font-size:11px;border-radius:3px;border:none;cursor:pointer}
-.btn-save{background:var(--vscode-button-background);color:var(--vscode-button-foreground)}
-.btn-save:hover{background:var(--vscode-button-hoverBackground)}
-.btn-reset{background:transparent;color:var(--vscode-foreground);opacity:.6}
+.btn-reset{background:transparent;color:var(--vscode-foreground);opacity:.6;border:1px solid var(--vscode-input-border,rgba(128,128,128,.4))}
 .btn-reset:hover{opacity:1}
 .reset-all-btn{background:none;border:none;cursor:pointer;opacity:.35;padding:2px 4px;line-height:1;display:inline-flex;align-items:center}
 .reset-all-btn:hover{opacity:.8}
@@ -674,20 +672,24 @@ function showRuleConfig(ruleId, defaults, current) {
     }
     h += '</div>';
   }
-  h += '<div class="config-actions"><button class="btn-save" data-save="' + ruleId + '">Save</button><button class="btn-reset" data-reset="' + ruleId + '">Reset</button></div>';
+  h += '<div class="config-actions"><button class="btn-reset" data-reset="' + ruleId + '">Reset to Defaults</button></div>';
   panel.innerHTML = h;
 
-  // Live dot updates on value change
-  panel.querySelectorAll('[data-key]').forEach(el => {
-    el.addEventListener('input', () => updateConfigDot(panel, el));
-    el.addEventListener('change', () => updateConfigDot(panel, el));
-  });
-
-  panel.querySelector('[data-save]')?.addEventListener('click', () => {
+  function autoSave() {
     const config = {};
     panel.querySelectorAll('[data-key]').forEach(el => { config[el.dataset.key] = el.value; });
     vscode.postMessage({ type: 'updateRuleConfig', ruleId, config });
+  }
+
+  // Auto-save: dropdowns save immediately, text inputs save on Enter/blur
+  panel.querySelectorAll('select[data-key]').forEach(el => {
+    el.addEventListener('change', () => { updateConfigDot(panel, el); autoSave(); });
   });
+  panel.querySelectorAll('input[data-key]').forEach(el => {
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { el.blur(); } });
+    el.addEventListener('blur', () => { updateConfigDot(panel, el); autoSave(); });
+  });
+
   panel.querySelector('[data-reset]')?.addEventListener('click', () => {
     panel.querySelectorAll('[data-key]').forEach(el => {
       const def = defs[el.dataset.key];
