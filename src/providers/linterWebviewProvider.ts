@@ -87,11 +87,13 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
         switch (msg.type) {
             case 'ready':
                 this.log('[linter] webview ready');
+                // Send state immediately, check brew in background
+                this.postState();
                 if (this.brewAvailable === null) {
                     try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
+                    this.log(`[linter] brew available: ${this.brewAvailable}`);
+                    this.postState();
                 }
-                this.log(`[linter] brew available: ${this.brewAvailable}`);
-                this.postState();
                 break;
 
             case 'installSwiftLint': {
@@ -414,6 +416,14 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
   <div class="not-found" id="loading">Detecting SwiftLint...</div>
 </div>
 <script nonce="${nonce}">
+${this.getScript()}
+</script>
+</body>
+</html>`;
+    }
+
+    private getScript(): string {
+        return `
 const vscode = acquireVsCodeApi();
 const app = document.getElementById('app');
 let state = null;
@@ -541,7 +551,6 @@ function toggleRow(label, id, checked) {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-function escTextarea(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
 function applySearch() {
   const searchInput = document.getElementById('rules-search');
@@ -712,7 +721,7 @@ function showRuleConfig(ruleId, defaults, current, description) {
       if (isNum) {
         h += '<input type="number" data-key="' + esc(key) + '" value="' + esc(sv) + '" min="0">';
       } else {
-        h += '<textarea data-key="' + esc(key) + '" rows="1">' + escTextarea(sv) + '</textarea>';
+        h += '<textarea data-key="' + esc(key) + '" rows="1"></textarea>';
       }
     }
     h += '</div>';
@@ -720,16 +729,21 @@ function showRuleConfig(ruleId, defaults, current, description) {
   h += '<div class="config-actions"><button class="btn-reset" data-reset="' + ruleId + '">Reset to Defaults</button></div>';
   panel.innerHTML = h;
 
+  // Set textarea values via JS to avoid HTML escaping issues
+  panel.querySelectorAll('textarea[data-key]').forEach(el => {
+    el.value = String(vals[el.dataset.key] ?? defs[el.dataset.key] ?? '').trim();
+  });
+
   // Set tooltips via JS to avoid HTML attribute escaping issues with quotes
   panel.querySelectorAll('[data-key]').forEach(el => {
     const key = el.dataset.key;
     const defVal = String(defs[key] ?? '');
-    el.title = humanize(key) + '\nDefault: ' + defVal;
+    el.title = humanize(key) + '\\nDefault: ' + defVal;
   });
   panel.querySelectorAll('label[title]').forEach(lbl => {
     const key = lbl.title;
     const defVal = String(defs[key] ?? '');
-    lbl.title = humanize(key) + '\nDefault: ' + defVal;
+    lbl.title = humanize(key) + '\\nDefault: ' + defVal;
   });
 
   function autoSave() {
@@ -777,9 +791,7 @@ function updateConfigDot(panel, el) {
   const defVal = String((configDefaults[ruleId] || {})[el.dataset.key] || '').trim();
   dot.classList.toggle('default', el.value.trim() === defVal);
 }
-</script>
-</body>
-</html>`;
+`.replace(/<\//g, '<\\/');
     }
 }
 
