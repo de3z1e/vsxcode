@@ -199,6 +199,24 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 break;
             }
 
+            case 'resetAllRules': {
+                const answer = await vscode.window.showWarningMessage(
+                    'Reset all rules and rule configs to defaults?',
+                    { modal: true },
+                    'Reset',
+                );
+                if (answer === 'Reset') {
+                    await this.swiftLintProvider.updateConfig({
+                        disabledRules: [],
+                        optInRules: [],
+                        ruleConfigs: {},
+                    });
+                    this.ruleDefaultsCache.clear();
+                    this.postState();
+                }
+                break;
+            }
+
             case 'changePath': {
                 const config = this.swiftLintProvider.getConfig();
                 const resolvedPath = this.swiftLintProvider.getResolvedPath();
@@ -337,6 +355,7 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .rule-row .switch input:checked+.slider::before{transform:translateX(13px)}
 .rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rule-tags{font-size:10px;opacity:.45;white-space:nowrap}
+.rule-modified{width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;margin-left:2px}
 .gear-btn{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;opacity:.4;font-size:13px;padding:2px 4px;line-height:1}
 .gear-btn:hover{opacity:1}
 .gear-btn.active{opacity:1;color:var(--vscode-button-background)}
@@ -351,6 +370,9 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .btn-save:hover{background:var(--vscode-button-hoverBackground)}
 .btn-reset{background:transparent;color:var(--vscode-foreground);opacity:.6}
 .btn-reset:hover{opacity:1}
+.reset-all-btn{background:none;border:none;cursor:pointer;opacity:.35;padding:2px 4px;line-height:1;display:inline-flex;align-items:center}
+.reset-all-btn:hover{opacity:.8}
+.reset-all-btn svg{width:14px;height:14px;fill:var(--vscode-foreground)}
 /* excluded */
 .excluded-row{display:flex;align-items:center;padding:2px 14px;gap:6px;font-size:12px}
 .excluded-row span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8}
@@ -372,6 +394,8 @@ const vscode = acquireVsCodeApi();
 const app = document.getElementById('app');
 let state = null;
 const groupCollapsed = {}; // tracks user's manual collapse state per kind
+let savedSearch = '';
+let openConfigRuleId = null;
 
 window.addEventListener('message', e => {
   const msg = e.data;
@@ -385,6 +409,9 @@ const ghIcon = '<span class="gh-link" id="gh-link" title="SwiftLint on GitHub"><
 
 function render() {
   if (!state) return;
+  // Save transient UI state before re-render
+  const prevSearch = document.getElementById('rules-search');
+  if (prevSearch) { savedSearch = prevSearch.value; }
   if (!state.pathResolved) { app.innerHTML = '<div class="not-found">Detecting SwiftLint...</div>'; return; }
   if (!state.resolvedPath) {
     let nf = '<div class="section"><div class="row"><span>SwiftLint' + ghIcon + '</span><span class="value" id="path-btn">Not Found</span></div>';
@@ -427,24 +454,29 @@ function render() {
   h += '</select></div></div>';
 
   // rules
-  h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + rules.length + '</span></div>';
+  h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + rules.length + '</span><button class="reset-all-btn" id="reset-all-btn" title="Reset all rules to defaults"><svg viewBox="0 0 16 16"><path d="M2.006 8.267L.78 9.5 0 8.73l2.09-2.07.76.01 2.09 2.12-.76.76-1.167-1.18a5 5 0 1 0 1.563-4.163l-.755-.657A6 6 0 1 1 2.006 8.267z"/></svg></button></div>';
   h += '<div class="search-wrap" id="search-wrap"><input type="text" class="search" id="rules-search" placeholder="Filter rules..."><button class="search-clear" id="search-clear" title="Clear"><svg viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/></svg></button></div>';
 
   for (const kind of kinds) {
     const group = rules.filter(r => r.kind === kind);
     if (!group.length) continue;
-    h += '<div class="group-header collapsed" data-kind="' + kind + '" data-group="' + kind + '"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>' + kind.charAt(0).toUpperCase() + kind.slice(1) + ' (' + group.length + ')</div>';
-    h += '<div class="group-body collapsed" data-group-body="' + kind + '">';
+    const gc = (groupCollapsed[kind] ?? true) ? ' collapsed' : '';
+    h += '<div class="group-header' + gc + '" data-kind="' + kind + '" data-group="' + kind + '"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>' + kind.charAt(0).toUpperCase() + kind.slice(1) + ' (' + group.length + ')</div>';
+    h += '<div class="group-body' + gc + '" data-group-body="' + kind + '">';
     for (const r of group) {
       const tags = [];
       if (r.optIn) tags.push('opt-in');
       if (r.correctable) tags.push('fixable');
-      const customized = c.ruleConfigs[r.identifier] ? ' active' : '';
+      const hasCustomConfig = !!c.ruleConfigs[r.identifier];
+      const toggleChanged = r.optIn ? r.enabled : !r.enabled;
+      const modified = toggleChanged || hasCustomConfig;
+      const gearClass = hasCustomConfig ? ' active' : '';
       h += '<div class="rule-row" data-id="' + r.identifier + '" data-kind="' + kind + '">';
       h += '<label class="switch"><input type="checkbox" data-rule="' + r.identifier + '"' + (r.enabled ? ' checked' : '') + '><span class="slider"></span></label>';
       h += '<span class="rule-name">' + esc(r.identifier) + '</span>';
+      if (modified) h += '<span class="rule-modified" title="Modified from default"></span>';
       if (tags.length) h += '<span class="rule-tags">' + tags.join(', ') + '</span>';
-      h += '<button class="gear-btn' + customized + '" data-gear="' + r.identifier + '" title="Configure">\u2699</button>';
+      h += '<button class="gear-btn' + gearClass + '" data-gear="' + r.identifier + '" title="Configure">\u2699</button>';
       h += '</div>';
       h += '<div class="rule-config hidden" data-config="' + r.identifier + '"></div>';
     }
@@ -462,6 +494,21 @@ function render() {
 
   app.innerHTML = h;
   bind();
+  // Restore search text and re-apply filter
+  if (savedSearch) {
+    const si = document.getElementById('rules-search');
+    if (si) { si.value = savedSearch; applySearch(); }
+  }
+  // Restore open config panel
+  if (openConfigRuleId) {
+    const panel = document.querySelector('[data-config="' + openConfigRuleId + '"]');
+    const btn = document.querySelector('[data-gear="' + openConfigRuleId + '"]');
+    if (panel && btn) {
+      panel.classList.remove('hidden');
+      btn.classList.add('active');
+      vscode.postMessage({ type: 'fetchRuleConfig', ruleId: openConfigRuleId });
+    }
+  }
 }
 
 function toggleRow(label, id, checked) {
@@ -469,6 +516,33 @@ function toggleRow(label, id, checked) {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function applySearch() {
+  const searchInput = document.getElementById('rules-search');
+  const searchWrap = document.getElementById('search-wrap');
+  const q = (searchInput?.value || '').toLowerCase();
+  searchWrap?.classList.toggle('has-value', q.length > 0);
+  document.querySelectorAll('.rule-row').forEach(row => {
+    const id = row.dataset.id || '';
+    row.classList.toggle('hidden', q.length > 0 && !id.includes(q));
+  });
+  document.querySelectorAll('.group-header').forEach(gh => {
+    const kind = gh.dataset.group;
+    const body = document.querySelector('[data-group-body="' + kind + '"]');
+    const hasVisible = body ? body.querySelectorAll('.rule-row:not(.hidden)').length > 0 : false;
+    gh.classList.toggle('hidden', !hasVisible);
+    if (body) body.classList.toggle('hidden', !hasVisible);
+    if (q.length > 0) {
+      const expanded = hasVisible;
+      gh.classList.toggle('collapsed', !expanded);
+      if (body) body.classList.toggle('collapsed', !expanded);
+    } else {
+      const collapsed = groupCollapsed[kind] ?? true;
+      gh.classList.toggle('collapsed', collapsed);
+      if (body) body.classList.toggle('collapsed', collapsed);
+    }
+  });
+}
 
 function bind() {
   document.getElementById('path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
@@ -480,44 +554,16 @@ function bind() {
   // Initialize user collapse state for any new groups
   document.querySelectorAll('.group-header').forEach(gh => {
     const kind = gh.dataset.group;
-    if (!(kind in groupCollapsed)) { groupCollapsed[kind] = true; } // default collapsed
+    if (!(kind in groupCollapsed)) { groupCollapsed[kind] = true; }
   });
 
-  const searchInput = document.getElementById('rules-search');
-  const searchWrap = document.getElementById('search-wrap');
-
-  function applySearch() {
-    const q = (searchInput?.value || '').toLowerCase();
-    searchWrap?.classList.toggle('has-value', q.length > 0);
-    document.querySelectorAll('.rule-row').forEach(row => {
-      const id = row.dataset.id || '';
-      row.classList.toggle('hidden', q.length > 0 && !id.includes(q));
-    });
-    document.querySelectorAll('.group-header').forEach(gh => {
-      const kind = gh.dataset.group;
-      const body = document.querySelector('[data-group-body="' + kind + '"]');
-      const hasVisible = body ? body.querySelectorAll('.rule-row:not(.hidden)').length > 0 : false;
-      gh.classList.toggle('hidden', !hasVisible);
-      if (body) body.classList.toggle('hidden', !hasVisible);
-      if (q.length > 0) {
-        // Searching: expand groups with matches, collapse others
-        const expanded = hasVisible;
-        gh.classList.toggle('collapsed', !expanded);
-        if (body) body.classList.toggle('collapsed', !expanded);
-      } else {
-        // Search cleared: restore user's manual collapse state
-        const collapsed = groupCollapsed[kind] ?? true;
-        gh.classList.toggle('collapsed', collapsed);
-        if (body) body.classList.toggle('collapsed', collapsed);
-      }
-    });
-  }
-
-  searchInput?.addEventListener('input', applySearch);
+  document.getElementById('rules-search')?.addEventListener('input', applySearch);
   document.getElementById('search-clear')?.addEventListener('click', () => {
-    if (searchInput) { searchInput.value = ''; }
+    const si = document.getElementById('rules-search');
+    if (si) { si.value = ''; }
+    savedSearch = '';
     applySearch();
-    searchInput?.focus();
+    si?.focus();
   });
 
   document.querySelectorAll('input[data-rule]').forEach(cb => {
@@ -541,11 +587,17 @@ function bind() {
       const ruleId = btn.dataset.gear;
       const panel = document.querySelector('[data-config="' + ruleId + '"]');
       if (!panel) return;
-      if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); btn.classList.remove('active'); return; }
+      if (!panel.classList.contains('hidden')) {
+        panel.classList.add('hidden');
+        btn.classList.remove('active');
+        openConfigRuleId = null;
+        return;
+      }
       document.querySelectorAll('.rule-config:not(.hidden)').forEach(p => { p.classList.add('hidden'); });
       document.querySelectorAll('.gear-btn.active').forEach(b => { if (!state?.config?.ruleConfigs[b.dataset.gear]) b.classList.remove('active'); });
       btn.classList.add('active');
       panel.classList.remove('hidden');
+      openConfigRuleId = ruleId;
       panel.innerHTML = '<div style="opacity:.5;font-size:11px;padding:4px 0">Loading...</div>';
       vscode.postMessage({ type: 'fetchRuleConfig', ruleId });
     });
@@ -556,6 +608,7 @@ function bind() {
   });
   document.getElementById('add-path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'addExcludedPath' }));
   document.getElementById('add-folder-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'addExcludedFolder' }));
+  document.getElementById('reset-all-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetAllRules' }));
 }
 
 function showRuleConfig(ruleId, defaults, current) {
