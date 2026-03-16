@@ -195,7 +195,12 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 await this.swiftLintProvider.updateConfig({ ruleConfigs });
-                this.postState();
+                // Send lightweight update instead of full re-render to avoid flash
+                this._view?.webview.postMessage({
+                    type: 'ruleConfigUpdated',
+                    ruleId,
+                    hasCustomConfig: ruleId in (this.swiftLintProvider.getConfig().ruleConfigs),
+                });
                 break;
             }
 
@@ -361,8 +366,9 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .gear-btn.active{opacity:1;color:var(--vscode-button-background)}
 .rule-config{padding:6px 14px 8px 50px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.1))}
 .config-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
-.config-row label{width:120px;opacity:.7;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;flex-shrink:0}
-.config-row input{flex:1;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none}
+.config-row label{flex:1;opacity:.7;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.config-row input{width:80px;flex-shrink:0;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none;text-align:right}
+.config-row select{width:80px;flex-shrink:0;background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none;cursor:pointer;text-align:right}
 .config-row input:focus{border-color:var(--vscode-focusBorder)}
 .config-actions{display:flex;gap:6px;margin-top:6px}
 .config-actions button{padding:2px 10px;font-size:11px;border-radius:3px;border:none;cursor:pointer}
@@ -401,6 +407,7 @@ window.addEventListener('message', e => {
   const msg = e.data;
   if (msg.type === 'setState') { state = msg.state; render(); }
   if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.defaults, msg.current); }
+  if (msg.type === 'ruleConfigUpdated') { updateRuleIndicators(msg.ruleId, msg.hasCustomConfig); }
 });
 
 vscode.postMessage({ type: 'ready' });
@@ -611,6 +618,37 @@ function bind() {
   document.getElementById('reset-all-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetAllRules' }));
 }
 
+function updateRuleIndicators(ruleId, hasCustomConfig) {
+  const row = document.querySelector('.rule-row[data-id="' + ruleId + '"]');
+  if (!row) return;
+  const gear = row.querySelector('.gear-btn');
+  if (gear) { gear.classList.toggle('active', hasCustomConfig); }
+  // Update modified dot: check toggle state + config
+  const rule = (state?.rules || []).find(r => r.identifier === ruleId);
+  if (rule) {
+    const toggleChanged = rule.optIn ? rule.enabled : !rule.enabled;
+    const modified = toggleChanged || hasCustomConfig;
+    let dot = row.querySelector('.rule-modified');
+    if (modified && !dot) {
+      dot = document.createElement('span');
+      dot.className = 'rule-modified';
+      dot.title = 'Modified from default';
+      const name = row.querySelector('.rule-name');
+      if (name) { name.after(dot); }
+    } else if (!modified && dot) {
+      dot.remove();
+    }
+  }
+  // Update internal state so next full render is consistent
+  if (state?.config) {
+    if (hasCustomConfig) {
+      state.config.ruleConfigs[ruleId] = state.config.ruleConfigs[ruleId] || {};
+    } else {
+      delete state.config.ruleConfigs[ruleId];
+    }
+  }
+}
+
 function showRuleConfig(ruleId, defaults, current) {
   const panel = document.querySelector('[data-config="' + ruleId + '"]');
   if (!panel) return;
@@ -618,17 +656,32 @@ function showRuleConfig(ruleId, defaults, current) {
   if (!entries.length) { panel.innerHTML = '<div style="opacity:.5;font-size:11px;padding:4px 0">No configurable parameters</div>'; return; }
   let h = '';
   for (const [key, val] of entries) {
-    h += '<div class="config-row"><label title="' + esc(key) + '">' + esc(key) + '</label><input type="text" data-key="' + esc(key) + '" value="' + esc(String(val)) + '"></div>';
+    const sv = String(val);
+    const isBool = sv === 'true' || sv === 'false';
+    h += '<div class="config-row"><label title="' + esc(key) + '">' + esc(key) + '</label>';
+    if (isBool) {
+      h += '<select data-key="' + esc(key) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
+    } else {
+      h += '<input type="text" data-key="' + esc(key) + '" value="' + esc(sv) + '">';
+    }
+    h += '</div>';
   }
   h += '<div class="config-actions"><button class="btn-save" data-save="' + ruleId + '">Save</button><button class="btn-reset" data-reset="' + ruleId + '">Reset</button></div>';
   panel.innerHTML = h;
 
   panel.querySelector('[data-save]')?.addEventListener('click', () => {
     const config = {};
-    panel.querySelectorAll('input[data-key]').forEach(inp => { config[inp.dataset.key] = inp.value; });
+    panel.querySelectorAll('[data-key]').forEach(el => { config[el.dataset.key] = el.value; });
     vscode.postMessage({ type: 'updateRuleConfig', ruleId, config });
   });
   panel.querySelector('[data-reset]')?.addEventListener('click', () => {
+    // Repopulate fields with defaults locally first to avoid full re-render flash
+    if (defaults) {
+      panel.querySelectorAll('[data-key]').forEach(el => {
+        const def = defaults[el.dataset.key];
+        if (def !== undefined) { el.value = String(def); }
+      });
+    }
     vscode.postMessage({ type: 'updateRuleConfig', ruleId, config: defaults || {} });
   });
 }
