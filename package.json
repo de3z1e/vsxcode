@@ -1,5 +1,5 @@
 {
-    "name": "swift-package-helper",
+    "name": "vsxcode",
     "displayName": "VSXcode",
     "description": "Xcode project integration for VS Code — IntelliSense, build tasks, and device/simulator debugging.",
     "version": "3.0.0",
@@ -38,7 +38,7 @@
             "activitybar": [
                 {
                     "id": "vsxcode",
-                    "title": "Swift Package Helper",
+                    "title": "VSXcode",
                     "icon": "images/sidebar.svg"
                 }
             ]
