@@ -1,7 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { promisify } from 'util';
+import { execFile as execFileCallback } from 'child_process';
 import type { SwiftLintConfig, SwiftLintRule } from '../types/interfaces';
 import { SwiftLintProvider, fetchRuleDefaultConfig } from './swiftLintProvider';
+
+const execFile = promisify(execFileCallback);
 
 interface WebviewState {
     pathResolved: boolean;
@@ -9,14 +13,18 @@ interface WebviewState {
     version: string | null;
     config: SwiftLintConfig;
     rules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
+    installing: boolean;
+    brewAvailable: boolean;
 }
 
 export class LinterWebviewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private ruleDefaultsCache = new Map<string, Record<string, string>>();
+    private installing = false;
+    private brewAvailable: boolean | null = null;
 
     constructor(
-        private readonly extensionUri: vscode.Uri,
+        private readonly _extensionUri: vscode.Uri,
         private readonly swiftLintProvider: SwiftLintProvider,
     ) {}
 
@@ -57,6 +65,8 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
             version: this.swiftLintProvider.getResolvedVersion(),
             config,
             rules,
+            installing: this.installing,
+            brewAvailable: this.brewAvailable ?? false,
         };
     }
 
@@ -69,7 +79,44 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
     private async handleMessage(msg: Record<string, unknown>): Promise<void> {
         switch (msg.type) {
             case 'ready':
+                if (this.brewAvailable === null) {
+                    this.brewAvailable = await this.checkBrewAvailable();
+                }
                 this.postState();
+                break;
+
+            case 'installSwiftLint': {
+                this.installing = true;
+                this.postState();
+
+                const brewPath = await this.findBrew();
+                if (!brewPath) {
+                    vscode.window.showErrorMessage('Homebrew not found. Install it from https://brew.sh');
+                    this.installing = false;
+                    this.postState();
+                    break;
+                }
+
+                try {
+                    await execFile(brewPath, ['install', 'swiftlint'], { encoding: 'utf8', timeout: 300000 });
+                    await this.swiftLintProvider.resolvePathAndVersion();
+                    vscode.window.showInformationMessage('SwiftLint installed successfully.');
+                } catch (error: unknown) {
+                    const message = (error as { stderr?: string }).stderr || 'Installation failed';
+                    vscode.window.showErrorMessage(`SwiftLint install failed: ${message.split('\n')[0]}`);
+                }
+
+                this.installing = false;
+                this.postState();
+                break;
+            }
+
+            case 'openInstallGuide':
+                vscode.env.openExternal(vscode.Uri.parse('https://github.com/realm/SwiftLint'));
+                break;
+
+            case 'openInstallInstructions':
+                vscode.env.openExternal(vscode.Uri.parse('https://github.com/realm/SwiftLint#installation'));
                 break;
 
             case 'toggleEnabled':
@@ -220,15 +267,32 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    // ── Brew helpers ────────────────────────────────────────
+
+    private async findBrew(): Promise<string | null> {
+        const candidates = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'];
+        for (const candidate of candidates) {
+            try {
+                await execFile(candidate, ['--version'], { encoding: 'utf8', timeout: 5000 });
+                return candidate;
+            } catch { /* try next */ }
+        }
+        return null;
+    }
+
+    private async checkBrewAvailable(): Promise<boolean> {
+        return (await this.findBrew()) !== null;
+    }
+
     // ── HTML ─────────────────────────────────────────────────
 
-    private getHtml(webview: vscode.Webview): string {
+    private getHtml(_webview: vscode.Webview): string {
         const nonce = getNonce();
         return /*html*/`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src data:;">
 <style nonce="${nonce}">
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);color:var(--vscode-foreground);padding:0}
@@ -238,6 +302,9 @@ body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);col
 .label{opacity:.85;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 .value{cursor:pointer;opacity:.7;font-size:12px}
 .value:hover{opacity:1}
+.gh-link{display:inline-flex;align-items:center;opacity:.35;cursor:pointer;margin-left:6px;vertical-align:middle}
+.gh-link:hover{opacity:.8}
+.gh-link svg{width:14px;height:14px;fill:var(--vscode-foreground)}
 select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border);border-radius:3px;padding:2px 6px;font-size:12px;outline:none;cursor:pointer}
 /* toggle switch */
 .switch{position:relative;width:34px;height:18px;flex-shrink:0}
@@ -303,12 +370,27 @@ window.addEventListener('message', e => {
 
 vscode.postMessage({ type: 'ready' });
 
+const ghIcon = '<span class="gh-link" id="gh-link" title="SwiftLint on GitHub"><svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></span>';
+
 function render() {
   if (!state) return;
   if (!state.pathResolved) { app.innerHTML = '<div class="not-found">Detecting SwiftLint...</div>'; return; }
   if (!state.resolvedPath) {
-    app.innerHTML = '<div class="section"><div class="row"><span>SwiftLint</span><span class="value" id="path-btn">Not Found</span></div></div>';
+    let nf = '<div class="section"><div class="row"><span>SwiftLint' + ghIcon + '</span><span class="value" id="path-btn">Not Found</span></div>';
+    if (state.installing) {
+      nf += '<div class="not-found">Installing via Homebrew\u2026</div>';
+    } else {
+      nf += '<div class="add-btns" style="padding-top:8px">';
+      if (state.brewAvailable) { nf += '<button id="install-btn">Install via Homebrew</button>'; }
+      else { nf += '<button id="manual-install-btn">Installation Guide</button>'; }
+      nf += '<button id="path-btn2">Set Custom Path</button></div>';
+    }
+    nf += '</div>';
+    app.innerHTML = nf;
     document.getElementById('path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
+    document.getElementById('path-btn2')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
+    document.getElementById('install-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'installSwiftLint' }));
+    document.getElementById('manual-install-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'openInstallInstructions' }));
     return;
   }
 
@@ -320,7 +402,7 @@ function render() {
   let h = '';
   // header
   h += '<div class="section">';
-  h += '<div class="row"><span>SwiftLint</span><span class="value" id="path-btn">' + esc(state.version ? 'v' + state.version : state.resolvedPath) + '</span></div>';
+  h += '<div class="row"><span>SwiftLint' + ghIcon + '</span><span class="value" id="path-btn">' + esc(state.version ? 'v' + state.version : state.resolvedPath) + '</span></div>';
   h += '</div>';
 
   // toggles + severity
@@ -377,6 +459,7 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s || 
 
 function bind() {
   document.getElementById('path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
+  document.getElementById('gh-link')?.addEventListener('click', e => { e.stopPropagation(); vscode.postMessage({ type: 'openInstallGuide' }); });
   document.getElementById('toggle-enabled')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleEnabled', value: e.target.checked }));
   document.getElementById('toggle-fixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFixOnSave', value: e.target.checked }));
   document.getElementById('severity-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeSeverity', value: e.target.value }));
