@@ -1,0 +1,33 @@
+{
+    "name": "swift-package-helper",
+    "displayName": "Swift Package Helper (Deprecated — use VSXcode)",
+    "description": "This extension has been renamed to VSXcode. Install 'de3z1e.vsxcode' instead.",
+    "version": "3.0.0",
+    "publisher": "de3z1e",
+    "icon": "images/icon.png",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/de3z1e/vsxcode.git"
+    },
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "keywords": [
+        "deprecated",
+        "swift",
+        "xcode",
+        "vsxcode"
+    ],
+    "extensionDependencies": [
+        "de3z1e.vsxcode"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./extension.js",
+    "contributes": {}
+}
