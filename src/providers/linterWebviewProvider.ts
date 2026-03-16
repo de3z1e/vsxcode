@@ -3,7 +3,7 @@ import * as path from 'path';
 import { promisify } from 'util';
 import { execFile as execFileCallback } from 'child_process';
 import type { SwiftLintConfig, SwiftLintRule } from '../types/interfaces';
-import { SwiftLintProvider, fetchRuleDefaultConfig } from './swiftLintProvider';
+import { SwiftLintProvider, fetchRuleDefaultConfig, type RuleDefaultConfig } from './swiftLintProvider';
 
 const execFile = promisify(execFileCallback);
 
@@ -19,13 +19,14 @@ interface WebviewState {
 
 export class LinterWebviewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
-    private ruleDefaultsCache = new Map<string, Record<string, string>>();
+    private ruleDefaultsCache = new Map<string, RuleDefaultConfig>();
     private installing = false;
     private brewAvailable: boolean | null = null;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly swiftLintProvider: SwiftLintProvider,
+        private readonly log: (message: string) => void,
     ) {}
 
     resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -77,15 +78,24 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
     // ── Messages ─────────────────────────────────────────────
 
     private async handleMessage(msg: Record<string, unknown>): Promise<void> {
+        try { await this._handleMessage(msg); } catch (e) {
+            this.log(`[linter] error handling message '${msg.type}': ${e}`);
+        }
+    }
+
+    private async _handleMessage(msg: Record<string, unknown>): Promise<void> {
         switch (msg.type) {
             case 'ready':
+                this.log('[linter] webview ready');
                 if (this.brewAvailable === null) {
-                    this.brewAvailable = await this.checkBrewAvailable();
+                    try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
                 }
+                this.log(`[linter] brew available: ${this.brewAvailable}`);
                 this.postState();
                 break;
 
             case 'installSwiftLint': {
+                this.log('[linter] installing SwiftLint via Homebrew');
                 this.installing = true;
                 this.postState();
 
@@ -100,9 +110,11 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 try {
                     await execFile(brewPath, ['install', 'swiftlint'], { encoding: 'utf8', timeout: 300000 });
                     await this.swiftLintProvider.resolvePathAndVersion();
+                    this.log(`[linter] SwiftLint installed: ${this.swiftLintProvider.getResolvedPath()}`);
                     vscode.window.showInformationMessage('SwiftLint installed successfully.');
                 } catch (error: unknown) {
                     const message = (error as { stderr?: string }).stderr || 'Installation failed';
+                    this.log(`[linter] SwiftLint install failed: ${message}`);
                     vscode.window.showErrorMessage(`SwiftLint install failed: ${message.split('\n')[0]}`);
                 }
 
@@ -158,11 +170,11 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 const resolvedPath = this.swiftLintProvider.getResolvedPath();
                 if (!resolvedPath) { break; }
 
-                let defaults = this.ruleDefaultsCache.get(ruleId);
-                if (!defaults) {
-                    defaults = await fetchRuleDefaultConfig(resolvedPath, ruleId);
-                    if (Object.keys(defaults).length > 0) {
-                        this.ruleDefaultsCache.set(ruleId, defaults);
+                let cached = this.ruleDefaultsCache.get(ruleId);
+                if (!cached) {
+                    cached = await fetchRuleDefaultConfig(resolvedPath, ruleId);
+                    if (Object.keys(cached.config).length > 0) {
+                        this.ruleDefaultsCache.set(ruleId, cached);
                     }
                 }
 
@@ -172,8 +184,9 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 this._view?.webview.postMessage({
                     type: 'ruleConfigData',
                     ruleId,
-                    defaults,
+                    defaults: cached.config,
                     current,
+                    description: cached.description,
                 });
                 break;
             }
@@ -182,7 +195,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 const ruleId = msg.ruleId as string;
                 const newConfig = msg.config as Record<string, string>;
                 const config = this.swiftLintProvider.getConfig();
-                const defaults = this.ruleDefaultsCache.get(ruleId) || {};
+                const defaults = this.ruleDefaultsCache.get(ruleId)?.config || {};
 
                 const ruleConfigs = { ...config.ruleConfigs };
                 const isDefault = Object.keys(newConfig).length === Object.keys(defaults).length
@@ -365,6 +378,7 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .gear-btn:hover{opacity:1}
 .gear-btn.active{opacity:1;color:var(--vscode-button-background)}
 .rule-config{padding:6px 14px 8px 50px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.1))}
+.config-desc{font-size:11px;opacity:.5;padding:0 0 6px;line-height:1.4}
 .config-modified{width:5px;height:5px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;visibility:visible}
 .config-modified.default{visibility:hidden}
 .config-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
@@ -410,7 +424,7 @@ let openConfigRuleId = null;
 window.addEventListener('message', e => {
   const msg = e.data;
   if (msg.type === 'setState') { state = msg.state; render(); }
-  if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.defaults, msg.current); }
+  if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.defaults, msg.current, msg.description); }
   if (msg.type === 'ruleConfigUpdated') { updateRuleIndicators(msg.ruleId, msg.hasCustomConfig); }
 });
 
@@ -664,7 +678,11 @@ function updateRuleIndicators(ruleId, hasCustomConfig) {
 // Store defaults per open config panel for dot comparison
 const configDefaults = {};
 
-function showRuleConfig(ruleId, defaults, current) {
+function humanize(key) {
+  return key.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+}
+
+function showRuleConfig(ruleId, defaults, current, description) {
   const panel = document.querySelector('[data-config="' + ruleId + '"]');
   if (!panel) return;
   const defs = defaults || {};
@@ -673,6 +691,9 @@ function showRuleConfig(ruleId, defaults, current) {
   const entries = Object.entries(defs);
   if (!entries.length) { panel.innerHTML = '<div class="not-found">No configurable parameters</div>'; return; }
   let h = '';
+  if (description) {
+    h += '<div class="config-desc">' + esc(description) + '</div>';
+  }
   for (const [key, defRaw] of entries) {
     const defVal = String(defRaw).trim();
     const sv = String(vals[key] ?? defRaw).trim();
@@ -703,12 +724,12 @@ function showRuleConfig(ruleId, defaults, current) {
   panel.querySelectorAll('[data-key]').forEach(el => {
     const key = el.dataset.key;
     const defVal = String(defs[key] ?? '');
-    el.title = key + ' (default: ' + defVal + ')';
+    el.title = humanize(key) + '\nDefault: ' + defVal;
   });
   panel.querySelectorAll('label[title]').forEach(lbl => {
     const key = lbl.title;
     const defVal = String(defs[key] ?? '');
-    lbl.title = key + ' (default: ' + defVal + ')';
+    lbl.title = humanize(key) + '\nDefault: ' + defVal;
   });
 
   function autoSave() {

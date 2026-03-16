@@ -30,10 +30,15 @@ const DEFAULT_CONFIG: SwiftLintConfig = {
 
 // ── Rule config fetching ─────────────────────────────────────────
 
+export interface RuleDefaultConfig {
+    description: string;
+    config: Record<string, string>;
+}
+
 export async function fetchRuleDefaultConfig(
     binaryPath: string,
     ruleId: string,
-): Promise<Record<string, string>> {
+): Promise<RuleDefaultConfig> {
     let stdout: string;
     try {
         const result = await execFile(
@@ -43,12 +48,17 @@ export async function fetchRuleDefaultConfig(
         );
         stdout = result.stdout;
     } catch {
-        return {};
+        return { description: '', config: {} };
     }
+
+    const lines = stdout.split('\n');
+    // First line: "Rule Name (rule_id): Description text"
+    const descMatch = /^.+\):\s*(.+)$/.exec(lines[0] || '');
+    const description = descMatch ? descMatch[1].trim() : '';
 
     const config: Record<string, string> = {};
     let inConfig = false;
-    for (const line of stdout.split('\n')) {
+    for (const line of lines) {
         if (line.includes('Configuration (YAML):')) {
             inConfig = true;
             continue;
@@ -57,13 +67,12 @@ export async function fetchRuleDefaultConfig(
         if (line.trimStart().startsWith('Triggering') || line.trimStart().startsWith('Non Triggering')) {
             break;
         }
-        // Match 4-space-indented key: value (direct children of the rule key)
         const match = /^ {4}(\w[\w_]*):\s*(.+)$/.exec(line);
         if (match) {
             config[match[1]] = match[2].trim();
         }
     }
-    return config;
+    return { description, config };
 }
 
 // ── Binary detection ─────────────────────────────────────────────
@@ -164,7 +173,10 @@ export class SwiftLintProvider implements vscode.Disposable {
     private fixingFiles = new Set<string>();
     private cachedRules: SwiftLintRule[] | null = null;
 
-    constructor(private workspaceState: vscode.Memento) {
+    constructor(
+        private workspaceState: vscode.Memento,
+        private readonly log: (message: string) => void = () => {},
+    ) {
         this.diagnosticCollection = vscode.languages.createDiagnosticCollection('swiftlint');
 
         this.disposables.push(
@@ -216,11 +228,16 @@ export class SwiftLintProvider implements vscode.Disposable {
 
     async resolvePathAndVersion(): Promise<void> {
         const config = this.getConfig();
+        this.log('[swiftlint] resolving binary path...');
         this.resolvedPath = await findSwiftLintBinary(config.path);
         this.resolvedVersion = this.resolvedPath ? await getSwiftLintVersion(this.resolvedPath) : null;
 
         if (this.resolvedPath) {
+            this.log(`[swiftlint] found: ${this.resolvedPath} (v${this.resolvedVersion})`);
             this.cachedRules = await parseSwiftLintRules(this.resolvedPath);
+            this.log(`[swiftlint] loaded ${this.cachedRules.length} rules`);
+        } else {
+            this.log('[swiftlint] binary not found');
         }
 
         this._pathResolved = true;

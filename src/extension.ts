@@ -622,7 +622,7 @@ export function activate(context: vscode.ExtensionContext): void {
     };
 
     // SwiftLint provider (independent of build config)
-    const swiftLintProvider = new SwiftLintProvider(context.workspaceState);
+    const swiftLintProvider = new SwiftLintProvider(context.workspaceState, log);
 
     // Always register sidebar (shows welcome message when no project found)
     const sidebarProvider = new SidebarProvider(context.workspaceState);
@@ -631,13 +631,16 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     // Linter sidebar (custom webview)
-    const linterWebviewProvider = new LinterWebviewProvider(context.extensionUri, swiftLintProvider);
+    const linterWebviewProvider = new LinterWebviewProvider(context.extensionUri, swiftLintProvider, log);
     const linterViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.linter', linterWebviewProvider);
 
     // Initialize SwiftLint (async, non-blocking)
     swiftLintProvider.resolvePathAndVersion().then(() => {
         linterWebviewProvider.refresh();
         swiftLintProvider.lintOpenDocuments();
+    }).catch((e) => {
+        log(`[swiftlint] resolvePathAndVersion failed: ${e}`);
+        linterWebviewProvider.refresh();
     });
 
     context.subscriptions.push(swiftLintProvider, linterViewDisposable);
