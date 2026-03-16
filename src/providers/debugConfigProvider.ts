@@ -25,13 +25,13 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
                     'Configure'
                 ).then((action) => {
                     if (action === 'Configure') {
-                        vscode.commands.executeCommand('swiftPackageHelper.generateBuildTasks');
+                        vscode.commands.executeCommand('vsxcode.generateBuildTasks');
                     }
                 });
                 return undefined;
             }
             // Trigger the unified build-and-run flow for both simulator and device
-            vscode.commands.executeCommand('swiftPackageHelper.sidebar.buildAndRun');
+            vscode.commands.executeCommand('vsxcode.sidebar.buildAndRun');
             return undefined;
         }
 

@@ -1,4 +1,6 @@
-# Swift Package Helper
+# VSXcode
+
+> Formerly called Swift Package Helper.
 
 Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, and full debugging with breakpoints and console output on both simulators and physical devices, with a single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS apps directly from VS Code.
 
@@ -66,14 +68,14 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 
 ### Installation
 
-- Install from the VS Code Marketplace (search for `Swift Package Helper`).
-- Install the bundled package directly: `code --install-extension swift-package-helper-2.3.7.vsix`.
+- Install from the VS Code Marketplace (search for `VSXcode`).
+- Install the bundled package directly: `code --install-extension vsxcode-3.0.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
 
 ```bash
 npm install              # install dev dependencies
-npm run package          # runs tsc build and produces swift-package-helper-<version>.vsix
-code --install-extension swift-package-helper-2.3.7.vsix
+npm run package          # runs tsc build and produces vsxcode-<version>.vsix
+code --install-extension vsxcode-3.0.0.vsix
 ```

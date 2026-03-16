@@ -535,7 +535,7 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         `Build tasks configured for ${selectedTarget.name} on ${simulatorPick.label}`
     );
 
-    vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
+    vscode.commands.executeCommand('setContext', 'vsxcode.buildTasksConfigured', true);
 
     if (!vscode.extensions.getExtension('llvm-vs-code-extensions.lldb-dap')) {
         const install = await vscode.window.showWarningMessage(
@@ -560,7 +560,7 @@ function printToSharedPanel(message: string, color = '33'): void {
         { type: 'shell' },
         folder,
         'Print Message',
-        'swift-package-helper',
+        'vsxcode',
         new vscode.CustomExecution(async () => {
             const writeEmitter = new vscode.EventEmitter<string>();
             const closeEmitter = new vscode.EventEmitter<number | void>();
@@ -613,7 +613,7 @@ function executeTaskAndWait(task: vscode.Task, onStart?: (exec: vscode.TaskExecu
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-    const outputChannel = vscode.window.createOutputChannel('Swift Package Helper');
+    const outputChannel = vscode.window.createOutputChannel('VSXcode');
     const log = (message: string): void => {
         const timestamp = new Date().toLocaleTimeString();
         outputChannel.appendLine(`[${timestamp}] ${message}`);
@@ -621,7 +621,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Always register sidebar (shows welcome message when no project found)
     const sidebarProvider = new SidebarProvider(context.workspaceState);
-    const treeView = vscode.window.createTreeView('swiftPackageHelper.sidebar', {
+    const treeView = vscode.window.createTreeView('vsxcode.sidebar', {
         treeDataProvider: sidebarProvider,
     });
 
@@ -662,7 +662,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Enable Cmd+R keybinding if build tasks were previously configured
     const existingConfig = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
     if (existingConfig) {
-        vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
+        vscode.commands.executeCommand('setContext', 'vsxcode.buildTasksConfigured', true);
     }
 
     // Register TaskProvider and DebugConfigurationProvider
@@ -688,7 +688,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // ── Package.swift commands ────────────────────────────────
 
     const generateCommand = vscode.commands.registerCommand(
-        'swiftPackageHelper.createFromXcodeproj',
+        'vsxcode.createFromXcodeproj',
         async () => {
             try {
                 const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -704,7 +704,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const generateWithOptionsCommand = vscode.commands.registerCommand(
-        'swiftPackageHelper.createFromXcodeprojWithOptions',
+        'vsxcode.createFromXcodeprojWithOptions',
         async () => {
             try {
                 const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -726,7 +726,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // ── Manual configure command (fallback) ───────────────────
 
     const generateBuildTasksCommand = vscode.commands.registerCommand(
-        'swiftPackageHelper.generateBuildTasks',
+        'vsxcode.generateBuildTasks',
         async () => {
             try {
                 const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -745,7 +745,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // ── Sidebar commands ──────────────────────────────────────
 
     const changeProjectCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.changeProject',
+        'vsxcode.sidebar.changeProject',
         async () => {
             const data = sidebarProvider.getProjectData();
             if (!data || data.xcodeProjects.length <= 1) { return; }
@@ -760,7 +760,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const changeTargetCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.changeTarget',
+        'vsxcode.sidebar.changeTarget',
         async () => {
             const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
@@ -795,7 +795,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const changeSchemeCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.changeScheme',
+        'vsxcode.sidebar.changeScheme',
         async () => {
             const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
@@ -813,7 +813,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const changeBundleIdCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.changeBundleId',
+        'vsxcode.sidebar.changeBundleId',
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
@@ -829,7 +829,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const selectSimulatorCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.selectSimulator',
+        'vsxcode.sidebar.selectSimulator',
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
@@ -903,7 +903,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const buildCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.build',
+        'vsxcode.sidebar.build',
         async () => {
             await cancelActiveRun();
             const tasks = await vscode.tasks.fetchTasks({ type: 'xcode-build' });
@@ -1154,7 +1154,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const buildAndRunCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.buildAndRun',
+        'vsxcode.sidebar.buildAndRun',
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) {
@@ -1163,7 +1163,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     'Configure'
                 ).then((action) => {
                     if (action === 'Configure') {
-                        vscode.commands.executeCommand('swiftPackageHelper.generateBuildTasks');
+                        vscode.commands.executeCommand('vsxcode.generateBuildTasks');
                     }
                 });
                 return;
@@ -1177,7 +1177,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const refreshCmd = vscode.commands.registerCommand(
-        'swiftPackageHelper.sidebar.refresh',
+        'vsxcode.sidebar.refresh',
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             await sidebarProvider.loadProjectData(config);
@@ -1256,7 +1256,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const noticeShown = context.workspaceState.get<boolean>('migrationNoticeShown');
     if (oldScriptsExist && !noticeShown) {
         vscode.window.showInformationMessage(
-            'Swift Package Helper now uses integrated build tasks. You can safely delete .vscode/scripts/ and the build entries in tasks.json/launch.json.'
+            'VSXcode now uses integrated build tasks. You can safely delete .vscode/scripts/ and the build entries in tasks.json/launch.json.'
         );
         context.workspaceState.update('migrationNoticeShown', true);
     }

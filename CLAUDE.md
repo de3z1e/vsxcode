@@ -36,10 +36,10 @@ Also contains inline helpers: `parseDefaultLocalization`, `parseDeploymentTarget
 
 | Command | Description |
 |---------|-------------|
-| `swiftPackageHelper.createFromXcodeproj` | Generate Package.swift (Debug config) |
-| `swiftPackageHelper.createFromXcodeprojWithOptions` | Generate Package.swift (QuickPick config selection) |
-| `swiftPackageHelper.generateBuildTasks` | Interactive build task configuration |
-| `swiftPackageHelper.sidebar.*` | 7 sidebar commands: changeProject, changeTarget, changeScheme, changeBundleId, selectSimulator, build, buildAndRun, refresh |
+| `vsxcode.createFromXcodeproj` | Generate Package.swift (Debug config) |
+| `vsxcode.createFromXcodeprojWithOptions` | Generate Package.swift (QuickPick config selection) |
+| `vsxcode.generateBuildTasks` | Interactive build task configuration |
+| `vsxcode.sidebar.*` | 7 sidebar commands: changeProject, changeTarget, changeScheme, changeBundleId, selectSimulator, build, buildAndRun, refresh |
 
 ### Module Map
 

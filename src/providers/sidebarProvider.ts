@@ -98,15 +98,15 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     private getConfigItems(config: BuildTaskConfig): SidebarItem[] {
         return [
             this.createConfigItem('config-project', 'Project', config.projectFile,
-                'swiftPackageHelper.sidebar.changeProject', 'project'),
+                'vsxcode.sidebar.changeProject', 'project'),
             this.createConfigItem('config-target', 'Target', config.targetName,
-                'swiftPackageHelper.sidebar.changeTarget', 'symbol-method'),
+                'vsxcode.sidebar.changeTarget', 'symbol-method'),
             this.createConfigItem('config-scheme', 'Scheme', config.schemeName,
-                'swiftPackageHelper.sidebar.changeScheme', 'play-circle'),
+                'vsxcode.sidebar.changeScheme', 'play-circle'),
             this.createConfigItem('config-bundleId', 'Bundle ID', config.bundleIdentifier,
-                'swiftPackageHelper.sidebar.changeBundleId', 'tag'),
+                'vsxcode.sidebar.changeBundleId', 'tag'),
             this.createConfigItem('config-simulator', 'Device', config.simulatorDevice,
-                'swiftPackageHelper.sidebar.selectSimulator', 'device-mobile'),
+                'vsxcode.sidebar.selectSimulator', 'device-mobile'),
         ];
     }
 
@@ -266,7 +266,7 @@ export async function autoConfigureBuildTasks(
         };
         await workspaceState.update('buildTaskConfig', config);
 
-        vscode.commands.executeCommand('setContext', 'swiftPackageHelper.buildTasksConfigured', true);
+        vscode.commands.executeCommand('setContext', 'vsxcode.buildTasksConfigured', true);
 
         await provider.loadProjectData(config);
         provider.notifyConfigChanged();

@@ -1,8 +1,8 @@
 {
     "name": "swift-package-helper",
-    "displayName": "Swift Package Helper",
+    "displayName": "VSXcode",
     "description": "Xcode project integration for VS Code — IntelliSense, build tasks, and device/simulator debugging.",
-    "version": "2.3.7",
+    "version": "3.0.0",
     "publisher": "de3z1e",
     "icon": "images/icon.png",
     "license": "MIT",
@@ -37,16 +37,16 @@
         "viewsContainers": {
             "activitybar": [
                 {
-                    "id": "swiftPackageHelper",
+                    "id": "vsxcode",
                     "title": "Swift Package Helper",
                     "icon": "images/sidebar.svg"
                 }
             ]
         },
         "views": {
-            "swiftPackageHelper": [
+            "vsxcode": [
                 {
-                    "id": "swiftPackageHelper.sidebar",
+                    "id": "vsxcode.sidebar",
                     "name": "Xcode Build",
                     "icon": "images/sidebar.svg",
                     "when": "workspaceFolderCount > 0"
@@ -55,55 +55,55 @@
         },
         "viewsWelcome": [
             {
-                "view": "swiftPackageHelper.sidebar",
+                "view": "vsxcode.sidebar",
                 "contents": "No Xcode project found in this workspace."
             }
         ],
         "commands": [
             {
-                "command": "swiftPackageHelper.createFromXcodeproj",
+                "command": "vsxcode.createFromXcodeproj",
                 "title": "Swift: Generate Package.swift from Xcode Project"
             },
             {
-                "command": "swiftPackageHelper.createFromXcodeprojWithOptions",
+                "command": "vsxcode.createFromXcodeprojWithOptions",
                 "title": "Swift: Generate Package.swift from Xcode Project (with Options)"
             },
             {
-                "command": "swiftPackageHelper.generateBuildTasks",
+                "command": "vsxcode.generateBuildTasks",
                 "title": "Swift: Configure Build Tasks"
             },
             {
-                "command": "swiftPackageHelper.sidebar.changeProject",
+                "command": "vsxcode.sidebar.changeProject",
                 "title": "Change Project"
             },
             {
-                "command": "swiftPackageHelper.sidebar.changeTarget",
+                "command": "vsxcode.sidebar.changeTarget",
                 "title": "Change Target"
             },
             {
-                "command": "swiftPackageHelper.sidebar.changeScheme",
+                "command": "vsxcode.sidebar.changeScheme",
                 "title": "Change Scheme"
             },
             {
-                "command": "swiftPackageHelper.sidebar.changeBundleId",
+                "command": "vsxcode.sidebar.changeBundleId",
                 "title": "Change Bundle Identifier"
             },
             {
-                "command": "swiftPackageHelper.sidebar.selectSimulator",
+                "command": "vsxcode.sidebar.selectSimulator",
                 "title": "Select Device"
             },
             {
-                "command": "swiftPackageHelper.sidebar.build",
+                "command": "vsxcode.sidebar.build",
                 "title": "Build",
                 "icon": "$(tools)"
             },
             {
-                "command": "swiftPackageHelper.sidebar.buildAndRun",
+                "command": "vsxcode.sidebar.buildAndRun",
                 "title": "Build & Run",
                 "icon": "$(debug-alt)"
             },
             {
-                "command": "swiftPackageHelper.sidebar.refresh",
+                "command": "vsxcode.sidebar.refresh",
                 "title": "Refresh",
                 "icon": "$(refresh)"
             }
@@ -111,18 +111,18 @@
         "menus": {
             "view/title": [
                 {
-                    "command": "swiftPackageHelper.sidebar.build",
-                    "when": "view == swiftPackageHelper.sidebar",
+                    "command": "vsxcode.sidebar.build",
+                    "when": "view == vsxcode.sidebar",
                     "group": "navigation@1"
                 },
                 {
-                    "command": "swiftPackageHelper.sidebar.buildAndRun",
-                    "when": "view == swiftPackageHelper.sidebar",
+                    "command": "vsxcode.sidebar.buildAndRun",
+                    "when": "view == vsxcode.sidebar",
                     "group": "navigation@2"
                 },
                 {
-                    "command": "swiftPackageHelper.sidebar.refresh",
-                    "when": "view == swiftPackageHelper.sidebar",
+                    "command": "vsxcode.sidebar.refresh",
+                    "when": "view == vsxcode.sidebar",
                     "group": "navigation@3"
                 }
             ]
@@ -143,8 +143,8 @@
         "keybindings": [
             {
                 "key": "cmd+r",
-                "command": "swiftPackageHelper.sidebar.buildAndRun",
-                "when": "swiftPackageHelper.buildTasksConfigured && !inDebugMode"
+                "command": "vsxcode.sidebar.buildAndRun",
+                "when": "vsxcode.buildTasksConfigured && !inDebugMode"
             },
             {
                 "key": "cmd+r",
@@ -152,10 +152,10 @@
                 "args": {
                     "commands": [
                         "workbench.action.debug.stop",
-                        {"command": "swiftPackageHelper.sidebar.buildAndRun", "delay": 1000}
+                        {"command": "vsxcode.sidebar.buildAndRun", "delay": 1000}
                     ]
                 },
-                "when": "swiftPackageHelper.buildTasksConfigured && inDebugMode"
+                "when": "vsxcode.buildTasksConfigured && inDebugMode"
             }
         ]
     },
