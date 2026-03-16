@@ -527,6 +527,7 @@ function toggleRow(label, id, checked) {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function escTextarea(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
 function applySearch() {
   const searchInput = document.getElementById('rules-search');
@@ -660,13 +661,17 @@ function updateRuleIndicators(ruleId, hasCustomConfig) {
   }
 }
 
+// Store defaults per open config panel for dot comparison
+const configDefaults = {};
+
 function showRuleConfig(ruleId, defaults, current) {
   const panel = document.querySelector('[data-config="' + ruleId + '"]');
   if (!panel) return;
   const defs = defaults || {};
+  configDefaults[ruleId] = defs;
   const vals = current || defs;
   const entries = Object.entries(defs);
-  if (!entries.length) { panel.innerHTML = '<div style="opacity:.5;font-size:11px;padding:4px 0">No configurable parameters</div>'; return; }
+  if (!entries.length) { panel.innerHTML = '<div class="not-found">No configurable parameters</div>'; return; }
   let h = '';
   for (const [key, defRaw] of entries) {
     const defVal = String(defRaw).trim();
@@ -675,21 +680,33 @@ function showRuleConfig(ruleId, defaults, current) {
     const isBool = sv === 'true' || sv === 'false';
     h += '<div class="config-row">';
     h += '<span class="config-modified' + (changed ? '' : ' default') + '" data-dot="' + esc(key) + '"></span>';
-    h += '<label title="' + esc(key) + ' (default: ' + esc(defVal) + ')">' + esc(key) + '</label>';
+    h += '<label title="' + esc(key) + '">' + esc(key) + '</label>';
     if (isBool) {
-      h += '<select data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" title="' + esc(key) + ': ' + esc(sv) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
+      h += '<select data-key="' + esc(key) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
     } else {
       const isNum = /^\d+$/.test(defVal);
       if (isNum) {
-        h += '<input type="number" data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" value="' + esc(sv) + '" title="' + esc(key) + ': ' + esc(sv) + ' (default: ' + esc(defVal) + ')" min="0">';
+        h += '<input type="number" data-key="' + esc(key) + '" value="' + esc(sv) + '" min="0">';
       } else {
-        h += '<textarea data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" rows="1" title="' + esc(key) + ': ' + esc(sv) + ' (default: ' + esc(defVal) + ')">' + esc(sv) + '</textarea>';
+        h += '<textarea data-key="' + esc(key) + '" rows="1">' + escTextarea(sv) + '</textarea>';
       }
     }
     h += '</div>';
   }
   h += '<div class="config-actions"><button class="btn-reset" data-reset="' + ruleId + '">Reset to Defaults</button></div>';
   panel.innerHTML = h;
+
+  // Set tooltips via JS to avoid HTML attribute escaping issues with quotes
+  panel.querySelectorAll('[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    const defVal = String(defs[key] ?? '');
+    el.title = key + ' (default: ' + defVal + ')';
+  });
+  panel.querySelectorAll('label[title]').forEach(lbl => {
+    const key = lbl.title;
+    const defVal = String(defs[key] ?? '');
+    lbl.title = key + ' (default: ' + defVal + ')';
+  });
 
   function autoSave() {
     const config = {};
@@ -703,10 +720,11 @@ function showRuleConfig(ruleId, defaults, current) {
   });
   panel.querySelectorAll('input[data-key], textarea[data-key]').forEach(el => {
     function checkOverflow() { el.classList.toggle('expand-w', el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight); }
-    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && el.tagName !== 'TEXTAREA') { el.blur(); } });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
     el.addEventListener('focus', checkOverflow);
     el.addEventListener('input', checkOverflow);
     el.addEventListener('blur', () => {
+      el.value = el.value.trim();
       updateConfigDot(panel, el);
       autoSave();
       if (el.tagName === 'TEXTAREA') { el.style.height = '20px'; }
@@ -730,7 +748,10 @@ function showRuleConfig(ruleId, defaults, current) {
 
 function updateConfigDot(panel, el) {
   const dot = panel.querySelector('[data-dot="' + el.dataset.key + '"]');
-  if (dot) { dot.classList.toggle('default', el.value.trim() === (el.dataset.default || '').trim()); }
+  if (!dot) return;
+  const ruleId = panel.dataset.config;
+  const defVal = String((configDefaults[ruleId] || {})[el.dataset.key] || '').trim();
+  dot.classList.toggle('default', el.value.trim() === defVal);
 }
 </script>
 </body>
