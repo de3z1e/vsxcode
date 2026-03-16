@@ -69,7 +69,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.0.0.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.0.1.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -77,5 +77,5 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.0.0.vsix
+code --install-extension vsxcode-3.0.1.vsix
 ```
