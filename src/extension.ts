@@ -25,6 +25,8 @@ import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
+import { SwiftLintProvider } from './providers/swiftLintProvider';
+import { LinterWebviewProvider } from './providers/linterWebviewProvider';
 import type { BuildTaskConfig } from './types/interfaces';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
@@ -619,11 +621,26 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[${timestamp}] ${message}`);
     };
 
+    // SwiftLint provider (independent of build config)
+    const swiftLintProvider = new SwiftLintProvider(context.workspaceState);
+
     // Always register sidebar (shows welcome message when no project found)
     const sidebarProvider = new SidebarProvider(context.workspaceState);
     const treeView = vscode.window.createTreeView('vsxcode.sidebar', {
         treeDataProvider: sidebarProvider,
     });
+
+    // Linter sidebar (custom webview)
+    const linterWebviewProvider = new LinterWebviewProvider(context.extensionUri, swiftLintProvider);
+    const linterViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.linter', linterWebviewProvider);
+
+    // Initialize SwiftLint (async, non-blocking)
+    swiftLintProvider.resolvePathAndVersion().then(() => {
+        linterWebviewProvider.refresh();
+        swiftLintProvider.lintOpenDocuments();
+    });
+
+    context.subscriptions.push(swiftLintProvider, linterViewDisposable);
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
