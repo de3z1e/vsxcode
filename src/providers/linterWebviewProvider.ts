@@ -678,11 +678,14 @@ function showRuleConfig(ruleId, defaults, current) {
     const sv = String(vals[key] ?? defRaw).trim();
     const changed = sv !== defVal;
     const isBool = sv === 'true' || sv === 'false';
+    const isSeverity = sv === 'warning' || sv === 'error';
     h += '<div class="config-row">';
     h += '<span class="config-modified' + (changed ? '' : ' default') + '" data-dot="' + esc(key) + '"></span>';
     h += '<label title="' + esc(key) + '">' + esc(key) + '</label>';
     if (isBool) {
       h += '<select data-key="' + esc(key) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
+    } else if (isSeverity) {
+      h += '<select data-key="' + esc(key) + '"><option value="warning"' + (sv === 'warning' ? ' selected' : '') + '>warning</option><option value="error"' + (sv === 'error' ? ' selected' : '') + '>error</option></select>';
     } else {
       const isNum = /^\d+$/.test(defVal);
       if (isNum) {
