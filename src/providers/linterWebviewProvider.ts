@@ -358,7 +358,7 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .rule-row .switch{width:28px;height:15px}
 .rule-row .slider::before{height:9px;width:9px;left:2px;top:2px}
 .rule-row .switch input:checked+.slider::before{transform:translateX(13px)}
-.rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;user-select:none}
 .rule-tags{font-size:10px;opacity:.45;white-space:nowrap}
 .rule-modified{width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;margin-left:2px}
 .gear-btn{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;opacity:.4;font-size:13px;padding:2px 4px;line-height:1}
