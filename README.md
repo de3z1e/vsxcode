@@ -55,6 +55,18 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
 
+### Linter (SwiftLint)
+
+A dedicated Linter panel in the sidebar provides built-in [SwiftLint](https://github.com/realm/SwiftLint) integration — no extra extensions or manual YAML editing required.
+
+- **Auto-detects** the `swiftlint` binary (Homebrew paths or custom). Offers one-click install via Homebrew if not found.
+- **Inline diagnostics** — warnings and errors appear in the editor on file open and save.
+- **Toggle switches** for Enabled and Fix on Save (auto-corrects fixable violations before linting).
+- **Severity mode** — Normal, Strict (warnings become errors), or Lenient (errors become warnings).
+- **Rules list** — all ~245 rules grouped by category (Style, Lint, Idiomatic, Metrics, Performance) with a search filter. Toggle individual rules on/off, and click the gear icon on any rule to configure its parameters (thresholds, boolean flags, etc.) inline.
+- **Excluded paths** — add folders or path patterns to skip during linting.
+- All settings are stored in workspace state. When rules or exclusions are customized, the extension auto-generates `.vscode/.swiftlint.yml` and passes it to SwiftLint — no manual config files needed.
+
 ### Keyboard Shortcuts
 
 | Shortcut | Context | Action |
