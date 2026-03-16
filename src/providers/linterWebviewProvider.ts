@@ -369,8 +369,11 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .config-modified.default{visibility:hidden}
 .config-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
 .config-row label{flex:1;opacity:.7;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.config-row input{width:80px;flex-shrink:0;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none;text-align:right;-moz-appearance:textfield}
+.config-row input,.config-row textarea{width:80px;flex-shrink:0;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;font-family:var(--vscode-font-family);outline:none;text-align:right;-moz-appearance:textfield}
 .config-row input::-webkit-outer-spin-button,.config-row input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.config-row textarea{resize:none;overflow:hidden;height:20px;line-height:14px;white-space:nowrap}
+.config-row textarea:focus{white-space:pre-wrap;word-break:break-all;text-align:left}
+.config-row textarea.expand-w:focus,.config-row input.expand-w:focus{width:120px}
 .config-row select{width:80px;flex-shrink:0;background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none;cursor:pointer;text-align:right}
 .config-row input:focus{border-color:var(--vscode-focusBorder)}
 .config-actions{display:flex;gap:6px;margin-top:6px}
@@ -677,7 +680,11 @@ function showRuleConfig(ruleId, defaults, current) {
       h += '<select data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" title="' + esc(key) + ': ' + esc(sv) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
     } else {
       const isNum = /^\d+$/.test(defVal);
-      h += '<input type="' + (isNum ? 'number' : 'text') + '" data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" value="' + esc(sv) + '" title="' + esc(key) + ': ' + esc(sv) + ' (default: ' + esc(defVal) + ')"' + (isNum ? ' min="0"' : '') + '>';
+      if (isNum) {
+        h += '<input type="number" data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" value="' + esc(sv) + '" title="' + esc(key) + ': ' + esc(sv) + ' (default: ' + esc(defVal) + ')" min="0">';
+      } else {
+        h += '<textarea data-key="' + esc(key) + '" data-default="' + esc(defVal) + '" rows="1" title="' + esc(key) + ': ' + esc(sv) + ' (default: ' + esc(defVal) + ')">' + esc(sv) + '</textarea>';
+      }
     }
     h += '</div>';
   }
@@ -694,9 +701,21 @@ function showRuleConfig(ruleId, defaults, current) {
   panel.querySelectorAll('select[data-key]').forEach(el => {
     el.addEventListener('change', () => { updateConfigDot(panel, el); autoSave(); });
   });
-  panel.querySelectorAll('input[data-key]').forEach(el => {
-    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { el.blur(); } });
-    el.addEventListener('blur', () => { updateConfigDot(panel, el); autoSave(); });
+  panel.querySelectorAll('input[data-key], textarea[data-key]').forEach(el => {
+    function checkOverflow() { el.classList.toggle('expand-w', el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight); }
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && el.tagName !== 'TEXTAREA') { el.blur(); } });
+    el.addEventListener('focus', checkOverflow);
+    el.addEventListener('input', checkOverflow);
+    el.addEventListener('blur', () => {
+      updateConfigDot(panel, el);
+      autoSave();
+      if (el.tagName === 'TEXTAREA') { el.style.height = '20px'; }
+    });
+    if (el.tagName === 'TEXTAREA') {
+      function autoHeight() { el.style.height = '20px'; el.style.height = el.scrollHeight + 'px'; }
+      el.addEventListener('focus', autoHeight);
+      el.addEventListener('input', autoHeight);
+    }
   });
 
   panel.querySelector('[data-reset]')?.addEventListener('click', () => {
