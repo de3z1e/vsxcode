@@ -358,7 +358,7 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .rule-row .switch{width:28px;height:15px}
 .rule-row .slider::before{height:9px;width:9px;left:2px;top:2px}
 .rule-row .switch input:checked+.slider::before{transform:translateX(13px)}
-.rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .rule-tags{font-size:10px;opacity:.45;white-space:nowrap}
 .rule-modified{width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;margin-left:2px}
 .gear-btn{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;opacity:.4;font-size:13px;padding:2px 4px;line-height:1}
@@ -589,25 +589,32 @@ function bind() {
     });
   });
 
+  function toggleRuleConfig(ruleId) {
+    const panel = document.querySelector('[data-config="' + ruleId + '"]');
+    const btn = document.querySelector('[data-gear="' + ruleId + '"]');
+    if (!panel) return;
+    if (!panel.classList.contains('hidden')) {
+      panel.classList.add('hidden');
+      if (btn) { btn.classList.remove('active'); }
+      openConfigRuleId = null;
+      return;
+    }
+    document.querySelectorAll('.rule-config:not(.hidden)').forEach(p => { p.classList.add('hidden'); });
+    document.querySelectorAll('.gear-btn.active').forEach(b => { if (!state?.config?.ruleConfigs[b.dataset.gear]) b.classList.remove('active'); });
+    if (btn) { btn.classList.add('active'); }
+    panel.classList.remove('hidden');
+    openConfigRuleId = ruleId;
+    panel.innerHTML = '<div class="not-found">Loading...</div>';
+    vscode.postMessage({ type: 'fetchRuleConfig', ruleId });
+  }
+
   document.querySelectorAll('.gear-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const ruleId = btn.dataset.gear;
-      const panel = document.querySelector('[data-config="' + ruleId + '"]');
-      if (!panel) return;
-      if (!panel.classList.contains('hidden')) {
-        panel.classList.add('hidden');
-        btn.classList.remove('active');
-        openConfigRuleId = null;
-        return;
-      }
-      document.querySelectorAll('.rule-config:not(.hidden)').forEach(p => { p.classList.add('hidden'); });
-      document.querySelectorAll('.gear-btn.active').forEach(b => { if (!state?.config?.ruleConfigs[b.dataset.gear]) b.classList.remove('active'); });
-      btn.classList.add('active');
-      panel.classList.remove('hidden');
-      openConfigRuleId = ruleId;
-      panel.innerHTML = '<div style="opacity:.5;font-size:11px;padding:4px 0">Loading...</div>';
-      vscode.postMessage({ type: 'fetchRuleConfig', ruleId });
-    });
+    btn.addEventListener('click', () => toggleRuleConfig(btn.dataset.gear));
+  });
+
+  document.querySelectorAll('.rule-name').forEach(name => {
+    const row = name.closest('.rule-row');
+    if (row) { name.addEventListener('click', () => toggleRuleConfig(row.dataset.id)); }
   });
 
   document.querySelectorAll('.remove-btn').forEach(btn => {
