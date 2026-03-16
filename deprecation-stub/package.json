@@ -2,7 +2,7 @@
     "name": "swift-package-helper",
     "displayName": "Swift Package Helper (Deprecated — use VSXcode)",
     "description": "This extension has been renamed to VSXcode. Install 'de3z1e.vsxcode' instead.",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "publisher": "de3z1e",
     "icon": "images/icon.png",
     "license": "MIT",
