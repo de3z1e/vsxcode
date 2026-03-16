@@ -317,9 +317,19 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .rules-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 6px}
 .rules-header .label{flex:1}
 .badge{font-size:11px;opacity:.6}
-.search{display:block;width:calc(100% - 28px);margin:0 14px 8px;padding:4px 8px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;font-size:12px;outline:none}
+.search-wrap{position:relative;margin:0 14px 8px}
+.search{display:block;width:100%;padding:4px 24px 4px 8px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;font-size:12px;outline:none;box-sizing:border-box}
 .search:focus{border-color:var(--vscode-focusBorder)}
-.group-header{padding:4px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.5;background:var(--vscode-sideBar-background,transparent)}
+.search-clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:2px;line-height:1;display:none;color:var(--vscode-foreground);opacity:.4}
+.search-clear:hover{opacity:1}
+.search-clear svg{width:12px;height:12px;fill:var(--vscode-foreground)}
+.search-wrap.has-value .search-clear{display:block}
+.group-header{padding:4px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.5;background:var(--vscode-sideBar-background,transparent);cursor:pointer;display:flex;align-items:center;gap:4px;user-select:none}
+.group-header:hover{opacity:.8}
+.group-chevron{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;transition:transform .15s}
+.group-chevron svg{width:10px;height:10px;fill:var(--vscode-foreground)}
+.group-header.collapsed .group-chevron{transform:rotate(-90deg)}
+.group-body.collapsed{display:none}
 .rule-row{display:flex;align-items:center;padding:3px 14px;gap:8px;min-height:26px}
 .rule-row:hover{background:var(--vscode-list-hoverBackground)}
 .rule-row .switch{width:28px;height:15px}
@@ -361,6 +371,7 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 const vscode = acquireVsCodeApi();
 const app = document.getElementById('app');
 let state = null;
+const groupCollapsed = {}; // tracks user's manual collapse state per kind
 
 window.addEventListener('message', e => {
   const msg = e.data;
@@ -417,18 +428,19 @@ function render() {
 
   // rules
   h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + rules.length + '</span></div>';
-  h += '<input type="text" class="search" id="rules-search" placeholder="Filter rules...">';
+  h += '<div class="search-wrap" id="search-wrap"><input type="text" class="search" id="rules-search" placeholder="Filter rules..."><button class="search-clear" id="search-clear" title="Clear"><svg viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/></svg></button></div>';
 
   for (const kind of kinds) {
     const group = rules.filter(r => r.kind === kind);
     if (!group.length) continue;
-    h += '<div class="group-header" data-kind="' + kind + '">' + kind.charAt(0).toUpperCase() + kind.slice(1) + ' (' + group.length + ')</div>';
+    h += '<div class="group-header collapsed" data-kind="' + kind + '" data-group="' + kind + '"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>' + kind.charAt(0).toUpperCase() + kind.slice(1) + ' (' + group.length + ')</div>';
+    h += '<div class="group-body collapsed" data-group-body="' + kind + '">';
     for (const r of group) {
       const tags = [];
       if (r.optIn) tags.push('opt-in');
       if (r.correctable) tags.push('fixable');
       const customized = c.ruleConfigs[r.identifier] ? ' active' : '';
-      h += '<div class="rule-row" data-id="' + r.identifier + '">';
+      h += '<div class="rule-row" data-id="' + r.identifier + '" data-kind="' + kind + '">';
       h += '<label class="switch"><input type="checkbox" data-rule="' + r.identifier + '"' + (r.enabled ? ' checked' : '') + '><span class="slider"></span></label>';
       h += '<span class="rule-name">' + esc(r.identifier) + '</span>';
       if (tags.length) h += '<span class="rule-tags">' + tags.join(', ') + '</span>';
@@ -436,6 +448,7 @@ function render() {
       h += '</div>';
       h += '<div class="rule-config hidden" data-config="' + r.identifier + '"></div>';
     }
+    h += '</div>';
   }
 
   // excluded
@@ -464,25 +477,63 @@ function bind() {
   document.getElementById('toggle-fixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFixOnSave', value: e.target.checked }));
   document.getElementById('severity-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeSeverity', value: e.target.value }));
 
-  document.getElementById('rules-search')?.addEventListener('input', e => {
-    const q = e.target.value.toLowerCase();
+  // Initialize user collapse state for any new groups
+  document.querySelectorAll('.group-header').forEach(gh => {
+    const kind = gh.dataset.group;
+    if (!(kind in groupCollapsed)) { groupCollapsed[kind] = true; } // default collapsed
+  });
+
+  const searchInput = document.getElementById('rules-search');
+  const searchWrap = document.getElementById('search-wrap');
+
+  function applySearch() {
+    const q = (searchInput?.value || '').toLowerCase();
+    searchWrap?.classList.toggle('has-value', q.length > 0);
     document.querySelectorAll('.rule-row').forEach(row => {
       const id = row.dataset.id || '';
       row.classList.toggle('hidden', q.length > 0 && !id.includes(q));
     });
     document.querySelectorAll('.group-header').forEach(gh => {
-      const kind = gh.dataset.kind;
-      const visible = document.querySelectorAll('.rule-row[data-id]:not(.hidden)');
-      const hasVisible = Array.from(visible).some(r => {
-        const rule = (state?.rules || []).find(x => x.identifier === r.dataset.id);
-        return rule && rule.kind === kind;
-      });
+      const kind = gh.dataset.group;
+      const body = document.querySelector('[data-group-body="' + kind + '"]');
+      const hasVisible = body ? body.querySelectorAll('.rule-row:not(.hidden)').length > 0 : false;
       gh.classList.toggle('hidden', !hasVisible);
+      if (body) body.classList.toggle('hidden', !hasVisible);
+      if (q.length > 0) {
+        // Searching: expand groups with matches, collapse others
+        const expanded = hasVisible;
+        gh.classList.toggle('collapsed', !expanded);
+        if (body) body.classList.toggle('collapsed', !expanded);
+      } else {
+        // Search cleared: restore user's manual collapse state
+        const collapsed = groupCollapsed[kind] ?? true;
+        gh.classList.toggle('collapsed', collapsed);
+        if (body) body.classList.toggle('collapsed', collapsed);
+      }
     });
+  }
+
+  searchInput?.addEventListener('input', applySearch);
+  document.getElementById('search-clear')?.addEventListener('click', () => {
+    if (searchInput) { searchInput.value = ''; }
+    applySearch();
+    searchInput?.focus();
   });
 
   document.querySelectorAll('input[data-rule]').forEach(cb => {
     cb.addEventListener('change', e => vscode.postMessage({ type: 'toggleRule', ruleId: e.target.dataset.rule, enabled: e.target.checked }));
+  });
+
+  document.querySelectorAll('.group-header').forEach(gh => {
+    gh.addEventListener('click', () => {
+      const kind = gh.dataset.group;
+      const body = document.querySelector('[data-group-body="' + kind + '"]');
+      if (!body) return;
+      const isCollapsed = !gh.classList.contains('collapsed');
+      gh.classList.toggle('collapsed', isCollapsed);
+      body.classList.toggle('collapsed', isCollapsed);
+      groupCollapsed[kind] = isCollapsed;
+    });
   });
 
   document.querySelectorAll('.gear-btn').forEach(btn => {
