@@ -279,6 +279,7 @@ export class SwiftLintProvider implements vscode.Disposable {
 
     async checkForUpdate(): Promise<void> {
         if (!this.resolvedVersion) { return; }
+        this.log('[swiftlint] checking for updates...');
         try {
             const { stdout } = await execFile('curl', [
                 '-sf', '--max-time', '5',
@@ -286,8 +287,14 @@ export class SwiftLintProvider implements vscode.Disposable {
             ], { encoding: 'utf8', timeout: 10000 });
             const tag = JSON.parse(stdout).tag_name as string;
             this.latestVersion = tag.replace(/^v/, '') || null;
+            if (this.isUpdateAvailable()) {
+                this.log(`[swiftlint] update available: v${this.resolvedVersion} → v${this.latestVersion}`);
+            } else {
+                this.log(`[swiftlint] up to date (v${this.resolvedVersion})`);
+            }
         } catch {
             this.latestVersion = null;
+            this.log('[swiftlint] update check failed');
         }
     }
 
