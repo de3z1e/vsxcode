@@ -194,6 +194,13 @@ function mapSlKindToCategory(rule: SwiftLintRule): UnifiedCategory {
     }
 }
 
+// ── Correctable overlap SF rules (auto-disabled, SL handles these) ──
+
+/** SF rule identifiers whose SL counterpart is correctable — shown as SL-only */
+export const CORRECTABLE_OVERLAP_SF_RULES = new Set(
+    OVERLAP_PAIRS.filter((p) => p.slCorrectable).map((p) => p.sfRule),
+);
+
 // ── Build unified rules ─────────────────────────────────────────
 
 export function buildUnifiedRules(
@@ -207,7 +214,7 @@ export function buildUnifiedRules(
     const consumedSf = new Set<string>();
     const consumedSl = new Set<string>();
 
-    // 1. Process overlaps — create merged entries
+    // 1. Process overlaps
     for (const pair of OVERLAP_PAIRS) {
         const sfRule = sfRules?.find((r) => r.identifier === pair.sfRule);
         const slRuleIds = Array.isArray(pair.slRule) ? pair.slRule : [pair.slRule];
@@ -218,6 +225,27 @@ export function buildUnifiedRules(
         consumedSf.add(pair.sfRule);
         for (const id of slRuleIds) { consumedSl.add(id); }
 
+        // Correctable overlaps: SF side is auto-disabled, show SL rule only
+        if (pair.slCorrectable && slRuleObjs.length > 0) {
+            for (const slRule of slRuleObjs) {
+                result.push({
+                    displayName: humanReadableName(slRule.identifier),
+                    category: mapSlKindToCategory(slRule),
+                    tool: 'swiftlint',
+                    slRule: {
+                        identifier: slRule.identifier,
+                        optIn: slRule.optIn,
+                        correctable: slRule.correctable,
+                        kind: slRule.kind,
+                        enabled: computeSlEnabled(slRule, slConfig),
+                        hasConfig: !!slConfig.ruleConfigs[slRule.identifier],
+                    },
+                });
+            }
+            continue;
+        }
+
+        // Non-correctable overlaps: show as overlap with handler selection
         const handler = overlapPrefs[pair.sfRule] || pair.defaultHandler;
 
         result.push({

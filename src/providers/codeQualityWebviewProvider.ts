@@ -5,7 +5,7 @@ import { execFile as execFileCallback } from 'child_process';
 import type { SwiftFormatConfig, SwiftFormatRule, SwiftLintConfig, SwiftLintRule } from '../types/interfaces';
 import { SwiftFormatProvider } from './swiftFormatProvider';
 import { SwiftLintProvider, fetchRuleDefaultConfig, type RuleDefaultConfig } from './swiftLintProvider';
-import { buildUnifiedRules, OVERLAP_PAIRS, CATEGORY_ORDER, CATEGORY_LABELS, getSettingsOverlaps, humanReadableName, SF_FORMAT_RULES, type UnifiedRule, type UnifiedCategory, type SettingsOverlap } from '../types/ruleMapping';
+import { buildUnifiedRules, OVERLAP_PAIRS, CORRECTABLE_OVERLAP_SF_RULES, CATEGORY_ORDER, CATEGORY_LABELS, getSettingsOverlaps, humanReadableName, SF_FORMAT_RULES, type UnifiedRule, type UnifiedCategory, type SettingsOverlap } from '../types/ruleMapping';
 
 const execFile = promisify(execFileCallback);
 
@@ -35,6 +35,8 @@ interface WebviewState {
     // Rules
     unifiedRules: UnifiedRule[];
     analyzerRules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
+    // Save
+    autoFixOnSave: boolean;
     // Overlaps
     settingsOverlaps: SettingsOverlap[];
     activeOverlapCount: number;
@@ -128,6 +130,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             profileMode,
             sfConfig,
             slConfig,
+            autoFixOnSave: sfConfig.formatOnSave || slConfig.fixOnSave,
             unifiedRules,
             analyzerRules,
             settingsOverlaps,
@@ -152,6 +155,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
         switch (msg.type) {
             case 'ready':
                 this.log('[code-quality] webview ready');
+                await this.ensureCorrectableOverlapsSfDisabled();
                 this.postState();
                 if (this.brewAvailable === null) {
                     try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
@@ -304,18 +308,16 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 this.postState();
                 break;
 
-            case 'toggleFormatOnSave':
-                await this.swiftFormatProvider.updateConfig({ formatOnSave: msg.value as boolean });
+            case 'toggleAutoFixOnSave': {
+                const enabled = msg.value as boolean;
+                await this.swiftFormatProvider.updateConfig({ formatOnSave: enabled });
+                await this.swiftLintProvider.updateConfig({ fixOnSave: enabled });
                 this.postState();
                 break;
+            }
 
             case 'toggleLintMode':
                 await this.swiftFormatProvider.updateConfig({ lintMode: msg.value as boolean });
-                this.postState();
-                break;
-
-            case 'toggleFixOnSave':
-                await this.swiftLintProvider.updateConfig({ fixOnSave: msg.value as boolean });
                 this.postState();
                 break;
 
@@ -675,8 +677,11 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
             case 'autoResolveOverlaps': {
                 const prefs = this.workspaceState.get<Record<string, string>>('codeQualityOverlapPrefs') || {};
+                let resolved = 0;
 
+                // Only resolve non-correctable overlaps (correctable ones are auto-handled as SL-only)
                 for (const pair of OVERLAP_PAIRS) {
+                    if (pair.slCorrectable) { continue; }
                     const handler = pair.defaultHandler;
                     prefs[pair.sfRule] = handler;
                     const slRuleIds = Array.isArray(pair.slRule) ? pair.slRule : [pair.slRule];
@@ -692,12 +697,12 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                             await this.ensureSlRuleEnabled(slId, true);
                         }
                     }
+                    resolved++;
                 }
 
                 await this.workspaceState.update('codeQualityOverlapPrefs', prefs);
                 this.postState();
-                const count = OVERLAP_PAIRS.length;
-                vscode.window.showInformationMessage(`Auto-resolved ${count} overlap${count === 1 ? '' : 's'} using recommended defaults.`);
+                vscode.window.showInformationMessage(`Auto-resolved ${resolved} overlap${resolved === 1 ? '' : 's'} using recommended defaults.`);
                 break;
             }
         }
@@ -743,6 +748,42 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         await this.swiftLintProvider.updateConfig({ disabledRules, optInRules });
+    }
+
+    /** Disable SF rules whose SL counterpart is correctable — SL handles these */
+    private async ensureCorrectableOverlapsSfDisabled(): Promise<void> {
+        const sfRules = this.swiftFormatProvider.getRules();
+        if (!sfRules) { return; }
+        const sfConfig = this.swiftFormatProvider.getConfig();
+        let changed = false;
+        const disabledRules = [...sfConfig.disabledRules];
+        const enabledRules = [...sfConfig.enabledRules];
+
+        for (const sfRuleId of CORRECTABLE_OVERLAP_SF_RULES) {
+            const rule = sfRules.find((r) => r.identifier === sfRuleId);
+            if (!rule) { continue; }
+
+            // Check if currently enabled
+            const isDisabled = disabledRules.includes(sfRuleId);
+            const isEnabled = enabledRules.includes(sfRuleId);
+            const effectiveEnabled = (rule.isDefault && !isDisabled) || isEnabled;
+            if (!effectiveEnabled) { continue; }
+
+            // Disable it
+            if (rule.isDefault && !isDisabled) {
+                disabledRules.push(sfRuleId);
+                changed = true;
+            }
+            if (isEnabled) {
+                const idx = enabledRules.indexOf(sfRuleId);
+                if (idx >= 0) { enabledRules.splice(idx, 1); changed = true; }
+            }
+        }
+
+        if (changed) {
+            await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
+            this.log('[code-quality] auto-disabled SF rules for correctable overlaps');
+        }
     }
 
     // ── Brew helpers ────────────────────────────────────────
@@ -1047,12 +1088,13 @@ function render() {
   if (slFound) {
     h += toggleRow('Linter', 'toggle-linter', slC.enabled);
   }
+  if ((sfFound && sfC.enabled) || (slFound && slC.enabled)) {
+    h += toggleRow('Auto-fix on Save', 'toggle-autoFixOnSave', state.autoFixOnSave, 'Applies swift-format formatting and SwiftLint auto-corrections when saving a Swift file.');
+  }
   if (sfFound && sfC.enabled) {
-    h += toggleRow('Format on Save', 'toggle-formatOnSave', sfC.formatOnSave, 'Formats Swift files automatically when saving. Runs before SwiftLint fix-on-save.');
     h += toggleRow('Lint Mode', 'toggle-lintMode', sfC.lintMode, 'Shows swift-format violations as diagnostics in the Problems panel.');
   }
   if (slFound && slC.enabled) {
-    h += toggleRow('Fix on Save', 'toggle-fixOnSave', slC.fixOnSave, 'Auto-corrects fixable rule violations when saving a Swift file.');
     h += '<div class="row"><span>Severity' + infoIcon('<b>Normal</b>: warnings stay warnings, errors stay errors.<br><b>Strict</b>: all violations become errors.<br><b>Lenient</b>: all violations become warnings.') + '</span><select id="severity-select">';
     for (const v of ['normal','strict','lenient']) {
       h += '<option value="' + v + '"' + (slC.severity === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
@@ -1417,9 +1459,8 @@ function bind() {
   // Controls
   document.getElementById('toggle-formatter')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFormatterEnabled', value: e.target.checked }));
   document.getElementById('toggle-linter')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleLinterEnabled', value: e.target.checked }));
-  document.getElementById('toggle-formatOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFormatOnSave', value: e.target.checked }));
+  document.getElementById('toggle-autoFixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleAutoFixOnSave', value: e.target.checked }));
   document.getElementById('toggle-lintMode')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleLintMode', value: e.target.checked }));
-  document.getElementById('toggle-fixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFixOnSave', value: e.target.checked }));
   document.getElementById('severity-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeSeverity', value: e.target.value }));
   document.getElementById('profile-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeProfileMode', value: e.target.value }));
 
