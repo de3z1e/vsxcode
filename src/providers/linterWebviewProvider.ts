@@ -368,15 +368,15 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .group-chevron svg{width:10px;height:10px;fill:var(--vscode-foreground)}
 .group-header.collapsed .group-chevron{transform:rotate(-90deg)}
 .group-body.collapsed{display:none}
-.rule-row{display:flex;align-items:center;padding:3px 14px;gap:8px;min-height:26px}
+.rule-row{display:flex;align-items:center;padding:3px 14px;gap:8px;min-height:26px;cursor:pointer}
 .rule-row:hover{background:var(--vscode-list-hoverBackground)}
 .rule-row .switch{width:28px;height:15px}
 .rule-row .slider::before{height:9px;width:9px;left:2px;top:2px}
 .rule-row .switch input:checked+.slider::before{transform:translateX(13px)}
-.rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;user-select:none}
-.rule-tags{font-size:10px;opacity:.45;white-space:nowrap}
+.rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:none}
+.rule-tags{font-size:10px;opacity:.45;white-space:nowrap;pointer-events:none;user-select:none}
 .rule-modified{width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;margin-left:2px}
-.gear-btn{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;opacity:.4;font-size:13px;padding:2px 4px;line-height:1}
+.gear-btn{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;opacity:.4;font-size:13px;padding:2px 4px;line-height:1;user-select:none}
 .gear-btn:hover{opacity:1}
 .gear-btn.active{opacity:1;color:var(--vscode-button-background)}
 .rule-config{padding:6px 14px 8px 50px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.1))}
@@ -637,12 +637,14 @@ function bind() {
   }
 
   document.querySelectorAll('.gear-btn').forEach(btn => {
-    btn.addEventListener('click', () => toggleRuleConfig(btn.dataset.gear));
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toggleRuleConfig(btn.dataset.gear); });
   });
 
-  document.querySelectorAll('.rule-name').forEach(name => {
-    const row = name.closest('.rule-row');
-    if (row) { name.addEventListener('click', () => toggleRuleConfig(row.dataset.id)); }
+  document.querySelectorAll('.rule-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.switch')) return;
+      toggleRuleConfig(row.dataset.id);
+    });
   });
 
   document.querySelectorAll('.remove-btn').forEach(btn => {
