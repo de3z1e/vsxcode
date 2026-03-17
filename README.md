@@ -63,9 +63,12 @@ A dedicated Linter panel in the sidebar provides built-in [SwiftLint](https://gi
 - **Inline diagnostics** — warnings and errors appear in the editor on file open and save.
 - **Toggle switches** for Enabled and Fix on Save (auto-corrects fixable violations before linting).
 - **Severity mode** — Normal, Strict (warnings become errors), or Lenient (errors become warnings).
-- **Rules list** — all ~245 rules grouped by category (Style, Lint, Idiomatic, Metrics, Performance) with a search filter. Toggle individual rules on/off, and click the gear icon on any rule to configure its parameters (thresholds, boolean flags, etc.) inline.
+- **Rules list** — all ~250 rules grouped by category (Style, Lint, Idiomatic, Metrics, Performance) with a search filter. Toggle individual rules on/off, and click the gear icon on any rule to configure its parameters inline.
+- **Analyzer rules** — 5 rules (`unused_import`, `unused_declaration`, `explicit_self`, `capture_variable`, `typesafe_array_init`) that use the full type-checked AST. Runs automatically after successful builds using captured compiler logs.
+- **Global / Local profiles** — Global profile shares rule settings across all projects. Local profile keeps rules per-project. New projects default to Global; projects with an existing `.swiftlint.yml` default to Local. Excluded paths are always per-project.
 - **Excluded paths** — add folders or path patterns to skip during linting.
-- All settings are stored in workspace state. When rules or exclusions are customized, the extension auto-generates `.vscode/.swiftlint.yml` and passes it to SwiftLint — no manual config files needed.
+- **Config file sync** — manually editing `.vscode/.swiftlint.yml` automatically updates the UI. The file is also read on activation for cloned repos with committed configs.
+- All settings auto-generate `.vscode/.swiftlint.yml` — no manual config files needed.
 
 ### Keyboard Shortcuts
 
