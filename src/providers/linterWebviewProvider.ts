@@ -415,12 +415,8 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .config-row select{width:80px;flex-shrink:0;background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none;cursor:pointer;text-align:right}
 .config-row input:focus{border-color:var(--vscode-focusBorder)}
 .config-actions{margin-top:6px}
-.config-actions button{padding:2px 0;font-size:11px;border-radius:3px;border:none;cursor:pointer}
-.btn-reset{background:transparent;color:var(--vscode-foreground);opacity:.6;border:1px solid var(--vscode-input-border,rgba(128,128,128,.4))}
-.btn-reset:hover{opacity:1}
-.reset-all-btn{background:none;border:none;cursor:pointer;opacity:.35;padding:2px 4px;line-height:1;display:inline-flex;align-items:center}
-.reset-all-btn:hover{opacity:.8}
-.reset-all-btn svg{width:14px;height:14px;fill:var(--vscode-foreground)}
+.btn-reset{padding:2px 8px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
+.btn-reset:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
 /* excluded */
 .excluded-row{display:flex;align-items:center;padding:2px 14px;gap:6px;font-size:12px}
 .excluded-row span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8}
@@ -512,7 +508,7 @@ function render() {
   h += '</select></div></div>';
 
   // rules
-  h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + rules.length + '</span><button class="reset-all-btn" id="reset-all-btn" title="Reset all rules to defaults"><svg viewBox="0 0 16 16"><path d="M2.006 8.267L.78 9.5 0 8.73l2.09-2.07.76.01 2.09 2.12-.76.76-1.167-1.18a5 5 0 1 0 1.563-4.163l-.755-.657A6 6 0 1 1 2.006 8.267z"/></svg></button></div>';
+  h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + rules.length + '</span></div>';
   h += '<div class="search-wrap" id="search-wrap"><input type="text" class="search" id="rules-search" placeholder="Filter rules..."><button class="search-clear" id="search-clear" title="Clear"><svg viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/></svg></button></div>';
 
   for (const kind of kinds) {
@@ -563,6 +559,9 @@ function render() {
     }
     h += '</div>';
   }
+
+  // reset all
+  h += '<div class="add-btns" style="padding-top:4px"><button id="reset-all-btn">Reset All to Defaults</button></div>';
 
   // excluded
   h += '<div class="section" style="border-top:1px solid var(--vscode-widget-border,rgba(128,128,128,.2));margin-top:4px">';
