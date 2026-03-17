@@ -833,6 +833,14 @@ function showRuleConfig(ruleId, defaults, current, description) {
       updateConfigDot(panel, el);
     });
     vscode.postMessage({ type: 'updateRuleConfig', ruleId, config: defs });
+    // Also reset the toggle to its default state
+    const aRule = (state?.analyzerRules || []).find(r => r.identifier === ruleId);
+    if (aRule) {
+      vscode.postMessage({ type: 'toggleAnalyzerRule', ruleId, enabled: false });
+    } else {
+      const rule = (state?.rules || []).find(r => r.identifier === ruleId);
+      if (rule) { vscode.postMessage({ type: 'toggleRule', ruleId, enabled: !rule.optIn }); }
+    }
   });
 }
 
