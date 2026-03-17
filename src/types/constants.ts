@@ -74,3 +74,12 @@ export const SWIFT_VERSION_MAP: Record<string, string> = {
     '5.9': '.v5',
     '5': '.v5'
 };
+
+// swift-format rule → overlapping SwiftLint rule (swift-format handles these better via rewrite)
+export const SWIFTLINT_SWIFTFORMAT_OVERLAPS: Record<string, string> = {
+    'ReturnVoidInsteadOfEmptyTuple': 'void_return',
+    'DoNotUseSemicolons': 'trailing_semicolon',
+    'NoEmptyTrailingClosureParentheses': 'empty_parentheses_with_trailing_closure',
+    'OrderedImports': 'sorted_imports',
+    'UseTripleSlashForDocComments': 'comment_spacing',
+};

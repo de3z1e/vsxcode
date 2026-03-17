@@ -1,0 +1,854 @@
+import * as vscode from 'vscode';
+import { promisify } from 'util';
+import { execFile as execFileCallback } from 'child_process';
+import type { SwiftFormatConfig, SwiftFormatRule } from '../types/interfaces';
+import { SWIFTLINT_SWIFTFORMAT_OVERLAPS } from '../types/constants';
+import { SwiftFormatProvider } from './swiftFormatProvider';
+import { SwiftLintProvider } from './swiftLintProvider';
+
+const execFile = promisify(execFileCallback);
+
+interface WebviewState {
+    pathResolved: boolean;
+    resolvedPath: string | null;
+    version: string | null;
+    updateAvailable: boolean;
+    latestVersion: string | null;
+    config: SwiftFormatConfig;
+    rules: Array<SwiftFormatRule & { effectiveEnabled: boolean }> | null;
+    installing: boolean;
+    updating: boolean;
+    brewAvailable: boolean;
+    profileMode: 'local' | 'global';
+    conflicts: Array<{ swiftFormatRule: string; swiftLintRule: string }>;
+}
+
+export class FormatterWebviewProvider implements vscode.WebviewViewProvider {
+    private _view?: vscode.WebviewView;
+    private installing = false;
+    private updating = false;
+    private brewAvailable: boolean | null = null;
+
+    constructor(
+        private readonly _extensionUri: vscode.Uri,
+        private readonly swiftFormatProvider: SwiftFormatProvider,
+        private readonly swiftLintProvider: SwiftLintProvider,
+        private readonly log: (message: string) => void,
+    ) {}
+
+    resolveWebviewView(webviewView: vscode.WebviewView): void {
+        this._view = webviewView;
+        webviewView.webview.options = { enableScripts: true };
+        webviewView.webview.html = this.getHtml(webviewView.webview);
+        webviewView.webview.onDidReceiveMessage((msg) => this.handleMessage(msg));
+        webviewView.onDidDispose(() => { this._view = undefined; });
+    }
+
+    refresh(): void {
+        this.postState();
+    }
+
+    // ── State ────────────────────────────────────────────────
+
+    private getConflicts(): WebviewState['conflicts'] {
+        const config = this.swiftFormatProvider.getConfig();
+        const lintConfig = this.swiftLintProvider.getConfig();
+        if (!config.enabled || !lintConfig.enabled) { return []; }
+
+        const formatRules = this.swiftFormatProvider.getRules() || [];
+        const lintRules = this.swiftLintProvider.getRules() || [];
+        const conflicts: WebviewState['conflicts'] = [];
+
+        for (const [formatRuleName, lintRuleName] of Object.entries(SWIFTLINT_SWIFTFORMAT_OVERLAPS)) {
+            const fRule = formatRules.find((r) => r.identifier === formatRuleName);
+            if (!fRule) { continue; }
+            const fEnabled = (fRule.isDefault && !config.disabledRules.includes(formatRuleName))
+                || config.enabledRules.includes(formatRuleName);
+            if (!fEnabled) { continue; }
+
+            const lRule = lintRules.find((r) => r.identifier === lintRuleName);
+            if (!lRule) { continue; }
+            const lEnabled = (!lRule.optIn && !lintConfig.disabledRules.includes(lintRuleName))
+                || lintConfig.optInRules.includes(lintRuleName);
+            if (!lEnabled) { continue; }
+
+            conflicts.push({ swiftFormatRule: formatRuleName, swiftLintRule: lintRuleName });
+        }
+
+        return conflicts;
+    }
+
+    private getState(): WebviewState {
+        const config = this.swiftFormatProvider.getConfig();
+        const rawRules = this.swiftFormatProvider.getRules();
+        let rules: WebviewState['rules'] = null;
+
+        if (rawRules) {
+            rules = rawRules.map((r) => {
+                const isDisabled = config.disabledRules.includes(r.identifier);
+                const isEnabled = config.enabledRules.includes(r.identifier);
+                const effectiveEnabled = (r.isDefault && !isDisabled) || isEnabled;
+                return { ...r, effectiveEnabled };
+            });
+        }
+
+        return {
+            pathResolved: this.swiftFormatProvider.isPathResolved(),
+            resolvedPath: this.swiftFormatProvider.getResolvedPath(),
+            version: this.swiftFormatProvider.getResolvedVersion(),
+            updateAvailable: this.swiftFormatProvider.isUpdateAvailable(),
+            latestVersion: this.swiftFormatProvider.getLatestVersion(),
+            config,
+            rules,
+            installing: this.installing,
+            updating: this.updating,
+            brewAvailable: this.brewAvailable ?? false,
+            profileMode: this.swiftFormatProvider.getProfileMode(),
+            conflicts: this.getConflicts(),
+        };
+    }
+
+    private postState(): void {
+        this._view?.webview.postMessage({ type: 'setState', state: this.getState() });
+    }
+
+    // ── Messages ─────────────────────────────────────────────
+
+    private async handleMessage(msg: Record<string, unknown>): Promise<void> {
+        try { await this._handleMessage(msg); } catch (e) {
+            this.log(`[formatter] error handling message '${msg.type}': ${e}`);
+        }
+    }
+
+    private async _handleMessage(msg: Record<string, unknown>): Promise<void> {
+        switch (msg.type) {
+            case 'ready':
+                this.log('[formatter] webview ready');
+                this.postState();
+                if (this.brewAvailable === null) {
+                    try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
+                    this.log(`[formatter] brew available: ${this.brewAvailable}`);
+                    this.postState();
+                }
+                break;
+
+            case 'installSwiftFormat': {
+                this.log('[formatter] installing swift-format via Homebrew');
+                this.installing = true;
+                this.postState();
+
+                const brewPath = await this.findBrew();
+                if (!brewPath) {
+                    vscode.window.showErrorMessage('Homebrew not found. Install it from https://brew.sh');
+                    this.installing = false;
+                    this.postState();
+                    break;
+                }
+
+                try {
+                    await execFile(brewPath, ['install', 'swift-format'], { encoding: 'utf8', timeout: 300000 });
+                    await this.swiftFormatProvider.resolvePathAndVersion();
+                    this.log(`[formatter] swift-format installed: ${this.swiftFormatProvider.getResolvedPath()}`);
+                    vscode.window.showInformationMessage('swift-format installed successfully.');
+                } catch (error: unknown) {
+                    const message = (error as { stderr?: string }).stderr || 'Installation failed';
+                    this.log(`[formatter] swift-format install failed: ${message}`);
+                    vscode.window.showErrorMessage(`swift-format install failed: ${message.split('\n')[0]}`);
+                }
+
+                this.installing = false;
+                this.postState();
+                break;
+            }
+
+            case 'updateSwiftFormat': {
+                this.log('[formatter] updating swift-format via Homebrew');
+                this.updating = true;
+                this.postState();
+
+                const updateBrewPath = await this.findBrew();
+                if (!updateBrewPath) {
+                    vscode.window.showErrorMessage('Homebrew not found. Update manually.');
+                    this.updating = false;
+                    this.postState();
+                    break;
+                }
+
+                try {
+                    await execFile(updateBrewPath, ['upgrade', 'swift-format'], { encoding: 'utf8', timeout: 300000 });
+                    await this.swiftFormatProvider.resolvePathAndVersion();
+                    await this.swiftFormatProvider.checkForUpdate(true);
+                    this.log(`[formatter] swift-format updated to v${this.swiftFormatProvider.getResolvedVersion()}`);
+                    vscode.window.showInformationMessage(`swift-format updated to v${this.swiftFormatProvider.getResolvedVersion()}.`);
+                } catch (error: unknown) {
+                    const message = (error as { stderr?: string }).stderr || 'Update failed';
+                    this.log(`[formatter] swift-format update failed: ${message}`);
+                    vscode.window.showErrorMessage(`swift-format update failed: ${message.split('\n')[0]}`);
+                }
+
+                this.updating = false;
+                this.postState();
+                break;
+            }
+
+            case 'openInstallGuide':
+                vscode.env.openExternal(vscode.Uri.parse('https://github.com/apple/swift-format'));
+                break;
+
+            case 'openInstallInstructions':
+                vscode.env.openExternal(vscode.Uri.parse('https://github.com/apple/swift-format#getting-swift-format'));
+                break;
+
+            case 'toggleEnabled':
+                await this.swiftFormatProvider.updateConfig({ enabled: msg.value as boolean });
+                this.postState();
+                break;
+
+            case 'toggleFormatOnSave':
+                await this.swiftFormatProvider.updateConfig({ formatOnSave: msg.value as boolean });
+                this.postState();
+                break;
+
+            case 'toggleLintMode':
+                await this.swiftFormatProvider.updateConfig({ lintMode: msg.value as boolean });
+                this.postState();
+                break;
+
+            case 'updateOption': {
+                const key = msg.key as string;
+                const value = msg.value;
+                await this.swiftFormatProvider.updateConfig({ [key]: value } as Partial<SwiftFormatConfig>);
+                this.postState();
+                break;
+            }
+
+            case 'toggleRule': {
+                const ruleId = msg.ruleId as string;
+                const enabled = msg.enabled as boolean;
+                const config = this.swiftFormatProvider.getConfig();
+                const rules = this.swiftFormatProvider.getRules() || [];
+                const rule = rules.find((r) => r.identifier === ruleId);
+                if (!rule) { break; }
+
+                const disabledRules = config.disabledRules.filter((r) => r !== ruleId);
+                const enabledRules = config.enabledRules.filter((r) => r !== ruleId);
+
+                if (rule.isDefault && !enabled) { disabledRules.push(ruleId); }
+                if (!rule.isDefault && enabled) { enabledRules.push(ruleId); }
+
+                await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
+                this.postState();
+                break;
+            }
+
+            case 'resetAllRules': {
+                const answer = await vscode.window.showWarningMessage(
+                    'Reset all swift-format rules to defaults?',
+                    { modal: true },
+                    'Reset',
+                );
+                if (answer === 'Reset') {
+                    await this.swiftFormatProvider.updateConfig({ disabledRules: [], enabledRules: [] });
+                    this.postState();
+                }
+                break;
+            }
+
+            case 'resetOptions': {
+                const answer = await vscode.window.showWarningMessage(
+                    'Reset all swift-format formatting options to defaults?',
+                    { modal: true },
+                    'Reset',
+                );
+                if (answer === 'Reset') {
+                    await this.swiftFormatProvider.updateConfig({
+                        indentation: 'spaces',
+                        indentationCount: 4,
+                        lineLength: 100,
+                        maximumBlankLines: 1,
+                        respectsExistingLineBreaks: true,
+                        lineBreakBeforeControlFlowKeywords: false,
+                        lineBreakBeforeEachArgument: false,
+                        lineBreakBeforeEachGenericRequirement: false,
+                        lineBreakAroundMultilineExpressionChainComponents: false,
+                        lineBreakBeforeSwitchCaseBody: false,
+                        indentConditionalCompilationBlocks: true,
+                        indentSwitchCaseLabels: false,
+                        fileScopedDeclarationPrivacy: 'private',
+                        multiElementCollectionTrailingCommas: true,
+                    });
+                    this.postState();
+                }
+                break;
+            }
+
+            case 'changeProfileMode': {
+                const newMode = msg.value as 'local' | 'global';
+                if (newMode === 'global') {
+                    const localConfig = this.swiftFormatProvider.getConfig();
+                    const hasLocalChanges = localConfig.disabledRules.length > 0
+                        || localConfig.enabledRules.length > 0;
+                    if (hasLocalChanges) {
+                        const answer = await vscode.window.showWarningMessage(
+                            'Switch to global swift-format profile? This project\'s local formatter rules will be replaced by the global profile.',
+                            { modal: true },
+                            'Switch to Global',
+                        );
+                        if (answer !== 'Switch to Global') {
+                            this.postState();
+                            break;
+                        }
+                    }
+                }
+                await this.swiftFormatProvider.setProfileMode(newMode);
+                this.postState();
+                break;
+            }
+
+            case 'changePath': {
+                const config = this.swiftFormatProvider.getConfig();
+                const resolvedPath = this.swiftFormatProvider.getResolvedPath();
+
+                type PathPick = vscode.QuickPickItem & { action: 'auto' | 'custom' | 'browse' };
+                const picks: PathPick[] = [];
+                if (config.path) {
+                    picks.push({ label: '$(refresh) Reset to Auto-Detect', description: resolvedPath || undefined, action: 'auto' });
+                }
+                picks.push(
+                    { label: '$(edit) Enter Custom Path\u2026', action: 'custom' },
+                    { label: '$(folder-opened) Browse\u2026', action: 'browse' },
+                );
+
+                const pick = await vscode.window.showQuickPick(picks, { placeHolder: resolvedPath || 'swift-format not found' });
+                if (!pick) { break; }
+
+                switch (pick.action) {
+                    case 'auto':
+                        await this.swiftFormatProvider.updateConfig({ path: '' });
+                        await this.swiftFormatProvider.resolvePathAndVersion();
+                        break;
+                    case 'custom': {
+                        const input = await vscode.window.showInputBox({ prompt: 'Enter path to swift-format binary', value: resolvedPath || '/opt/homebrew/bin/swift-format' });
+                        if (input !== undefined) { await this.swiftFormatProvider.updateConfig({ path: input }); await this.swiftFormatProvider.resolvePathAndVersion(); }
+                        break;
+                    }
+                    case 'browse': {
+                        const uris = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: false, title: 'Select swift-format Binary' });
+                        if (uris && uris.length > 0) { await this.swiftFormatProvider.updateConfig({ path: uris[0].fsPath }); await this.swiftFormatProvider.resolvePathAndVersion(); }
+                        break;
+                    }
+                }
+                this.postState();
+                break;
+            }
+
+            case 'autoResolveConflicts': {
+                const conflicts = this.getConflicts();
+                if (conflicts.length === 0) { break; }
+
+                const lintConfig = this.swiftLintProvider.getConfig();
+                const disabledRules = [...lintConfig.disabledRules];
+                const optInRules = [...lintConfig.optInRules];
+                const lintRules = this.swiftLintProvider.getRules() || [];
+
+                for (const { swiftLintRule } of conflicts) {
+                    const rule = lintRules.find((r) => r.identifier === swiftLintRule);
+                    if (!rule) { continue; }
+
+                    if (rule.optIn) {
+                        const idx = optInRules.indexOf(swiftLintRule);
+                        if (idx >= 0) { optInRules.splice(idx, 1); }
+                    } else {
+                        if (!disabledRules.includes(swiftLintRule)) {
+                            disabledRules.push(swiftLintRule);
+                        }
+                    }
+                }
+
+                await this.swiftLintProvider.updateConfig({ disabledRules, optInRules });
+                this.postState();
+                vscode.window.showInformationMessage(`Disabled ${conflicts.length} overlapping SwiftLint rule${conflicts.length === 1 ? '' : 's'}.`);
+                break;
+            }
+        }
+    }
+
+    // ── Brew helpers ────────────────────────────────────────
+
+    private async findBrew(): Promise<string | null> {
+        const candidates = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'];
+        for (const candidate of candidates) {
+            try {
+                await execFile(candidate, ['--version'], { encoding: 'utf8', timeout: 5000 });
+                return candidate;
+            } catch { /* try next */ }
+        }
+        return null;
+    }
+
+    private async checkBrewAvailable(): Promise<boolean> {
+        return (await this.findBrew()) !== null;
+    }
+
+    // ── HTML ─────────────────────────────────────────────────
+
+    private getHtml(_webview: vscode.Webview): string {
+        const nonce = getNonce();
+        return /*html*/`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src data:;">
+<style nonce="${nonce}">
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);color:var(--vscode-foreground);padding:0}
+.section{padding:10px 14px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.2))}
+.row{display:flex;align-items:center;justify-content:space-between;min-height:28px}
+.row+.row{margin-top:6px}
+.label{opacity:.85;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.value{cursor:pointer;opacity:.7;font-size:12px}
+.value:hover{opacity:1}
+.gh-link{display:inline-flex;align-items:center;opacity:.35;cursor:pointer;margin-left:6px;vertical-align:middle}
+.gh-link:hover{opacity:.8}
+.gh-link svg{width:14px;height:14px;fill:var(--vscode-foreground)}
+select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border);border-radius:3px;padding:2px 6px;font-size:12px;outline:none;cursor:pointer}
+input[type="number"]{background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:12px;outline:none;width:50px;text-align:right;-moz-appearance:textfield}
+input[type="number"]::-webkit-outer-spin-button,input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
+.switch{position:relative;width:34px;height:18px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--vscode-input-background);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:9px;cursor:pointer;transition:background .2s}
+.slider::before{content:'';position:absolute;height:12px;width:12px;left:2px;top:2px;background:var(--vscode-foreground);border-radius:50%;transition:transform .2s;opacity:.5}
+.switch input:checked+.slider{background:var(--vscode-button-background)}
+.switch input:checked+.slider::before{transform:translateX(16px);opacity:1}
+.rules-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 6px}
+.rules-header .label{flex:1}
+.badge{font-size:11px;opacity:.6}
+.search-wrap{position:relative;margin:0 14px 8px}
+.search{display:block;width:100%;padding:4px 24px 4px 8px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;font-size:12px;outline:none;box-sizing:border-box}
+.search:focus{border-color:var(--vscode-focusBorder)}
+.search-clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:2px;line-height:1;display:none;color:var(--vscode-foreground);opacity:.4}
+.search-clear:hover{opacity:1}
+.search-clear svg{width:12px;height:12px;fill:var(--vscode-foreground)}
+.search-wrap.has-value .search-clear{display:block}
+.group-header{padding:4px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.5;background:var(--vscode-sideBar-background,transparent);cursor:pointer;display:flex;align-items:center;gap:4px;user-select:none}
+.group-header:hover{opacity:.8}
+.group-chevron{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;transition:transform .15s}
+.group-chevron svg{width:10px;height:10px;fill:var(--vscode-foreground)}
+.group-header.collapsed .group-chevron{transform:rotate(-90deg)}
+.group-body.collapsed{display:none}
+.rule-row{display:flex;align-items:center;padding:3px 14px;gap:8px;min-height:26px}
+.rule-row:hover{background:var(--vscode-list-hoverBackground)}
+.rule-row .switch{width:28px;height:15px}
+.rule-row .slider::before{height:9px;width:9px;left:2px;top:2px}
+.rule-row .switch input:checked+.slider::before{transform:translateX(13px)}
+.rule-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:none}
+.rule-modified{width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;margin-left:2px}
+.opt-modified{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);margin-left:6px;vertical-align:middle}
+.info-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle}
+.info-btn{background:none;border:none;cursor:pointer;opacity:.3;padding:0;margin-left:6px;line-height:1;display:inline-flex;align-items:center;vertical-align:middle}
+.info-btn:hover{opacity:.7}
+.info-btn svg{width:12px;height:12px;fill:var(--vscode-foreground)}
+.info-tip{display:none;position:absolute;left:0;top:calc(100% + 4px);background:var(--vscode-editorHoverWidget-background,var(--vscode-editor-background));border:1px solid var(--vscode-editorHoverWidget-border,var(--vscode-widget-border,rgba(128,128,128,.4)));border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.4;white-space:normal;width:200px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.info-wrap.open .info-tip{display:block}
+.update-row{padding:4px 14px 0;font-size:11px;opacity:.6}
+.update-btn{padding:1px 6px;font-size:10px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.8;margin-left:4px}
+.update-btn:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
+.update-link{cursor:pointer;opacity:.8;margin-left:4px;text-decoration:underline}
+.update-link:hover{opacity:1}
+.add-btns{display:flex;gap:6px;padding:6px 14px}
+.add-btns button{padding:2px 8px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
+.add-btns button:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
+.conflict-section{border-top:1px solid var(--vscode-widget-border,rgba(128,128,128,.2));margin-top:4px}
+.conflict-row{display:flex;align-items:center;padding:3px 14px;gap:6px;font-size:11px}
+.conflict-format{flex:1;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conflict-arrow{opacity:.4;font-size:10px}
+.conflict-lint{flex:1;opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.hidden{display:none!important}
+.not-found{padding:10px 14px;opacity:.6;font-size:12px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="not-found" id="loading">Detecting swift-format...</div>
+</div>
+<script nonce="${nonce}">
+${this.getScript()}
+</script>
+</body>
+</html>`;
+    }
+
+    private getScript(): string {
+        return `
+const vscode = acquireVsCodeApi();
+const app = document.getElementById('app');
+let state = null;
+const groupCollapsed = {};
+let savedSearch = '';
+
+window.addEventListener('message', e => {
+  const msg = e.data;
+  if (msg.type === 'setState') { state = msg.state; render(); }
+});
+
+vscode.postMessage({ type: 'ready' });
+
+const ruleDescs = {
+  AllPublicDeclarationsHaveDocumentation: 'All public and open declarations must have a documentation comment.',
+  AlwaysUseLiteralForEmptyCollectionInit: 'Use literal syntax [] or [:] instead of initializer calls for empty collections.',
+  AlwaysUseLowerCamelCase: 'Non-type declarations must use lowerCamelCase naming.',
+  AmbiguousTrailingClosureOverload: 'Avoid overloads that differ only by trailing closure label.',
+  BeginDocumentationCommentWithOneLineSummary: 'Documentation comments must begin with a single-line summary.',
+  DoNotUseSemicolons: 'Semicolons at the end of statements are removed.',
+  DontRepeatTypeInStaticProperties: 'Static properties should not repeat the type name.',
+  FileScopedDeclarationPrivacy: 'File-scoped declarations use the configured access level (private or fileprivate).',
+  FullyIndirectEnum: 'Enums where all cases are indirect use a single enum-level indirect keyword.',
+  GroupNumericLiterals: 'Numeric literals are grouped with underscores for readability.',
+  IdentifiersMustBeASCII: 'Identifiers must contain only ASCII characters.',
+  NeverForceUnwrap: 'Force unwraps (!) are not allowed.',
+  NeverUseForceTry: 'Force try (try!) is not allowed.',
+  NeverUseImplicitlyUnwrappedOptionals: 'Implicitly unwrapped optionals (!) are not allowed in declarations.',
+  NoAccessLevelOnExtensionDeclaration: 'Access levels are set on individual extension members, not the extension itself.',
+  NoAssignmentInExpressions: 'Assignment expressions must not appear inside other expressions.',
+  NoBlockComments: 'Block comments (/* ... */) are replaced with line comments (//).',
+  NoCasesWithOnlyFallthrough: 'Switch cases that only contain fallthrough are collapsed.',
+  NoEmptyTrailingClosureParentheses: 'Empty parentheses before trailing closures are removed.',
+  NoLabelsInCasePatterns: 'Redundant labels in case patterns are removed.',
+  NoLeadingUnderscores: 'Declarations must not have leading underscores in their names.',
+  NoParensAroundConditions: 'Parentheses around if/while/guard/switch conditions are removed.',
+  NoPlaygroundLiterals: 'Playground-specific literals (#colorLiteral, etc.) are not allowed.',
+  NoVoidReturnOnFunctionSignature: 'Explicit Void return types on functions are removed.',
+  OmitExplicitReturns: 'Single-expression functions and closures omit the return keyword.',
+  OneCasePerLine: 'Each case in a switch must be on its own line.',
+  OneVariableDeclarationPerLine: 'Each variable declaration must be on its own line.',
+  OnlyOneTrailingClosureArgument: 'Functions with multiple trailing closures use only one trailing closure.',
+  OrderedImports: 'Import statements are sorted alphabetically.',
+  ReplaceForEachWithForLoop: 'Replace .forEach { } calls with for-in loops.',
+  ReturnVoidInsteadOfEmptyTuple: 'Use Void instead of () for return types.',
+  TypeNamesShouldBeCapitalized: 'Type names must begin with an uppercase letter.',
+  UseEarlyExits: 'Replace if conditions with guard-else for early exits.',
+  UseExplicitNilCheckInConditions: 'Use explicit != nil checks instead of optional binding when the value is unused.',
+  UseLetInEveryBoundCaseVariable: 'Each bound variable in a case pattern uses its own let/var keyword.',
+  UseShorthandTypeNames: 'Use shorthand syntax for Optional, Array, and Dictionary types.',
+  UseSingleLinePropertyGetter: 'Single-expression computed property getters omit the get keyword.',
+  UseSynthesizedInitializer: 'Prefer the synthesized memberwise initializer over a manually written equivalent.',
+  UseTripleSlashForDocCommentation: 'Use /// for documentation comments instead of /** */.',
+  UseWhereClausesInForLoops: 'Move conditions from if-continue into the for-loop where clause.',
+  ValidateDocumentationComments: 'Documentation comments must match the declared parameters, throws, and returns.',
+};
+
+const ghIcon = '<span class="gh-link" id="gh-link" title="swift-format on GitHub"><svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></span>';
+
+function render() {
+  if (!state) return;
+  const prevSearch = document.getElementById('rules-search');
+  if (prevSearch) { savedSearch = prevSearch.value; }
+  if (!state.pathResolved) { app.innerHTML = '<div class="not-found">Detecting swift-format...</div>'; return; }
+  if (!state.resolvedPath) {
+    let nf = '<div class="section"><div class="row"><span>swift-format' + ghIcon + '</span><span class="value" id="path-btn">Not Found</span></div>';
+    if (state.installing) {
+      nf += '<div class="not-found">Installing via Homebrew\\u2026</div>';
+    } else {
+      nf += '<div class="add-btns" style="padding-top:8px">';
+      if (state.brewAvailable) { nf += '<button id="install-btn">Install via Homebrew</button>'; }
+      else { nf += '<button id="manual-install-btn">Installation Guide</button>'; }
+      nf += '<button id="path-btn2">Set Custom Path</button></div>';
+    }
+    nf += '</div>';
+    app.innerHTML = nf;
+    document.getElementById('path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
+    document.getElementById('path-btn2')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
+    document.getElementById('install-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'installSwiftFormat' }));
+    document.getElementById('manual-install-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'openInstallInstructions' }));
+    return;
+  }
+
+  const c = state.config;
+  const rules = state.rules || [];
+  const enabledCount = rules.filter(r => r.effectiveEnabled).length;
+  const totalCount = rules.length;
+
+  let h = '';
+
+  // Status
+  h += '<div class="section">';
+  h += '<div class="row"><span>swift-format' + ghIcon + '</span><span class="value" id="path-btn">' + esc(state.version ? 'v' + state.version : state.resolvedPath) + '</span></div>';
+  if (state.updating) {
+    h += '<div class="update-row">Updating via Homebrew\\u2026</div>';
+  } else if (state.updateAvailable && state.latestVersion) {
+    h += '<div class="update-row">v' + esc(state.latestVersion) + ' available';
+    if (state.brewAvailable) { h += ' <button class="update-btn" id="update-btn">Update</button>'; }
+    else { h += ' <a class="update-link" id="update-link">View release</a>'; }
+    h += '</div>';
+  }
+  h += '</div>';
+
+  // Controls
+  h += '<div class="section">';
+  h += toggleRow('Enabled', 'toggle-enabled', c.enabled);
+  h += toggleRow('Format on Save', 'toggle-formatOnSave', c.formatOnSave, 'Formats Swift files automatically when saving. Runs before SwiftLint fix-on-save.');
+  h += toggleRow('Lint Mode', 'toggle-lintMode', c.lintMode, 'Shows formatting violations as diagnostics in the Problems panel.');
+  h += '<div class="row"><span>Profile' + infoIcon('<b>Global</b>: formatting options and rules are shared across all projects.<br><b>Local</b>: formatting options and rules are specific to this project.') + '</span><select id="profile-select">';
+  h += '<option value="global"' + (state.profileMode === 'global' ? ' selected' : '') + '>Global</option>';
+  h += '<option value="local"' + (state.profileMode === 'local' ? ' selected' : '') + '>Local</option>';
+  h += '</select></div></div>';
+
+  // Formatting Options
+  const df = {indentation:'spaces',indentationCount:4,lineLength:100,maximumBlankLines:1,respectsExistingLineBreaks:true,lineBreakBeforeControlFlowKeywords:false,lineBreakBeforeEachArgument:false,lineBreakBeforeEachGenericRequirement:false,lineBreakAroundMultilineExpressionChainComponents:false,lineBreakBeforeSwitchCaseBody:false,indentConditionalCompilationBlocks:true,indentSwitchCaseLabels:false,fileScopedDeclarationPrivacy:'private',multiElementCollectionTrailingCommas:true};
+
+  h += '<div class="section">';
+  h += '<div class="row"><span class="label">Formatting Options</span></div>';
+
+  h += '<div class="row"><span title="' + esc('Use spaces or tabs for indentation.\\nDefault: Spaces') + '">Indentation' + modDot(c.indentation !== df.indentation) + '</span><select id="indent-type">';
+  h += '<option value="spaces"' + (c.indentation === 'spaces' ? ' selected' : '') + '>Spaces</option>';
+  h += '<option value="tabs"' + (c.indentation === 'tabs' ? ' selected' : '') + '>Tabs</option>';
+  h += '</select></div>';
+
+  if (c.indentation === 'spaces') {
+    h += '<div class="row"><span title="' + esc('Number of spaces per indentation level.\\nDefault: 4') + '">Indent Width' + modDot(c.indentationCount !== df.indentationCount) + '</span><input type="number" id="indent-count" value="' + c.indentationCount + '" min="1" max="8"></div>';
+  }
+
+  h += '<div class="row"><span title="' + esc('Maximum number of characters per line before the formatter wraps code.\\nDefault: 100') + '">Line Length' + modDot(c.lineLength !== df.lineLength) + '</span><input type="number" id="lineLength" value="' + c.lineLength + '" min="1" max="999"></div>';
+  h += '<div class="row"><span title="' + esc('Maximum number of consecutive blank lines allowed. Extra blank lines are removed.\\nDefault: 1') + '">Max Blank Lines' + modDot(c.maximumBlankLines !== df.maximumBlankLines) + '</span><input type="number" id="maximumBlankLines" value="' + c.maximumBlankLines + '" min="0" max="10"></div>';
+
+  h += toggleRow('Respects Existing Line Breaks', 'opt-respectsExistingLineBreaks', c.respectsExistingLineBreaks, 'Preserves existing line breaks in source code. When off, the formatter may join or reflow lines.', c.respectsExistingLineBreaks !== df.respectsExistingLineBreaks, 'On');
+  h += toggleRow('Break Before Control Flow Keywords', 'opt-lineBreakBeforeControlFlowKeywords', c.lineBreakBeforeControlFlowKeywords, 'Places else, catch, and similar keywords on a new line instead of the same line as the closing brace.', c.lineBreakBeforeControlFlowKeywords !== df.lineBreakBeforeControlFlowKeywords, 'Off');
+  h += toggleRow('Break Before Each Argument', 'opt-lineBreakBeforeEachArgument', c.lineBreakBeforeEachArgument, 'When a function call or declaration wraps, places each argument on its own line.', c.lineBreakBeforeEachArgument !== df.lineBreakBeforeEachArgument, 'Off');
+  h += toggleRow('Break Before Generic Requirements', 'opt-lineBreakBeforeEachGenericRequirement', c.lineBreakBeforeEachGenericRequirement, 'When a generic where-clause wraps, places each requirement on its own line.', c.lineBreakBeforeEachGenericRequirement !== df.lineBreakBeforeEachGenericRequirement, 'Off');
+  h += toggleRow('Break Around Multiline Chains', 'opt-lineBreakAroundMultilineExpressionChainComponents', c.lineBreakAroundMultilineExpressionChainComponents, 'Adds line breaks around each component of a multiline member access chain (e.g. foo\\n.bar\\n.baz).', c.lineBreakAroundMultilineExpressionChainComponents !== df.lineBreakAroundMultilineExpressionChainComponents, 'Off');
+  h += toggleRow('Break Before Switch Case Body', 'opt-lineBreakBeforeSwitchCaseBody', c.lineBreakBeforeSwitchCaseBody, 'Places the body of each switch case on the line after the case label, rather than on the same line.', c.lineBreakBeforeSwitchCaseBody !== df.lineBreakBeforeSwitchCaseBody, 'Off');
+  h += toggleRow('Indent #if/#else Blocks', 'opt-indentConditionalCompilationBlocks', c.indentConditionalCompilationBlocks, 'Indents code inside #if, #elseif, and #else conditional compilation blocks.', c.indentConditionalCompilationBlocks !== df.indentConditionalCompilationBlocks, 'On');
+  h += toggleRow('Indent Switch Case Labels', 'opt-indentSwitchCaseLabels', c.indentSwitchCaseLabels, 'Indents case and default labels inside switch statements relative to the switch keyword.', c.indentSwitchCaseLabels !== df.indentSwitchCaseLabels, 'Off');
+  h += toggleRow('Trailing Commas', 'opt-multiElementCollectionTrailingCommas', c.multiElementCollectionTrailingCommas, 'Adds a trailing comma after the last element in multi-line collection literals (arrays, dictionaries, etc.).', c.multiElementCollectionTrailingCommas !== df.multiElementCollectionTrailingCommas, 'On');
+
+  h += '<div class="row"><span title="' + esc('Controls whether file-scoped declarations use private or fileprivate access level.\\nDefault: private') + '">File-Scoped Privacy' + modDot(c.fileScopedDeclarationPrivacy !== df.fileScopedDeclarationPrivacy) + '</span><select id="fileScopedDeclarationPrivacy">';
+  h += '<option value="private"' + (c.fileScopedDeclarationPrivacy === 'private' ? ' selected' : '') + '>private</option>';
+  h += '<option value="fileprivate"' + (c.fileScopedDeclarationPrivacy === 'fileprivate' ? ' selected' : '') + '>fileprivate</option>';
+  h += '</select></div>';
+
+  h += '<div class="add-btns" style="padding-top:4px"><button id="reset-options-btn">Reset Options to Defaults</button></div>';
+  h += '</div>';
+
+  // Rules
+  if (rules.length > 0) {
+    h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + totalCount + '</span></div>';
+    h += '<div class="search-wrap" id="search-wrap"><input type="text" class="search" id="rules-search" placeholder="Filter rules..."><button class="search-clear" id="search-clear" title="Clear"><svg viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/></svg></button></div>';
+
+    const defaultRules = rules.filter(r => r.isDefault);
+    const optInRules = rules.filter(r => !r.isDefault);
+
+    if (defaultRules.length > 0) {
+      const gc = (groupCollapsed['default'] ?? true) ? ' collapsed' : '';
+      h += '<div class="group-header' + gc + '" data-group="default"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Enabled by Default (' + defaultRules.length + ')</div>';
+      h += '<div class="group-body' + gc + '" data-group-body="default">';
+      for (const r of defaultRules) { h += ruleRow(r); }
+      h += '</div>';
+    }
+
+    if (optInRules.length > 0) {
+      const gc = (groupCollapsed['opt-in'] ?? true) ? ' collapsed' : '';
+      h += '<div class="group-header' + gc + '" data-group="opt-in"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Opt-in (' + optInRules.length + ')</div>';
+      h += '<div class="group-body' + gc + '" data-group-body="opt-in">';
+      for (const r of optInRules) { h += ruleRow(r); }
+      h += '</div>';
+    }
+
+    h += '<div class="add-btns" style="padding-top:4px"><button id="reset-all-btn">Reset Rules to Defaults</button></div>';
+  }
+
+  // Conflicts
+  if (state.conflicts.length > 0) {
+    h += '<div class="section conflict-section">';
+    h += '<div class="row"><span class="label">SwiftLint Conflicts</span><span class="badge">' + state.conflicts.length + '</span></div>';
+    for (const cf of state.conflicts) {
+      h += '<div class="conflict-row"><span class="conflict-format">' + esc(cf.swiftFormatRule) + '</span><span class="conflict-arrow">\\u2194</span><span class="conflict-lint">' + esc(cf.swiftLintRule) + '</span></div>';
+    }
+    h += '<div class="add-btns" style="padding-top:4px"><button id="auto-resolve-btn">Auto-Resolve (Disable SwiftLint Rules)</button></div>';
+    h += '</div>';
+  }
+
+  app.innerHTML = h;
+  bind();
+  if (savedSearch) {
+    const si = document.getElementById('rules-search');
+    if (si) { si.value = savedSearch; applySearch(); }
+  }
+}
+
+function ruleRow(r) {
+  const modified = r.isDefault ? !r.effectiveEnabled : r.effectiveEnabled;
+  const defaultLabel = r.isDefault ? 'Enabled' : 'Disabled';
+  const desc = ruleDescs[r.identifier];
+  const tip = desc ? desc + '\\nDefault: ' + defaultLabel : 'Default: ' + defaultLabel;
+  return '<div class="rule-row" data-id="' + r.identifier + '">' +
+    '<label class="switch"><input type="checkbox" data-rule="' + r.identifier + '"' + (r.effectiveEnabled ? ' checked' : '') + '><span class="slider"></span></label>' +
+    '<span class="rule-name" title="' + esc(tip) + '">' + esc(r.identifier) + '</span>' +
+    (modified ? '<span class="rule-modified" title="Modified from default"></span>' : '') +
+    '</div>';
+}
+
+function modDot(isModified) {
+  return isModified ? '<span class="opt-modified"></span>' : '';
+}
+
+function toggleRow(label, id, checked, desc, modified, defaultLabel) {
+  let tip = '';
+  if (desc && defaultLabel) { tip = desc + '\\nDefault: ' + defaultLabel; }
+  else if (desc) { tip = desc; }
+  else if (defaultLabel) { tip = 'Default: ' + defaultLabel; }
+  const titleAttr = tip ? ' title="' + esc(tip) + '"' : '';
+  return '<div class="row"><span' + titleAttr + '>' + label + modDot(modified) + '</span><label class="switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="slider"></span></label></div>';
+}
+
+function infoIcon(text) {
+  return '<span class="info-wrap"><button class="info-btn" data-info><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 12.6A5.6 5.6 0 1 1 8 2.4a5.6 5.6 0 0 1 0 11.2zM7.4 5h1.2V3.8H7.4V5zm0 7.2h1.2V6.2H7.4v6z"/></svg></button><span class="info-tip">' + text + '</span></span>';
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function applySearch() {
+  const searchInput = document.getElementById('rules-search');
+  const searchWrap = document.getElementById('search-wrap');
+  const q = (searchInput?.value || '').toLowerCase();
+  searchWrap?.classList.toggle('has-value', q.length > 0);
+  document.querySelectorAll('.rule-row').forEach(row => {
+    const id = row.dataset.id || '';
+    row.classList.toggle('hidden', q.length > 0 && !id.toLowerCase().includes(q));
+  });
+  document.querySelectorAll('.group-header').forEach(gh => {
+    const kind = gh.dataset.group;
+    const body = document.querySelector('[data-group-body="' + kind + '"]');
+    const hasVisible = body ? body.querySelectorAll('.rule-row:not(.hidden)').length > 0 : false;
+    gh.classList.toggle('hidden', !hasVisible);
+    if (body) body.classList.toggle('hidden', !hasVisible);
+    if (q.length > 0) {
+      gh.classList.toggle('collapsed', !hasVisible);
+      if (body) body.classList.toggle('collapsed', !hasVisible);
+    } else {
+      const collapsed = groupCollapsed[kind] ?? true;
+      gh.classList.toggle('collapsed', collapsed);
+      if (body) body.classList.toggle('collapsed', collapsed);
+    }
+  });
+}
+
+function bind() {
+  document.querySelectorAll('.info-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const wrap = btn.closest('.info-wrap');
+      const wasOpen = wrap?.classList.contains('open');
+      document.querySelectorAll('.info-wrap.open').forEach(w => w.classList.remove('open'));
+      if (!wasOpen) { wrap?.classList.add('open'); }
+    });
+  });
+  document.addEventListener('click', () => document.querySelectorAll('.info-wrap.open').forEach(w => w.classList.remove('open')));
+
+  document.getElementById('path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
+  document.getElementById('gh-link')?.addEventListener('click', e => { e.stopPropagation(); vscode.postMessage({ type: 'openInstallGuide' }); });
+  document.getElementById('update-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'updateSwiftFormat' }));
+  document.getElementById('update-link')?.addEventListener('click', () => vscode.postMessage({ type: 'openInstallGuide' }));
+
+  // Controls
+  document.getElementById('toggle-enabled')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleEnabled', value: e.target.checked }));
+  document.getElementById('toggle-formatOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFormatOnSave', value: e.target.checked }));
+  document.getElementById('toggle-lintMode')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleLintMode', value: e.target.checked }));
+  document.getElementById('profile-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeProfileMode', value: e.target.value }));
+
+  // Formatting options
+  document.getElementById('indent-type')?.addEventListener('change', e => vscode.postMessage({ type: 'updateOption', key: 'indentation', value: e.target.value }));
+
+  const indentCount = document.getElementById('indent-count');
+  if (indentCount) {
+    indentCount.addEventListener('change', () => {
+      const val = parseInt(indentCount.value) || 4;
+      vscode.postMessage({ type: 'updateOption', key: 'indentationCount', value: val });
+    });
+  }
+
+  const lineLength = document.getElementById('lineLength');
+  if (lineLength) {
+    lineLength.addEventListener('change', () => {
+      const val = parseInt(lineLength.value) || 100;
+      vscode.postMessage({ type: 'updateOption', key: 'lineLength', value: val });
+    });
+  }
+
+  const maxBlankLines = document.getElementById('maximumBlankLines');
+  if (maxBlankLines) {
+    maxBlankLines.addEventListener('change', () => {
+      const val = parseInt(maxBlankLines.value) || 1;
+      vscode.postMessage({ type: 'updateOption', key: 'maximumBlankLines', value: val });
+    });
+  }
+
+  document.getElementById('fileScopedDeclarationPrivacy')?.addEventListener('change', e => vscode.postMessage({ type: 'updateOption', key: 'fileScopedDeclarationPrivacy', value: e.target.value }));
+
+  const boolOptions = [
+    'respectsExistingLineBreaks',
+    'lineBreakBeforeControlFlowKeywords',
+    'lineBreakBeforeEachArgument',
+    'lineBreakBeforeEachGenericRequirement',
+    'lineBreakAroundMultilineExpressionChainComponents',
+    'lineBreakBeforeSwitchCaseBody',
+    'indentConditionalCompilationBlocks',
+    'indentSwitchCaseLabels',
+    'multiElementCollectionTrailingCommas',
+  ];
+  for (const opt of boolOptions) {
+    document.getElementById('opt-' + opt)?.addEventListener('change', e => {
+      vscode.postMessage({ type: 'updateOption', key: opt, value: e.target.checked });
+    });
+  }
+
+  document.getElementById('reset-options-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetOptions' }));
+
+  // Rules
+  document.querySelectorAll('input[data-rule]').forEach(cb => {
+    cb.addEventListener('change', e => vscode.postMessage({ type: 'toggleRule', ruleId: e.target.dataset.rule, enabled: e.target.checked }));
+  });
+
+  document.querySelectorAll('.rule-row').forEach(row => {
+    row.style.cursor = 'default';
+  });
+
+  document.getElementById('rules-search')?.addEventListener('input', applySearch);
+  document.getElementById('search-clear')?.addEventListener('click', () => {
+    const si = document.getElementById('rules-search');
+    if (si) { si.value = ''; }
+    savedSearch = '';
+    applySearch();
+    si?.focus();
+  });
+
+  document.querySelectorAll('.group-header').forEach(gh => {
+    if (!(gh.dataset.group in groupCollapsed)) { groupCollapsed[gh.dataset.group] = true; }
+    gh.addEventListener('click', () => {
+      const kind = gh.dataset.group;
+      const body = document.querySelector('[data-group-body="' + kind + '"]');
+      if (!body) return;
+      const isCollapsed = !gh.classList.contains('collapsed');
+      gh.classList.toggle('collapsed', isCollapsed);
+      body.classList.toggle('collapsed', isCollapsed);
+      groupCollapsed[kind] = isCollapsed;
+    });
+  });
+
+  document.getElementById('reset-all-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetAllRules' }));
+
+  // Conflicts
+  document.getElementById('auto-resolve-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'autoResolveConflicts' }));
+}
+`.replace(/<\//g, '<\\/');
+    }
+}
+
+function getNonce(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let nonce = '';
+    for (let i = 0; i < 32; i++) {
+        nonce += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return nonce;
+}

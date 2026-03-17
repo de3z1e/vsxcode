@@ -281,7 +281,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
 
             case 'resetAllRules': {
                 const answer = await vscode.window.showWarningMessage(
-                    'Reset all rules and rule configs to defaults?',
+                    'Reset all SwiftLint rules and rule configs to defaults?',
                     { modal: true },
                     'Reset',
                 );

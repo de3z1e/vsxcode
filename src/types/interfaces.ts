@@ -170,3 +170,32 @@ export interface SwiftLintRule {
     kind: string;
     analyzer: boolean;
 }
+
+export interface SwiftFormatConfig {
+    enabled: boolean;
+    path: string;
+    formatOnSave: boolean;
+    lintMode: boolean;
+    disabledRules: string[];
+    enabledRules: string[];
+    indentation: 'spaces' | 'tabs';
+    indentationCount: number;
+    lineLength: number;
+    maximumBlankLines: number;
+    respectsExistingLineBreaks: boolean;
+    lineBreakBeforeControlFlowKeywords: boolean;
+    lineBreakBeforeEachArgument: boolean;
+    lineBreakBeforeEachGenericRequirement: boolean;
+    lineBreakAroundMultilineExpressionChainComponents: boolean;
+    lineBreakBeforeSwitchCaseBody: boolean;
+    indentConditionalCompilationBlocks: boolean;
+    indentSwitchCaseLabels: boolean;
+    fileScopedDeclarationPrivacy: 'private' | 'fileprivate';
+    multiElementCollectionTrailingCommas: boolean;
+}
+
+export interface SwiftFormatRule {
+    identifier: string;
+    enabled: boolean;
+    isDefault: boolean;
+}
