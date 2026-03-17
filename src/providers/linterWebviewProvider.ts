@@ -381,9 +381,9 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .gear-btn.active{opacity:1;color:var(--vscode-button-background)}
 .rule-config{padding:6px 14px 8px 50px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.1))}
 .config-desc{font-size:11px;opacity:.5;padding:0 0 6px;line-height:1.4}
-.config-modified{width:5px;height:5px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;visibility:visible}
+.config-modified{width:5px;height:5px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;visibility:visible;position:absolute;left:-14px;top:50%;transform:translateY(-50%)}
 .config-modified.default{visibility:hidden}
-.config-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
+.config-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;position:relative}
 .config-row label{flex:1;opacity:.7;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .config-row input,.config-row textarea{width:80px;flex-shrink:0;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;font-family:var(--vscode-font-family);outline:none;text-align:right;-moz-appearance:textfield}
 .config-row input::-webkit-outer-spin-button,.config-row input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
@@ -392,8 +392,8 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .config-row textarea.expand-w:focus,.config-row input.expand-w:focus{width:120px}
 .config-row select{width:80px;flex-shrink:0;background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:11px;outline:none;cursor:pointer;text-align:right}
 .config-row input:focus{border-color:var(--vscode-focusBorder)}
-.config-actions{display:flex;gap:6px;margin-top:6px}
-.config-actions button{padding:2px 10px;font-size:11px;border-radius:3px;border:none;cursor:pointer}
+.config-actions{margin-top:6px}
+.config-actions button{padding:2px 0;font-size:11px;border-radius:3px;border:none;cursor:pointer}
 .btn-reset{background:transparent;color:var(--vscode-foreground);opacity:.6;border:1px solid var(--vscode-input-border,rgba(128,128,128,.4))}
 .btn-reset:hover{opacity:1}
 .reset-all-btn{background:none;border:none;cursor:pointer;opacity:.35;padding:2px 4px;line-height:1;display:inline-flex;align-items:center}
