@@ -188,10 +188,15 @@ export interface SwiftFormatConfig {
     lineBreakBeforeEachGenericRequirement: boolean;
     lineBreakAroundMultilineExpressionChainComponents: boolean;
     lineBreakBeforeSwitchCaseBody: boolean;
+    lineBreakBetweenDeclarationAttributes: boolean;
     indentConditionalCompilationBlocks: boolean;
     indentSwitchCaseLabels: boolean;
     fileScopedDeclarationPrivacy: 'private' | 'fileprivate';
     multiElementCollectionTrailingCommas: boolean;
+    prioritizeKeepingFunctionOutputTogether: boolean;
+    spacesAroundRangeFormationOperators: boolean;
+    spacesBeforeEndOfLineComments: number;
+    reflowMultilineStringLiterals: 'never' | 'always';
 }
 
 export interface SwiftFormatRule {

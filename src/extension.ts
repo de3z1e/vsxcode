@@ -27,9 +27,8 @@ import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarPro
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
 import { SwiftLintProvider } from './providers/swiftLintProvider';
 import { resolvedBuildLogPath } from './generators/buildTasks';
-import { LinterWebviewProvider } from './providers/linterWebviewProvider';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
-import { FormatterWebviewProvider } from './providers/formatterWebviewProvider';
+import { CodeQualityWebviewProvider } from './providers/codeQualityWebviewProvider';
 import type { BuildTaskConfig } from './types/interfaces';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
@@ -633,15 +632,22 @@ export function activate(context: vscode.ExtensionContext): void {
         treeDataProvider: sidebarProvider,
     });
 
-    // Linter sidebar (custom webview)
-    const linterWebviewProvider = new LinterWebviewProvider(context.extensionUri, swiftLintProvider, log);
-    const linterViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.linter', linterWebviewProvider);
+    // swift-format provider (independent of build config)
+    const swiftFormatProvider = new SwiftFormatProvider(context.workspaceState, context.globalState, log);
+    const formatterEditProvider = vscode.languages.registerDocumentFormattingEditProvider(
+        { language: 'swift', scheme: 'file' },
+        swiftFormatProvider,
+    );
+
+    // Unified Code Quality sidebar (replaces separate Formatter + Linter panels)
+    const codeQualityProvider = new CodeQualityWebviewProvider(
+        context.extensionUri, swiftFormatProvider, swiftLintProvider, context.workspaceState, log,
+    );
+    const codeQualityViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.codeQuality', codeQualityProvider);
 
     // Initialize SwiftLint (async, non-blocking)
     swiftLintProvider.resolvePathAndVersion().then(async () => {
-        // Sync config from .swiftlint.yml if it exists (e.g., cloned repo)
         await swiftLintProvider.syncFromConfigFile();
-        // Auto-detect profile mode only on first activation
         if (!swiftLintProvider.isProfileModeExplicit()) {
             if (swiftLintProvider.hasWorkspaceConfig() || swiftLintProvider.hasConfigFile()) {
                 await swiftLintProvider.setProfileMode('local');
@@ -649,29 +655,16 @@ export function activate(context: vscode.ExtensionContext): void {
                 await swiftLintProvider.setProfileMode('global');
             }
         }
-        linterWebviewProvider.refresh();
+        codeQualityProvider.refresh();
         swiftLintProvider.lintOpenDocuments();
-        // Check for updates after binary resolved (uses 24h cooldown)
-        swiftLintProvider.checkForUpdate().then(() => linterWebviewProvider.refresh());
+        swiftLintProvider.checkForUpdate().then(() => codeQualityProvider.refresh());
     }).catch((e) => {
         log(`[swiftlint] resolvePathAndVersion failed: ${e}`);
-        linterWebviewProvider.refresh();
+        codeQualityProvider.refresh();
     });
 
-    swiftLintProvider.onDidSyncConfig(() => linterWebviewProvider.refresh());
-    context.subscriptions.push(swiftLintProvider, linterViewDisposable);
-
-    // swift-format provider (independent of build config)
-    const swiftFormatProvider = new SwiftFormatProvider(context.workspaceState, context.globalState, log);
-    linterWebviewProvider.setSwiftFormatProvider(swiftFormatProvider);
-    const formatterEditProvider = vscode.languages.registerDocumentFormattingEditProvider(
-        { language: 'swift', scheme: 'file' },
-        swiftFormatProvider,
-    );
-
-    // Formatter sidebar (custom webview)
-    const formatterWebviewProvider = new FormatterWebviewProvider(context.extensionUri, swiftFormatProvider, log);
-    const formatterViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.formatter', formatterWebviewProvider);
+    swiftLintProvider.onDidSyncConfig(() => codeQualityProvider.refresh());
+    context.subscriptions.push(swiftLintProvider, codeQualityViewDisposable);
 
     // Initialize swift-format (async, non-blocking)
     swiftFormatProvider.resolvePathAndVersion().then(async () => {
@@ -684,19 +677,15 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }
         await swiftFormatProvider.writeConfigFile();
-        formatterWebviewProvider.refresh();
-        linterWebviewProvider.refresh();
-        swiftFormatProvider.checkForUpdate().then(() => formatterWebviewProvider.refresh());
+        codeQualityProvider.refresh();
+        swiftFormatProvider.checkForUpdate().then(() => codeQualityProvider.refresh());
     }).catch((e) => {
         log(`[swift-format] resolvePathAndVersion failed: ${e}`);
-        formatterWebviewProvider.refresh();
+        codeQualityProvider.refresh();
     });
 
-    swiftFormatProvider.onDidSyncConfig(() => {
-        formatterWebviewProvider.refresh();
-        linterWebviewProvider.refresh();
-    });
-    context.subscriptions.push(swiftFormatProvider, formatterEditProvider, formatterViewDisposable);
+    swiftFormatProvider.onDidSyncConfig(() => codeQualityProvider.refresh());
+    context.subscriptions.push(swiftFormatProvider, formatterEditProvider);
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {

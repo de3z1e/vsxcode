@@ -52,14 +52,8 @@
                     "when": "workspaceFolderCount > 0"
                 },
                 {
-                    "id": "vsxcode.formatter",
-                    "name": "Formatter",
-                    "type": "webview",
-                    "when": "workspaceFolderCount > 0"
-                },
-                {
-                    "id": "vsxcode.linter",
-                    "name": "Linter",
+                    "id": "vsxcode.codeQuality",
+                    "name": "Code Quality",
                     "type": "webview",
                     "when": "workspaceFolderCount > 0"
                 }

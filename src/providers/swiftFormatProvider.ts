@@ -24,10 +24,15 @@ const DEFAULT_CONFIG: SwiftFormatConfig = {
     lineBreakBeforeEachGenericRequirement: false,
     lineBreakAroundMultilineExpressionChainComponents: false,
     lineBreakBeforeSwitchCaseBody: false,
+    lineBreakBetweenDeclarationAttributes: false,
     indentConditionalCompilationBlocks: true,
     indentSwitchCaseLabels: false,
     fileScopedDeclarationPrivacy: 'private',
     multiElementCollectionTrailingCommas: true,
+    prioritizeKeepingFunctionOutputTogether: false,
+    spacesAroundRangeFormationOperators: false,
+    spacesBeforeEndOfLineComments: 2,
+    reflowMultilineStringLiterals: 'never',
 };
 
 // ── Binary detection ─────────────────────────────────────────────
@@ -95,11 +100,15 @@ interface DumpConfig {
     lineBreakBeforeEachGenericRequirement?: boolean;
     lineBreakAroundMultilineExpressionChainComponents?: boolean;
     lineBreakBeforeSwitchCaseBody?: boolean;
+    lineBreakBetweenDeclarationAttributes?: boolean;
     indentConditionalCompilationBlocks?: boolean;
     indentSwitchCaseLabels?: boolean;
     fileScopedDeclarationPrivacy?: { accessLevel?: string };
     spacesAroundRangeFormationOperators?: boolean;
     multiElementCollectionTrailingCommas?: boolean;
+    prioritizeKeepingFunctionOutputTogether?: boolean;
+    reflowMultilineStringLiterals?: string;
+    spacesBeforeEndOfLineComments?: number;
     rules?: Record<string, boolean>;
 }
 
@@ -176,8 +185,11 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         'respectsExistingLineBreaks', 'lineBreakBeforeControlFlowKeywords',
         'lineBreakBeforeEachArgument', 'lineBreakBeforeEachGenericRequirement',
         'lineBreakAroundMultilineExpressionChainComponents', 'lineBreakBeforeSwitchCaseBody',
+        'lineBreakBetweenDeclarationAttributes',
         'indentConditionalCompilationBlocks', 'indentSwitchCaseLabels',
         'fileScopedDeclarationPrivacy', 'multiElementCollectionTrailingCommas',
+        'prioritizeKeepingFunctionOutputTogether', 'spacesAroundRangeFormationOperators',
+        'spacesBeforeEndOfLineComments', 'reflowMultilineStringLiterals',
     ];
 
     getProfileMode(): 'local' | 'global' {
@@ -393,7 +405,12 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             || config.indentConditionalCompilationBlocks !== DEFAULT_CONFIG.indentConditionalCompilationBlocks
             || config.indentSwitchCaseLabels !== DEFAULT_CONFIG.indentSwitchCaseLabels
             || config.fileScopedDeclarationPrivacy !== DEFAULT_CONFIG.fileScopedDeclarationPrivacy
-            || config.multiElementCollectionTrailingCommas !== DEFAULT_CONFIG.multiElementCollectionTrailingCommas;
+            || config.multiElementCollectionTrailingCommas !== DEFAULT_CONFIG.multiElementCollectionTrailingCommas
+            || config.lineBreakBetweenDeclarationAttributes !== DEFAULT_CONFIG.lineBreakBetweenDeclarationAttributes
+            || config.prioritizeKeepingFunctionOutputTogether !== DEFAULT_CONFIG.prioritizeKeepingFunctionOutputTogether
+            || config.spacesAroundRangeFormationOperators !== DEFAULT_CONFIG.spacesAroundRangeFormationOperators
+            || config.spacesBeforeEndOfLineComments !== DEFAULT_CONFIG.spacesBeforeEndOfLineComments
+            || config.reflowMultilineStringLiterals !== DEFAULT_CONFIG.reflowMultilineStringLiterals;
     }
 
     private getConfigFilePath(): string {
@@ -423,10 +440,15 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             lineBreakBeforeEachGenericRequirement: config.lineBreakBeforeEachGenericRequirement,
             lineBreakAroundMultilineExpressionChainComponents: config.lineBreakAroundMultilineExpressionChainComponents,
             lineBreakBeforeSwitchCaseBody: config.lineBreakBeforeSwitchCaseBody,
+            lineBreakBetweenDeclarationAttributes: config.lineBreakBetweenDeclarationAttributes,
             indentConditionalCompilationBlocks: config.indentConditionalCompilationBlocks,
             indentSwitchCaseLabels: config.indentSwitchCaseLabels,
             fileScopedDeclarationPrivacy: { accessLevel: config.fileScopedDeclarationPrivacy },
             multiElementCollectionTrailingCommas: config.multiElementCollectionTrailingCommas,
+            prioritizeKeepingFunctionOutputTogether: config.prioritizeKeepingFunctionOutputTogether,
+            spacesAroundRangeFormationOperators: config.spacesAroundRangeFormationOperators,
+            spacesBeforeEndOfLineComments: config.spacesBeforeEndOfLineComments,
+            reflowMultilineStringLiterals: config.reflowMultilineStringLiterals,
         };
 
         // Build rules from defaults + overrides
@@ -687,6 +709,24 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             }
             if (parsed.multiElementCollectionTrailingCommas !== undefined && parsed.multiElementCollectionTrailingCommas !== config.multiElementCollectionTrailingCommas) {
                 patch.multiElementCollectionTrailingCommas = parsed.multiElementCollectionTrailingCommas;
+            }
+            if (parsed.lineBreakBetweenDeclarationAttributes !== undefined && parsed.lineBreakBetweenDeclarationAttributes !== config.lineBreakBetweenDeclarationAttributes) {
+                patch.lineBreakBetweenDeclarationAttributes = parsed.lineBreakBetweenDeclarationAttributes;
+            }
+            if (parsed.prioritizeKeepingFunctionOutputTogether !== undefined && parsed.prioritizeKeepingFunctionOutputTogether !== config.prioritizeKeepingFunctionOutputTogether) {
+                patch.prioritizeKeepingFunctionOutputTogether = parsed.prioritizeKeepingFunctionOutputTogether;
+            }
+            if (parsed.spacesAroundRangeFormationOperators !== undefined && parsed.spacesAroundRangeFormationOperators !== config.spacesAroundRangeFormationOperators) {
+                patch.spacesAroundRangeFormationOperators = parsed.spacesAroundRangeFormationOperators;
+            }
+            if (parsed.spacesBeforeEndOfLineComments !== undefined && parsed.spacesBeforeEndOfLineComments !== config.spacesBeforeEndOfLineComments) {
+                patch.spacesBeforeEndOfLineComments = parsed.spacesBeforeEndOfLineComments;
+            }
+            if (parsed.reflowMultilineStringLiterals !== undefined) {
+                const reflow = parsed.reflowMultilineStringLiterals as 'never' | 'always';
+                if (reflow !== config.reflowMultilineStringLiterals) {
+                    patch.reflowMultilineStringLiterals = reflow;
+                }
             }
 
             // Sync rules
