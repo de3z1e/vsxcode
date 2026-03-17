@@ -402,11 +402,6 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
     }
 
     async writeConfigFile(): Promise<void> {
-        if (!this.hasConfigOverrides()) {
-            try { await fs.promises.unlink(this.getConfigFilePath()); } catch { /* already gone */ }
-            return;
-        }
-
         const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!rootPath) { return; }
 
