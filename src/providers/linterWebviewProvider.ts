@@ -3,7 +3,9 @@ import * as path from 'path';
 import { promisify } from 'util';
 import { execFile as execFileCallback } from 'child_process';
 import type { SwiftLintConfig, SwiftLintRule } from '../types/interfaces';
+import { SWIFTLINT_SWIFTFORMAT_OVERLAPS } from '../types/constants';
 import { SwiftLintProvider, fetchRuleDefaultConfig, type RuleDefaultConfig } from './swiftLintProvider';
+import type { SwiftFormatProvider } from './swiftFormatProvider';
 
 const execFile = promisify(execFileCallback);
 
@@ -20,6 +22,8 @@ interface WebviewState {
     updating: boolean;
     brewAvailable: boolean;
     profileMode: 'local' | 'global';
+    swiftFormatConflicts: Array<{ swiftFormatRule: string; swiftLintRule: string; lintRuleEnabled: boolean }>;
+    settingsOverlaps: Array<{ name: string; formatValue: string; lintRuleId: string; lintValue: string; lintRuleEnabled: boolean; conflict: boolean }>;
 }
 
 export class LinterWebviewProvider implements vscode.WebviewViewProvider {
@@ -28,12 +32,17 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
     private installing = false;
     private updating = false;
     private brewAvailable: boolean | null = null;
+    private swiftFormatProvider: SwiftFormatProvider | null = null;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly swiftLintProvider: SwiftLintProvider,
         private readonly log: (message: string) => void,
     ) {}
+
+    setSwiftFormatProvider(provider: SwiftFormatProvider): void {
+        this.swiftFormatProvider = provider;
+    }
 
     resolveWebviewView(webviewView: vscode.WebviewView): void {
         this._view = webviewView;
@@ -87,7 +96,94 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
             updating: this.updating,
             brewAvailable: this.brewAvailable ?? false,
             profileMode: this.swiftLintProvider.getProfileMode(),
+            swiftFormatConflicts: this.getSwiftFormatConflicts(),
+            settingsOverlaps: this.getSettingsOverlaps(),
         };
+    }
+
+    private isLintRuleEnabled(ruleId: string): boolean {
+        const lintConfig = this.swiftLintProvider.getConfig();
+        const lintRules = this.swiftLintProvider.getRules() || [];
+        const rule = lintRules.find((r) => r.identifier === ruleId);
+        if (!rule) { return false; }
+        return (!rule.optIn && !lintConfig.disabledRules.includes(ruleId))
+            || lintConfig.optInRules.includes(ruleId);
+    }
+
+    private getSettingsOverlaps(): WebviewState['settingsOverlaps'] {
+        const overlaps: WebviewState['settingsOverlaps'] = [];
+        if (!this.swiftFormatProvider) { return overlaps; }
+        const fmtConfig = this.swiftFormatProvider.getConfig();
+        const lintConfig = this.swiftLintProvider.getConfig();
+        if (!fmtConfig.enabled) { return overlaps; }
+
+        // Line length
+        const lineLengthEnabled = this.isLintRuleEnabled('line_length');
+        const lineConfig = lintConfig.ruleConfigs['line_length'];
+        const lintWarning = parseInt(lineConfig?.warning || '120');
+        overlaps.push({
+            name: 'Line Length',
+            formatValue: `${fmtConfig.lineLength}`,
+            lintRuleId: 'line_length',
+            lintValue: `${lintWarning}`,
+            lintRuleEnabled: lineLengthEnabled,
+            conflict: lineLengthEnabled && fmtConfig.lineLength > lintWarning,
+        });
+
+        // File-scoped privacy
+        const privateEnabled = this.isLintRuleEnabled('private_over_fileprivate');
+        overlaps.push({
+            name: 'File-Scoped Privacy',
+            formatValue: fmtConfig.fileScopedDeclarationPrivacy,
+            lintRuleId: 'private_over_fileprivate',
+            lintValue: '',
+            lintRuleEnabled: privateEnabled,
+            conflict: privateEnabled && fmtConfig.fileScopedDeclarationPrivacy === 'fileprivate',
+        });
+
+        // Trailing commas
+        const trailingEnabled = this.isLintRuleEnabled('trailing_comma');
+        const commaConfig = lintConfig.ruleConfigs['trailing_comma'];
+        const mandatoryComma = commaConfig?.mandatory_comma === 'true';
+        const fmtAdds = fmtConfig.multiElementCollectionTrailingCommas;
+        overlaps.push({
+            name: 'Trailing Commas',
+            formatValue: fmtAdds ? 'adds commas' : 'omits commas',
+            lintRuleId: 'trailing_comma',
+            lintValue: '',
+            lintRuleEnabled: trailingEnabled,
+            conflict: trailingEnabled && ((fmtAdds && !mandatoryComma) || (!fmtAdds && mandatoryComma)),
+        });
+
+        return overlaps;
+    }
+
+    private getSwiftFormatConflicts(): WebviewState['swiftFormatConflicts'] {
+        if (!this.swiftFormatProvider) { return []; }
+        const fmtConfig = this.swiftFormatProvider.getConfig();
+        const lintConfig = this.swiftLintProvider.getConfig();
+        if (!fmtConfig.enabled) { return []; }
+
+        const formatRules = this.swiftFormatProvider.getRules() || [];
+        const lintRules = this.swiftLintProvider.getRules() || [];
+        const conflicts: WebviewState['swiftFormatConflicts'] = [];
+
+        for (const [formatRuleName, lintRuleName] of Object.entries(SWIFTLINT_SWIFTFORMAT_OVERLAPS)) {
+            const fRule = formatRules.find((r) => r.identifier === formatRuleName);
+            if (!fRule) { continue; }
+            const fEnabled = (fRule.isDefault && !fmtConfig.disabledRules.includes(formatRuleName))
+                || fmtConfig.enabledRules.includes(formatRuleName);
+            if (!fEnabled) { continue; }
+
+            const lRule = lintRules.find((r) => r.identifier === lintRuleName);
+            if (!lRule) { continue; }
+            const lEnabled = (!lRule.optIn && !lintConfig.disabledRules.includes(lintRuleName))
+                || lintConfig.optInRules.includes(lintRuleName);
+
+            conflicts.push({ swiftFormatRule: formatRuleName, swiftLintRule: lintRuleName, lintRuleEnabled: lEnabled });
+        }
+
+        return conflicts;
     }
 
     private postState(): void {
@@ -388,6 +484,45 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 this.postState();
                 break;
             }
+
+            case 'autoResolveFormatConflicts': {
+                const conflicts = this.getSwiftFormatConflicts();
+                const settingsOvl = this.getSettingsOverlaps();
+
+                // Collect all SwiftLint rule IDs to disable
+                const ruleIds = new Set<string>();
+                for (const { swiftLintRule, lintRuleEnabled } of conflicts) {
+                    if (lintRuleEnabled) { ruleIds.add(swiftLintRule); }
+                }
+                for (const { lintRuleId, lintRuleEnabled } of settingsOvl) {
+                    if (lintRuleEnabled) { ruleIds.add(lintRuleId); }
+                }
+                if (ruleIds.size === 0) { break; }
+
+                const lintConfig = this.swiftLintProvider.getConfig();
+                const disabledRules = [...lintConfig.disabledRules];
+                const optInRules = [...lintConfig.optInRules];
+                const lintRules = this.swiftLintProvider.getRules() || [];
+
+                for (const ruleId of ruleIds) {
+                    const rule = lintRules.find((r) => r.identifier === ruleId);
+                    if (!rule) { continue; }
+
+                    if (rule.optIn) {
+                        const idx = optInRules.indexOf(ruleId);
+                        if (idx >= 0) { optInRules.splice(idx, 1); }
+                    } else {
+                        if (!disabledRules.includes(ruleId)) {
+                            disabledRules.push(ruleId);
+                        }
+                    }
+                }
+
+                await this.swiftLintProvider.updateConfig({ disabledRules, optInRules });
+                this.postState();
+                vscode.window.showInformationMessage(`Disabled ${ruleIds.size} SwiftLint rule${ruleIds.size === 1 ? '' : 's'} that overlap with swift-format.`);
+                break;
+            }
         }
     }
 
@@ -502,6 +637,10 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .update-link:hover{opacity:1}
 .analyzer-note{padding:2px 14px 6px;font-size:11px;opacity:.45;font-style:italic}
 .hidden{display:none!important}
+.overlap-row{display:flex;align-items:center;padding:3px 14px;gap:6px;font-size:12px}
+.overlap-left{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8}
+.overlap-arrow{opacity:.4;font-size:10px;flex-shrink:0}
+.overlap-right{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;opacity:.8}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
 </style>
 </head>
@@ -661,6 +800,32 @@ function render() {
   h += '<div class="add-btns"><button id="add-path-btn">+ Path</button><button id="add-folder-btn">+ Folder</button></div>';
   h += '</div>';
 
+  // swift-format overlaps
+  const sfConflicts = state.swiftFormatConflicts || [];
+  const sfSettings = state.settingsOverlaps || [];
+  if (sfConflicts.length > 0 || sfSettings.length > 0) {
+    const activeRules = sfConflicts.filter(cf => cf.lintRuleEnabled).length;
+    const activeSettings = sfSettings.filter(s => s.lintRuleEnabled).length;
+    const activeCount = activeRules + activeSettings;
+    h += '<div class="section" style="border-top:1px solid var(--vscode-widget-border,rgba(128,128,128,.2));margin-top:4px">';
+    h += '<div class="row"><span class="label">swift-format Overlaps</span></div>';
+    for (const cf of sfConflicts) {
+      const dim = cf.lintRuleEnabled ? '' : ' style="opacity:.35"';
+      const status = cf.lintRuleEnabled ? '<span style="color:var(--vscode-errorForeground);font-size:10px;opacity:.8">active</span>' : '<span style="font-size:10px;opacity:.5">disabled</span>';
+      h += '<div class="overlap-row"' + dim + '><span class="overlap-left">' + esc(cf.swiftFormatRule) + '</span><span class="overlap-arrow">\\u2194</span><span class="overlap-right">' + esc(cf.swiftLintRule) + '</span>' + status + '</div>';
+    }
+    for (const so of sfSettings) {
+      const dim = so.lintRuleEnabled ? '' : ' style="opacity:.35"';
+      const status = so.lintRuleEnabled ? '<span style="color:var(--vscode-errorForeground);font-size:10px;opacity:.8">active</span>' : '<span style="font-size:10px;opacity:.5">disabled</span>';
+      const rightText = esc(so.lintRuleId) + (so.lintRuleEnabled && so.lintValue ? ' (' + esc(so.lintValue) + ')' : '');
+      h += '<div class="overlap-row"' + dim + '><span class="overlap-left">' + esc(so.name) + ': ' + esc(so.formatValue) + '</span><span class="overlap-arrow">\\u2194</span><span class="overlap-right">' + rightText + '</span>' + status + '</div>';
+    }
+    if (activeCount > 0) {
+      h += '<div class="add-btns"><button id="auto-resolve-fmt-btn">Disable ' + activeCount + ' Active Overlap' + (activeCount === 1 ? '' : 's') + '</button></div>';
+    }
+    h += '</div>';
+  }
+
   app.innerHTML = h;
   bind();
   // Restore search text and re-apply filter
@@ -809,6 +974,7 @@ function bind() {
   document.getElementById('add-path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'addExcludedPath' }));
   document.getElementById('add-folder-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'addExcludedFolder' }));
   document.getElementById('reset-all-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetAllRules' }));
+  document.getElementById('auto-resolve-fmt-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'autoResolveFormatConflicts' }));
 }
 
 function updateRuleIndicators(ruleId, hasCustomConfig) {

@@ -82,4 +82,6 @@ export const SWIFTLINT_SWIFTFORMAT_OVERLAPS: Record<string, string> = {
     'NoEmptyTrailingClosureParentheses': 'empty_parentheses_with_trailing_closure',
     'OrderedImports': 'sorted_imports',
     'UseTripleSlashForDocComments': 'comment_spacing',
+    'NoVoidReturnOnFunctionSignature': 'redundant_void_return',
+    'NoParensAroundConditions': 'control_statement',
 };

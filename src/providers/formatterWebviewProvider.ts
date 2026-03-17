@@ -2,9 +2,7 @@ import * as vscode from 'vscode';
 import { promisify } from 'util';
 import { execFile as execFileCallback } from 'child_process';
 import type { SwiftFormatConfig, SwiftFormatRule } from '../types/interfaces';
-import { SWIFTLINT_SWIFTFORMAT_OVERLAPS } from '../types/constants';
 import { SwiftFormatProvider } from './swiftFormatProvider';
-import { SwiftLintProvider } from './swiftLintProvider';
 
 const execFile = promisify(execFileCallback);
 
@@ -20,7 +18,6 @@ interface WebviewState {
     updating: boolean;
     brewAvailable: boolean;
     profileMode: 'local' | 'global';
-    conflicts: Array<{ swiftFormatRule: string; swiftLintRule: string }>;
 }
 
 export class FormatterWebviewProvider implements vscode.WebviewViewProvider {
@@ -32,7 +29,6 @@ export class FormatterWebviewProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly swiftFormatProvider: SwiftFormatProvider,
-        private readonly swiftLintProvider: SwiftLintProvider,
         private readonly log: (message: string) => void,
     ) {}
 
@@ -49,34 +45,6 @@ export class FormatterWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     // ── State ────────────────────────────────────────────────
-
-    private getConflicts(): WebviewState['conflicts'] {
-        const config = this.swiftFormatProvider.getConfig();
-        const lintConfig = this.swiftLintProvider.getConfig();
-        if (!config.enabled || !lintConfig.enabled) { return []; }
-
-        const formatRules = this.swiftFormatProvider.getRules() || [];
-        const lintRules = this.swiftLintProvider.getRules() || [];
-        const conflicts: WebviewState['conflicts'] = [];
-
-        for (const [formatRuleName, lintRuleName] of Object.entries(SWIFTLINT_SWIFTFORMAT_OVERLAPS)) {
-            const fRule = formatRules.find((r) => r.identifier === formatRuleName);
-            if (!fRule) { continue; }
-            const fEnabled = (fRule.isDefault && !config.disabledRules.includes(formatRuleName))
-                || config.enabledRules.includes(formatRuleName);
-            if (!fEnabled) { continue; }
-
-            const lRule = lintRules.find((r) => r.identifier === lintRuleName);
-            if (!lRule) { continue; }
-            const lEnabled = (!lRule.optIn && !lintConfig.disabledRules.includes(lintRuleName))
-                || lintConfig.optInRules.includes(lintRuleName);
-            if (!lEnabled) { continue; }
-
-            conflicts.push({ swiftFormatRule: formatRuleName, swiftLintRule: lintRuleName });
-        }
-
-        return conflicts;
-    }
 
     private getState(): WebviewState {
         const config = this.swiftFormatProvider.getConfig();
@@ -104,7 +72,6 @@ export class FormatterWebviewProvider implements vscode.WebviewViewProvider {
             updating: this.updating,
             brewAvailable: this.brewAvailable ?? false,
             profileMode: this.swiftFormatProvider.getProfileMode(),
-            conflicts: this.getConflicts(),
         };
     }
 
@@ -342,34 +309,6 @@ export class FormatterWebviewProvider implements vscode.WebviewViewProvider {
                 break;
             }
 
-            case 'autoResolveConflicts': {
-                const conflicts = this.getConflicts();
-                if (conflicts.length === 0) { break; }
-
-                const lintConfig = this.swiftLintProvider.getConfig();
-                const disabledRules = [...lintConfig.disabledRules];
-                const optInRules = [...lintConfig.optInRules];
-                const lintRules = this.swiftLintProvider.getRules() || [];
-
-                for (const { swiftLintRule } of conflicts) {
-                    const rule = lintRules.find((r) => r.identifier === swiftLintRule);
-                    if (!rule) { continue; }
-
-                    if (rule.optIn) {
-                        const idx = optInRules.indexOf(swiftLintRule);
-                        if (idx >= 0) { optInRules.splice(idx, 1); }
-                    } else {
-                        if (!disabledRules.includes(swiftLintRule)) {
-                            disabledRules.push(swiftLintRule);
-                        }
-                    }
-                }
-
-                await this.swiftLintProvider.updateConfig({ disabledRules, optInRules });
-                this.postState();
-                vscode.window.showInformationMessage(`Disabled ${conflicts.length} overlapping SwiftLint rule${conflicts.length === 1 ? '' : 's'}.`);
-                break;
-            }
         }
     }
 
@@ -459,11 +398,6 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .add-btns{display:flex;gap:6px;padding:6px 14px}
 .add-btns button{padding:2px 8px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
 .add-btns button:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
-.conflict-section{border-top:1px solid var(--vscode-widget-border,rgba(128,128,128,.2));margin-top:4px}
-.conflict-row{display:flex;align-items:center;padding:3px 14px;gap:6px;font-size:11px}
-.conflict-format{flex:1;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.conflict-arrow{opacity:.4;font-size:10px}
-.conflict-lint{flex:1;opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .hidden{display:none!important}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
 </style>
@@ -657,17 +591,6 @@ function render() {
     h += '<div class="add-btns" style="padding-top:4px"><button id="reset-all-btn">Reset Rules to Defaults</button></div>';
   }
 
-  // Conflicts
-  if (state.conflicts.length > 0) {
-    h += '<div class="section conflict-section">';
-    h += '<div class="row"><span class="label">SwiftLint Conflicts</span><span class="badge">' + state.conflicts.length + '</span></div>';
-    for (const cf of state.conflicts) {
-      h += '<div class="conflict-row"><span class="conflict-format">' + esc(cf.swiftFormatRule) + '</span><span class="conflict-arrow">\\u2194</span><span class="conflict-lint">' + esc(cf.swiftLintRule) + '</span></div>';
-    }
-    h += '<div class="add-btns" style="padding-top:4px"><button id="auto-resolve-btn">Auto-Resolve (Disable SwiftLint Rules)</button></div>';
-    h += '</div>';
-  }
-
   app.innerHTML = h;
   bind();
   if (savedSearch) {
@@ -837,8 +760,6 @@ function bind() {
 
   document.getElementById('reset-all-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetAllRules' }));
 
-  // Conflicts
-  document.getElementById('auto-resolve-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'autoResolveConflicts' }));
 }
 `.replace(/<\//g, '<\\/');
     }
