@@ -19,6 +19,7 @@ interface WebviewState {
     installing: boolean;
     updating: boolean;
     brewAvailable: boolean;
+    profileMode: 'local' | 'global';
 }
 
 export class LinterWebviewProvider implements vscode.WebviewViewProvider {
@@ -85,6 +86,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
             installing: this.installing,
             updating: this.updating,
             brewAvailable: this.brewAvailable ?? false,
+            profileMode: this.swiftLintProvider.getProfileMode(),
         };
     }
 
@@ -293,6 +295,31 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                     this.ruleDefaultsCache.clear();
                     this.postState();
                 }
+                break;
+            }
+
+            case 'changeProfileMode': {
+                const newMode = msg.value as 'local' | 'global';
+                if (newMode === 'global') {
+                    const localConfig = this.swiftLintProvider.getConfig();
+                    const hasLocalRules = localConfig.disabledRules.length > 0
+                        || localConfig.optInRules.length > 0
+                        || localConfig.analyzerRules.length > 0
+                        || Object.keys(localConfig.ruleConfigs).length > 0;
+                    if (hasLocalRules) {
+                        const answer = await vscode.window.showWarningMessage(
+                            'Switch to global SwiftLint profile? This project\'s local linter rules will be replaced by the global profile.',
+                            { modal: true },
+                            'Switch to Global',
+                        );
+                        if (answer !== 'Switch to Global') {
+                            this.postState();
+                            break;
+                        }
+                    }
+                }
+                await this.swiftLintProvider.setProfileMode(newMode);
+                this.postState();
                 break;
             }
 
@@ -553,10 +580,14 @@ function render() {
   h += '<div class="section">';
   h += toggleRow('Enabled', 'toggle-enabled', c.enabled);
   h += toggleRow('Fix on Save', 'toggle-fixOnSave', c.fixOnSave);
-  h += '<div class="row"><span>Severity</span><select id="severity-select">';
+  h += '<div class="row"><span>Severity</span><select id="severity-select" title="Normal: warnings stay warnings, errors stay errors.\\nStrict: all violations become errors.\\nLenient: all violations become warnings.">';
   for (const v of ['normal','strict','lenient']) {
     h += '<option value="' + v + '"' + (c.severity === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
   }
+  h += '</select></div>';
+  h += '<div class="row"><span>Profile</span><select id="profile-select" title="Local: rules are specific to this project.\\nGlobal: rules are shared across all projects.">';
+  h += '<option value="global"' + (state.profileMode === 'global' ? ' selected' : '') + '>Global</option>';
+  h += '<option value="local"' + (state.profileMode === 'local' ? ' selected' : '') + '>Local</option>';
   h += '</select></div></div>';
 
   // rules
@@ -684,6 +715,7 @@ function bind() {
   document.getElementById('toggle-enabled')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleEnabled', value: e.target.checked }));
   document.getElementById('toggle-fixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFixOnSave', value: e.target.checked }));
   document.getElementById('severity-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeSeverity', value: e.target.value }));
+  document.getElementById('profile-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeProfileMode', value: e.target.value }));
 
   // Initialize user collapse state for any new groups
   document.querySelectorAll('.group-header').forEach(gh => {

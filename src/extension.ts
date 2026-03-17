@@ -623,7 +623,7 @@ export function activate(context: vscode.ExtensionContext): void {
     };
 
     // SwiftLint provider (independent of build config)
-    const swiftLintProvider = new SwiftLintProvider(context.workspaceState, log);
+    const swiftLintProvider = new SwiftLintProvider(context.workspaceState, context.globalState, log);
 
     // Always register sidebar (shows welcome message when no project found)
     const sidebarProvider = new SidebarProvider(context.workspaceState);
@@ -639,6 +639,13 @@ export function activate(context: vscode.ExtensionContext): void {
     swiftLintProvider.resolvePathAndVersion().then(async () => {
         // Sync config from .swiftlint.yml if it exists (e.g., cloned repo)
         await swiftLintProvider.syncFromConfigFile();
+        // Projects with local config or .yml stay in local mode; otherwise default to global
+        if (swiftLintProvider.hasWorkspaceConfig() || swiftLintProvider.hasConfigFile()) {
+            await swiftLintProvider.setProfileMode('local');
+        } else if (!swiftLintProvider.hasGlobalProfile()) {
+            // Ensure global profile is initialized with defaults
+            await swiftLintProvider.setProfileMode('global');
+        }
         linterWebviewProvider.refresh();
         swiftLintProvider.lintOpenDocuments();
         // Check for updates after binary resolved (uses 24h cooldown)

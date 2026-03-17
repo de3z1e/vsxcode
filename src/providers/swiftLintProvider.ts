@@ -183,6 +183,7 @@ export class SwiftLintProvider implements vscode.Disposable {
 
     constructor(
         private workspaceState: vscode.Memento,
+        private globalState: vscode.Memento,
         private readonly log: (message: string) => void = () => {},
     ) {
         this.diagnosticCollection = vscode.languages.createDiagnosticCollection('swiftlint');
@@ -212,23 +213,108 @@ export class SwiftLintProvider implements vscode.Disposable {
 
     // ── Config access ────────────────────────────────────────
 
+    private static readonly PROFILE_FIELDS: (keyof SwiftLintConfig)[] = [
+        'severity', 'fixOnSave', 'disabledRules', 'optInRules', 'analyzerRules', 'ruleConfigs',
+    ];
+
+    getProfileMode(): 'local' | 'global' {
+        return this.workspaceState.get<'local' | 'global'>('swiftLintProfileMode', 'global');
+    }
+
+    async setProfileMode(mode: 'local' | 'global'): Promise<void> {
+        const prevMode = this.getProfileMode();
+        if (mode === prevMode) { return; }
+
+        if (mode === 'global' && !this.globalState.get('swiftLintGlobalProfile')) {
+            // Initialize global profile with defaults
+            const profile: Partial<SwiftLintConfig> = {};
+            for (const key of SwiftLintProvider.PROFILE_FIELDS) {
+                (profile as unknown as Record<string, unknown>)[key] = DEFAULT_CONFIG[key];
+            }
+            await this.globalState.update('swiftLintGlobalProfile', profile);
+            this.log('[swiftlint] initialized global profile with defaults');
+        }
+
+        if (mode === 'local') {
+            // Copy global settings as local starting point
+            const global = this.globalState.get<Partial<SwiftLintConfig>>('swiftLintGlobalProfile');
+            if (global) {
+                const current = this.workspaceState.get<Partial<SwiftLintConfig>>('swiftLintConfig') || {};
+                await this.workspaceState.update('swiftLintConfig', { ...current, ...global });
+                this.log('[swiftlint] copied global profile to local settings');
+            }
+        }
+
+        await this.workspaceState.update('swiftLintProfileMode', mode);
+        this.log(`[swiftlint] profile mode: ${mode}`);
+        await this.writeConfigFile();
+        this.lintOpenDocuments();
+    }
+
+    hasConfigFile(): boolean {
+        return fs.existsSync(this.getConfigFilePath());
+    }
+
     getConfig(): SwiftLintConfig {
         const stored = this.workspaceState.get<Partial<SwiftLintConfig>>('swiftLintConfig');
-        if (!stored) { return { ...DEFAULT_CONFIG }; }
-        return {
+        const base: SwiftLintConfig = {
             ...DEFAULT_CONFIG,
             ...stored,
-            disabledRules: stored.disabledRules || [],
-            optInRules: stored.optInRules || [],
-            analyzerRules: stored.analyzerRules || [],
-            excludedPaths: stored.excludedPaths || [],
-            ruleConfigs: stored.ruleConfigs || {},
+            disabledRules: stored?.disabledRules || [],
+            optInRules: stored?.optInRules || [],
+            analyzerRules: stored?.analyzerRules || [],
+            excludedPaths: stored?.excludedPaths || [],
+            ruleConfigs: stored?.ruleConfigs || {},
         };
+
+        if (this.getProfileMode() === 'global') {
+            const global = this.globalState.get<Partial<SwiftLintConfig>>('swiftLintGlobalProfile');
+            if (global) {
+                for (const key of SwiftLintProvider.PROFILE_FIELDS) {
+                    if (key in global) {
+                        (base as unknown as Record<string, unknown>)[key] = global[key];
+                    }
+                }
+                // Ensure arrays
+                base.disabledRules = base.disabledRules || [];
+                base.optInRules = base.optInRules || [];
+                base.analyzerRules = base.analyzerRules || [];
+                base.excludedPaths = base.excludedPaths || [];
+                base.ruleConfigs = base.ruleConfigs || {};
+            }
+        }
+
+        return base;
     }
 
     async updateConfig(patch: Partial<SwiftLintConfig>): Promise<void> {
-        const current = this.getConfig();
-        await this.workspaceState.update('swiftLintConfig', { ...current, ...patch });
+        // Local-only fields always go to workspaceState
+        const localPatch: Partial<SwiftLintConfig> = {};
+        const profilePatch: Partial<SwiftLintConfig> = {};
+        for (const [key, value] of Object.entries(patch)) {
+            if (SwiftLintProvider.PROFILE_FIELDS.includes(key as keyof SwiftLintConfig)) {
+                (profilePatch as Record<string, unknown>)[key] = value;
+            } else {
+                (localPatch as Record<string, unknown>)[key] = value;
+            }
+        }
+
+        // Write local fields
+        if (Object.keys(localPatch).length > 0) {
+            const current = this.workspaceState.get<Partial<SwiftLintConfig>>('swiftLintConfig') || {};
+            await this.workspaceState.update('swiftLintConfig', { ...current, ...localPatch });
+        }
+
+        // Write profile fields to the active storage
+        if (Object.keys(profilePatch).length > 0) {
+            if (this.getProfileMode() === 'global') {
+                const current = this.globalState.get<Partial<SwiftLintConfig>>('swiftLintGlobalProfile') || {};
+                await this.globalState.update('swiftLintGlobalProfile', { ...current, ...profilePatch });
+            } else {
+                const current = this.workspaceState.get<Partial<SwiftLintConfig>>('swiftLintConfig') || {};
+                await this.workspaceState.update('swiftLintConfig', { ...current, ...profilePatch });
+            }
+        }
 
         if ('path' in patch) {
             this._pathResolved = false;
@@ -681,6 +767,16 @@ export class SwiftLintProvider implements vscode.Disposable {
             this.lintOpenDocuments();
             this._onDidSyncConfig.fire();
         } catch { /* file may not exist or be invalid */ }
+    }
+
+    // ── Global profile ────────────────────────────────────────
+
+    hasGlobalProfile(): boolean {
+        return !!this.globalState.get('swiftLintGlobalProfile');
+    }
+
+    hasWorkspaceConfig(): boolean {
+        return !!this.workspaceState.get('swiftLintConfig');
     }
 
     dispose(): void {
