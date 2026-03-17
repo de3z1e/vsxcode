@@ -235,7 +235,8 @@ export class SwiftLintProvider implements vscode.Disposable {
         if (this.resolvedPath) {
             this.log(`[swiftlint] found: ${this.resolvedPath} (v${this.resolvedVersion})`);
             this.cachedRules = await parseSwiftLintRules(this.resolvedPath);
-            this.log(`[swiftlint] loaded ${this.cachedRules.length} rules`);
+            const analyzerCount = this.cachedRules.filter((r) => r.analyzer).length;
+            this.log(`[swiftlint] loaded ${this.cachedRules.length - analyzerCount} rules (${analyzerCount} analyzer rules excluded)`);
         } else {
             this.log('[swiftlint] binary not found');
         }
