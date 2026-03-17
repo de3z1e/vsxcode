@@ -1,3 +1,4 @@
+import * as os from 'os';
 import type { BuildTaskConfig } from '../types/interfaces';
 
 function xcodebuildArgs(config: BuildTaskConfig): string[] {
@@ -5,7 +6,7 @@ function xcodebuildArgs(config: BuildTaskConfig): string[] {
     const udid = config.simulatorUdid || config.simulatorDevice;
     const sdk = config.isPhysicalDevice ? 'iphoneos' : 'iphonesimulator';
     const args = [
-        'set -eo pipefail; xcodebuild',
+        `set -eo pipefail; mkdir -p "${derivedData}"; xcodebuild`,
         `-project "${config.projectFile}"`,
         `-scheme "${config.schemeName}"`,
         '-configuration Debug',
@@ -25,9 +26,10 @@ function devicectlId(config: BuildTaskConfig): string {
 }
 
 export function buildCommandLine(config: BuildTaskConfig): string {
+    const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
     return [
         ...xcodebuildArgs(config),
-        'build 2>&1',
+        `build 2>&1 | tee "${derivedData}/build.log"`,
     ].join(' ');
 }
 
@@ -39,7 +41,7 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
         const devId = devicectlId(config);
         return [
             ...xcodebuildArgs(config),
-            'build 2>&1',
+            `build 2>&1 | tee "${derivedData}/build.log"`,
             `&& xcrun devicectl device install app --device "${devId}" "${appPath}"`,
             `&& xcrun devicectl device process launch --device "${devId}" "${config.bundleIdentifier}"`,
         ].join(' ');
@@ -49,12 +51,16 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
     const appPath = `${derivedData}/Build/Products/Debug-iphonesimulator/${config.productName}.app`;
     return [
         ...xcodebuildArgs(config),
-        'build 2>&1',
+        `build 2>&1 | tee "${derivedData}/build.log"`,
         `&& { xcrun simctl boot "${udid}" 2>/dev/null || true`,
         `; xcrun simctl terminate "${udid}" "${config.bundleIdentifier}" 2>/dev/null || true`,
         `; xcrun simctl install "${udid}" "${appPath}"`,
         '; open -a Simulator; }',
     ].join(' ');
+}
+
+export function resolvedBuildLogPath(config: BuildTaskConfig): string {
+    return `${os.homedir()}/Library/Developer/VSCode/DerivedData/${config.schemeName}/build.log`;
 }
 
 // perl filter that prepends a locale-formatted timestamp ([2:26:21 PM]) to each line

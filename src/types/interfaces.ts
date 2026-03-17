@@ -157,6 +157,7 @@ export interface SwiftLintConfig {
     fixOnSave: boolean;
     disabledRules: string[];
     optInRules: string[];
+    analyzerRules: string[];
     excludedPaths: string[];
     ruleConfigs: Record<string, Record<string, string>>;
 }

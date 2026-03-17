@@ -13,6 +13,7 @@ interface WebviewState {
     version: string | null;
     config: SwiftLintConfig;
     rules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
+    analyzerRules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
     installing: boolean;
     brewAvailable: boolean;
 }
@@ -47,6 +48,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
         const config = this.swiftLintProvider.getConfig();
         const rawRules = this.swiftLintProvider.getRules();
         let rules: WebviewState['rules'] = null;
+        let analyzerRules: WebviewState['analyzerRules'] = null;
 
         if (rawRules) {
             const lintRules = rawRules.filter((r) => !r.analyzer);
@@ -58,6 +60,13 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 const hasConfig = !!config.ruleConfigs[r.identifier] || this.ruleDefaultsCache.has(r.identifier);
                 return { ...r, enabled, hasConfig };
             });
+
+            const aRules = rawRules.filter((r) => r.analyzer);
+            analyzerRules = aRules.map((r) => {
+                const enabled = config.analyzerRules.includes(r.identifier);
+                const hasConfig = !!config.ruleConfigs[r.identifier] || this.ruleDefaultsCache.has(r.identifier);
+                return { ...r, enabled, hasConfig };
+            });
         }
 
         return {
@@ -66,6 +75,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
             version: this.swiftLintProvider.getResolvedVersion(),
             config,
             rules,
+            analyzerRules,
             installing: this.installing,
             brewAvailable: this.brewAvailable ?? false,
         };
@@ -219,6 +229,17 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 break;
             }
 
+            case 'toggleAnalyzerRule': {
+                const ruleId = msg.ruleId as string;
+                const enabled = msg.enabled as boolean;
+                const config = this.swiftLintProvider.getConfig();
+                let analyzerRules = config.analyzerRules.filter((r) => r !== ruleId);
+                if (enabled) { analyzerRules.push(ruleId); }
+                await this.swiftLintProvider.updateConfig({ analyzerRules });
+                this.postState();
+                break;
+            }
+
             case 'resetAllRules': {
                 const answer = await vscode.window.showWarningMessage(
                     'Reset all rules and rule configs to defaults?',
@@ -229,6 +250,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                     await this.swiftLintProvider.updateConfig({
                         disabledRules: [],
                         optInRules: [],
+                        analyzerRules: [],
                         ruleConfigs: {},
                     });
                     this.ruleDefaultsCache.clear();
@@ -407,6 +429,7 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .add-btns{display:flex;gap:6px;padding:6px 14px}
 .add-btns button{padding:2px 8px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
 .add-btns button:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
+.analyzer-note{padding:2px 14px 6px;font-size:11px;opacity:.45;font-style:italic}
 .hidden{display:none!important}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
 </style>
@@ -518,6 +541,29 @@ function render() {
     h += '</div>';
   }
 
+  // analyzer rules
+  const aRules = state.analyzerRules || [];
+  if (aRules.length > 0) {
+    const aEnabled = aRules.filter(r => r.enabled).length;
+    const aCollapsed = (groupCollapsed['analyzer'] ?? true) ? ' collapsed' : '';
+    h += '<div class="group-header' + aCollapsed + '" data-kind="analyzer" data-group="analyzer"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Analyzer (' + aRules.length + ')<span class="badge" style="margin-left:auto">' + aEnabled + ' enabled</span></div>';
+    h += '<div class="group-body' + aCollapsed + '" data-group-body="analyzer">';
+    h += '<div class="analyzer-note">Runs after builds using compiler logs</div>';
+    for (const r of aRules) {
+      const hasCustomConfig = !!c.ruleConfigs[r.identifier];
+      const modified = r.enabled || hasCustomConfig;
+      const gearClass = hasCustomConfig ? ' active' : '';
+      h += '<div class="rule-row" data-id="' + r.identifier + '" data-kind="analyzer" data-analyzer="1">';
+      h += '<label class="switch"><input type="checkbox" data-analyzer-rule="' + r.identifier + '"' + (r.enabled ? ' checked' : '') + '><span class="slider"></span></label>';
+      h += '<span class="rule-name">' + esc(r.identifier) + '</span>';
+      if (modified) h += '<span class="rule-modified" title="Modified from default"></span>';
+      h += '<button class="gear-btn' + gearClass + '" data-gear="' + r.identifier + '" title="Configure">\u2699</button>';
+      h += '</div>';
+      h += '<div class="rule-config hidden" data-config="' + r.identifier + '"></div>';
+    }
+    h += '</div>';
+  }
+
   // excluded
   h += '<div class="section" style="border-top:1px solid var(--vscode-widget-border,rgba(128,128,128,.2));margin-top:4px">';
   h += '<div class="row"><span class="label">Excluded Paths</span></div>';
@@ -603,6 +649,10 @@ function bind() {
 
   document.querySelectorAll('input[data-rule]').forEach(cb => {
     cb.addEventListener('change', e => vscode.postMessage({ type: 'toggleRule', ruleId: e.target.dataset.rule, enabled: e.target.checked }));
+  });
+
+  document.querySelectorAll('input[data-analyzer-rule]').forEach(cb => {
+    cb.addEventListener('change', e => vscode.postMessage({ type: 'toggleAnalyzerRule', ruleId: e.target.dataset.analyzerRule, enabled: e.target.checked }));
   });
 
   document.querySelectorAll('.group-header').forEach(gh => {

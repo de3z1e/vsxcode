@@ -26,6 +26,7 @@ import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
 import { SwiftLintProvider } from './providers/swiftLintProvider';
+import { resolvedBuildLogPath } from './generators/buildTasks';
 import { LinterWebviewProvider } from './providers/linterWebviewProvider';
 import type { BuildTaskConfig } from './types/interfaces';
 
@@ -643,6 +644,7 @@ export function activate(context: vscode.ExtensionContext): void {
         linterWebviewProvider.refresh();
     });
 
+    swiftLintProvider.onDidSyncConfig(() => linterWebviewProvider.refresh());
     context.subscriptions.push(swiftLintProvider, linterViewDisposable);
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -929,7 +931,13 @@ export function activate(context: vscode.ExtensionContext): void {
             const tasks = await vscode.tasks.fetchTasks({ type: 'xcode-build' });
             const buildTask = tasks.find((t) => t.name === 'Build');
             if (buildTask) {
-                buildExecution = await vscode.tasks.executeTask(buildTask);
+                const exitCode = await executeTaskAndWait(buildTask, (exec) => { buildExecution = exec; });
+                if (exitCode === 0) {
+                    const btConfig = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+                    if (btConfig) {
+                        swiftLintProvider.analyzeWorkspace(resolvedBuildLogPath(btConfig));
+                    }
+                }
             } else {
                 vscode.window.showErrorMessage('Build task not available. Check configuration.');
             }
@@ -965,6 +973,7 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
         log('[simulator-debug] build succeeded');
+        swiftLintProvider.analyzeWorkspace(resolvedBuildLogPath(config));
 
         const udid = config.simulatorUdid || config.simulatorDevice;
         const homeDir = require('os').homedir();
@@ -1056,6 +1065,7 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
         log('[physical-debug] build succeeded');
+        swiftLintProvider.analyzeWorkspace(resolvedBuildLogPath(config));
 
         const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
         const homeDir = require('os').homedir();

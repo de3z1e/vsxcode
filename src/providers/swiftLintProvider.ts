@@ -24,6 +24,7 @@ const DEFAULT_CONFIG: SwiftLintConfig = {
     fixOnSave: false,
     disabledRules: [],
     optInRules: [],
+    analyzerRules: [],
     excludedPaths: [],
     ruleConfigs: {},
 };
@@ -166,27 +167,46 @@ function parseSwiftLintOutput(json: string): vscode.Diagnostic[] {
 
 export class SwiftLintProvider implements vscode.Disposable {
     private diagnosticCollection: vscode.DiagnosticCollection;
+    private analyzerDiagnosticCollection: vscode.DiagnosticCollection;
     private disposables: vscode.Disposable[] = [];
     private resolvedPath: string | null = null;
     private resolvedVersion: string | null = null;
     private _pathResolved = false;
     private fixingFiles = new Set<string>();
     private cachedRules: SwiftLintRule[] | null = null;
+    private analyzing = false;
+    private _writingConfigFile = false;
+
+    private _onDidSyncConfig = new vscode.EventEmitter<void>();
+    readonly onDidSyncConfig = this._onDidSyncConfig.event;
 
     constructor(
         private workspaceState: vscode.Memento,
         private readonly log: (message: string) => void = () => {},
     ) {
         this.diagnosticCollection = vscode.languages.createDiagnosticCollection('swiftlint');
+        this.analyzerDiagnosticCollection = vscode.languages.createDiagnosticCollection('swiftlint-analyzer');
 
         this.disposables.push(
             this.diagnosticCollection,
+            this.analyzerDiagnosticCollection,
+            this._onDidSyncConfig,
             vscode.workspace.onDidSaveTextDocument((doc) => this.onDocumentSaved(doc)),
             vscode.workspace.onDidOpenTextDocument((doc) => this.lintDocument(doc)),
             vscode.workspace.onDidCloseTextDocument((doc) => {
                 this.diagnosticCollection.delete(doc.uri);
             }),
         );
+
+        const rootUri = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (rootUri) {
+            const watcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(rootUri, '.vscode/.swiftlint.yml'),
+            );
+            watcher.onDidChange(() => this.syncFromConfigFile());
+            watcher.onDidCreate(() => this.syncFromConfigFile());
+            this.disposables.push(watcher);
+        }
     }
 
     // ── Config access ────────────────────────────────────────
@@ -199,6 +219,7 @@ export class SwiftLintProvider implements vscode.Disposable {
             ...stored,
             disabledRules: stored.disabledRules || [],
             optInRules: stored.optInRules || [],
+            analyzerRules: stored.analyzerRules || [],
             excludedPaths: stored.excludedPaths || [],
             ruleConfigs: stored.ruleConfigs || {},
         };
@@ -213,14 +234,20 @@ export class SwiftLintProvider implements vscode.Disposable {
         }
 
         // Write config file when rule/exclusion/ruleConfig settings change
-        if ('disabledRules' in patch || 'optInRules' in patch || 'excludedPaths' in patch || 'ruleConfigs' in patch) {
+        if ('disabledRules' in patch || 'optInRules' in patch || 'analyzerRules' in patch || 'excludedPaths' in patch || 'ruleConfigs' in patch) {
             await this.writeConfigFile();
         }
 
-        if (!this.getConfig().enabled) {
+        const updatedConfig = this.getConfig();
+        if (!updatedConfig.enabled) {
             this.diagnosticCollection.clear();
+            this.analyzerDiagnosticCollection.clear();
         } else {
             this.lintOpenDocuments();
+        }
+
+        if ('analyzerRules' in patch && updatedConfig.analyzerRules.length === 0) {
+            this.analyzerDiagnosticCollection.clear();
         }
     }
 
@@ -277,6 +304,7 @@ export class SwiftLintProvider implements vscode.Disposable {
         const config = this.getConfig();
         return config.disabledRules.length > 0
             || config.optInRules.length > 0
+            || config.analyzerRules.length > 0
             || config.excludedPaths.length > 0
             || Object.keys(config.ruleConfigs).length > 0;
     }
@@ -312,6 +340,13 @@ export class SwiftLintProvider implements vscode.Disposable {
             }
         }
 
+        if (config.analyzerRules.length > 0) {
+            lines.push('', 'analyzer_rules:');
+            for (const rule of config.analyzerRules) {
+                lines.push(`  - ${rule}`);
+            }
+        }
+
         if (config.excludedPaths.length > 0) {
             lines.push('', 'excluded:');
             for (const p of config.excludedPaths) {
@@ -330,7 +365,9 @@ export class SwiftLintProvider implements vscode.Disposable {
         }
 
         lines.push('');
+        this._writingConfigFile = true;
         await fs.promises.writeFile(this.getConfigFilePath(), lines.join('\n'));
+        setTimeout(() => { this._writingConfigFile = false; }, 500);
     }
 
     // ── Linting ──────────────────────────────────────────────
@@ -431,6 +468,173 @@ export class SwiftLintProvider implements vscode.Disposable {
         for (const doc of vscode.workspace.textDocuments) {
             this.lintDocument(doc);
         }
+    }
+
+    // ── Analyzer ────────────────────────────────────────────
+
+    getEnabledAnalyzerRuleCount(): number {
+        if (!this.cachedRules) { return 0; }
+        const config = this.getConfig();
+        return config.analyzerRules.length;
+    }
+
+    getTotalAnalyzerRuleCount(): number {
+        if (!this.cachedRules) { return 0; }
+        return this.cachedRules.filter((r) => r.analyzer).length;
+    }
+
+    async analyzeWorkspace(compilerLogPath: string): Promise<void> {
+        if (!this.resolvedPath) { return; }
+
+        const config = this.getConfig();
+        if (!config.enabled) { return; }
+        if (config.analyzerRules.length === 0) { return; }
+        if (!fs.existsSync(compilerLogPath)) { return; }
+        if (this.analyzing) { return; }
+
+        // Determine which log to use — incremental builds have no swiftc invocations
+        const fullLogPath = compilerLogPath.replace(/\.log$/, '_full.log');
+        let effectiveLogPath = compilerLogPath;
+        try {
+            const logContent = await fs.promises.readFile(compilerLogPath, 'utf8');
+            if (logContent.includes('swiftc')) {
+                await fs.promises.copyFile(compilerLogPath, fullLogPath);
+            } else if (fs.existsSync(fullLogPath)) {
+                effectiveLogPath = fullLogPath;
+            } else {
+                this.log('[swiftlint] analyzer skipped: no compiler invocations in build log (need a full build)');
+                return;
+            }
+        } catch {
+            return;
+        }
+
+        this.analyzing = true;
+        this.log('[swiftlint] running analyzer...');
+
+        try {
+            const args = ['analyze', '--reporter', 'json', '--quiet', '--compiler-log-path', effectiveLogPath];
+            if (this.hasConfigOverrides()) {
+                args.push('--config', this.getConfigFilePath());
+            }
+
+            const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!cwd) { return; }
+
+            let stdout: string;
+            try {
+                const result = await execFile(this.resolvedPath, args, { encoding: 'utf8', cwd, timeout: 120000 });
+                stdout = result.stdout;
+            } catch (error: unknown) {
+                const execError = error as { stdout?: string };
+                if (execError.stdout) {
+                    stdout = execError.stdout;
+                } else {
+                    throw error;
+                }
+            }
+
+            if (!stdout.trim()) {
+                this.analyzerDiagnosticCollection.clear();
+                return;
+            }
+
+            const violations: SwiftLintViolation[] = JSON.parse(stdout);
+            const grouped = new Map<string, vscode.Diagnostic[]>();
+
+            for (const v of violations) {
+                const line = Math.max(0, v.line - 1);
+                const char = Math.max(0, (v.character || 1) - 1);
+                const range = new vscode.Range(line, char, line, Number.MAX_SAFE_INTEGER);
+                const severity = v.severity === 'Error'
+                    ? vscode.DiagnosticSeverity.Error
+                    : vscode.DiagnosticSeverity.Warning;
+                const diagnostic = new vscode.Diagnostic(range, v.reason, severity);
+                diagnostic.source = 'SwiftLint (Analyzer)';
+                diagnostic.code = v.rule_id;
+
+                const fileDiags = grouped.get(v.file) || [];
+                fileDiags.push(diagnostic);
+                grouped.set(v.file, fileDiags);
+            }
+
+            this.analyzerDiagnosticCollection.clear();
+            for (const [file, diags] of grouped) {
+                this.analyzerDiagnosticCollection.set(vscode.Uri.file(file), diags);
+            }
+
+            this.log(`[swiftlint] analyzer complete (${violations.length} violation${violations.length === 1 ? '' : 's'})`);
+        } catch (error) {
+            this.log(`[swiftlint] analyzer failed: ${error}`);
+        } finally {
+            this.analyzing = false;
+        }
+    }
+
+    // ── Config file sync (external edits) ─────────────────────
+
+    private static readonly KNOWN_SECTIONS = new Set(['disabled_rules', 'opt_in_rules', 'analyzer_rules', 'excluded']);
+
+    private parseConfigFileContent(content: string): Pick<SwiftLintConfig, 'disabledRules' | 'optInRules' | 'analyzerRules' | 'excludedPaths' | 'ruleConfigs'> {
+        const disabledRules: string[] = [];
+        const optInRules: string[] = [];
+        const analyzerRules: string[] = [];
+        const excludedPaths: string[] = [];
+        const ruleConfigs: Record<string, Record<string, string>> = {};
+        let currentSection: string | null = null;
+
+        for (const line of content.split('\n')) {
+            if (line.startsWith('#') || line.trim() === '') { continue; }
+
+            const sectionMatch = /^([a-z_][a-z_0-9]*):\s*$/.exec(line);
+            if (sectionMatch) {
+                currentSection = sectionMatch[1];
+                continue;
+            }
+            if (!currentSection) { continue; }
+
+            const listMatch = /^\s+-\s+(.+)$/.exec(line);
+            if (listMatch && SwiftLintProvider.KNOWN_SECTIONS.has(currentSection)) {
+                const value = listMatch[1].trim();
+                switch (currentSection) {
+                    case 'disabled_rules': disabledRules.push(value); break;
+                    case 'opt_in_rules': optInRules.push(value); break;
+                    case 'analyzer_rules': analyzerRules.push(value); break;
+                    case 'excluded': excludedPaths.push(value); break;
+                }
+                continue;
+            }
+
+            const mapMatch = /^\s+(\w+):\s+(.+)$/.exec(line);
+            if (mapMatch && !SwiftLintProvider.KNOWN_SECTIONS.has(currentSection)) {
+                if (!ruleConfigs[currentSection]) { ruleConfigs[currentSection] = {}; }
+                ruleConfigs[currentSection][mapMatch[1]] = mapMatch[2].trim();
+            }
+        }
+
+        return { disabledRules, optInRules, analyzerRules, excludedPaths, ruleConfigs };
+    }
+
+    private async syncFromConfigFile(): Promise<void> {
+        if (this._writingConfigFile) { return; }
+
+        try {
+            const content = await fs.promises.readFile(this.getConfigFilePath(), 'utf8');
+            const parsed = this.parseConfigFileContent(content);
+            const current = this.getConfig();
+
+            const same = JSON.stringify(current.disabledRules) === JSON.stringify(parsed.disabledRules)
+                && JSON.stringify(current.optInRules) === JSON.stringify(parsed.optInRules)
+                && JSON.stringify(current.analyzerRules) === JSON.stringify(parsed.analyzerRules)
+                && JSON.stringify(current.excludedPaths) === JSON.stringify(parsed.excludedPaths)
+                && JSON.stringify(current.ruleConfigs) === JSON.stringify(parsed.ruleConfigs);
+            if (same) { return; }
+
+            await this.workspaceState.update('swiftLintConfig', { ...current, ...parsed });
+            this.log('[swiftlint] config synced from .swiftlint.yml');
+            this.lintOpenDocuments();
+            this._onDidSyncConfig.fire();
+        } catch { /* file may not exist or be invalid */ }
     }
 
     dispose(): void {
