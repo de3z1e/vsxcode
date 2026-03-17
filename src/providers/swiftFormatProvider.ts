@@ -280,9 +280,9 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         }
 
         const updatedConfig = this.getConfig();
-        if (!updatedConfig.enabled) {
+        if (!updatedConfig.enabled || !updatedConfig.lintMode) {
             this.diagnosticCollection.clear();
-        } else if (updatedConfig.lintMode) {
+        } else {
             this.lintOpenDocuments();
         }
     }
