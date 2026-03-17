@@ -15,7 +15,7 @@ export interface OverlapPair {
 export interface UnifiedRule {
     displayName: string;
     category: UnifiedCategory;
-    tool: 'swift-format' | 'swiftlint' | 'overlap';
+    tool: 'swift-format' | 'swiftlint';
     sfRule?: {
         identifier: string;
         isDefault: boolean;
@@ -29,11 +29,6 @@ export interface UnifiedRule {
         kind: string;
         enabled: boolean;
         hasConfig: boolean;
-    };
-    overlap?: {
-        activeHandler: 'swift-format' | 'swiftlint' | 'both';
-        sfIsFormat: boolean;
-        slCorrectable: boolean;
     };
 }
 
@@ -194,11 +189,23 @@ function mapSlKindToCategory(rule: SwiftLintRule): UnifiedCategory {
     }
 }
 
-// ── Correctable overlap SF rules (auto-disabled, SL handles these) ──
+// ── Overlap resolution sets ─────────────────────────────────────
 
-/** SF rule identifiers whose SL counterpart is correctable — shown as SL-only */
-export const CORRECTABLE_OVERLAP_SF_RULES = new Set(
-    OVERLAP_PAIRS.filter((p) => p.slCorrectable).map((p) => p.sfRule),
+/**
+ * All overlaps are hard-resolved — no user handler selection needed.
+ * - SL correctable → SL handles it (SF rule auto-disabled)
+ * - SF fixable + SL not correctable → SF handles it (SL rule auto-disabled)
+ * - Both lint-only → SL handles it (richer config / severity)
+ */
+
+/** SF rule IDs that should be auto-disabled (SL correctable OR both lint-only) */
+export const AUTO_DISABLE_SF_RULES = new Set(
+    OVERLAP_PAIRS.filter((p) => p.slCorrectable || !p.sfIsFormat).map((p) => p.sfRule),
+);
+
+/** SL rule IDs that should be auto-disabled (SF fixable + SL not correctable) */
+export const AUTO_DISABLE_SL_RULES = new Set(
+    OVERLAP_PAIRS.filter((p) => p.sfIsFormat && !p.slCorrectable).flatMap((p) => Array.isArray(p.slRule) ? p.slRule : [p.slRule]),
 );
 
 // ── Build unified rules ─────────────────────────────────────────
@@ -208,13 +215,12 @@ export function buildUnifiedRules(
     sfConfig: SwiftFormatConfig,
     slRules: SwiftLintRule[] | null,
     slConfig: SwiftLintConfig,
-    overlapPrefs: Record<string, 'swift-format' | 'swiftlint' | 'both'>,
 ): UnifiedRule[] {
     const result: UnifiedRule[] = [];
     const consumedSf = new Set<string>();
     const consumedSl = new Set<string>();
 
-    // 1. Process overlaps
+    // 1. Process overlaps — each pair is hard-resolved to one tool
     for (const pair of OVERLAP_PAIRS) {
         const sfRule = sfRules?.find((r) => r.identifier === pair.sfRule);
         const slRuleIds = Array.isArray(pair.slRule) ? pair.slRule : [pair.slRule];
@@ -225,8 +231,23 @@ export function buildUnifiedRules(
         consumedSf.add(pair.sfRule);
         for (const id of slRuleIds) { consumedSl.add(id); }
 
-        // Correctable overlaps: SF side is auto-disabled, show SL rule only
-        if (pair.slCorrectable && slRuleObjs.length > 0) {
+        if (pair.sfIsFormat && !pair.slCorrectable) {
+            // SF can auto-fix, SL cannot → show as SF-only
+            if (sfRule) {
+                result.push({
+                    displayName: humanReadableName(sfRule.identifier),
+                    category: SF_RULE_CATEGORIES[sfRule.identifier] || 'style',
+                    tool: 'swift-format',
+                    sfRule: {
+                        identifier: sfRule.identifier,
+                        isDefault: sfRule.isDefault,
+                        effectiveEnabled: computeSfEnabled(sfRule, sfConfig),
+                        isFormatRule: true,
+                    },
+                });
+            }
+        } else {
+            // SL correctable OR both lint-only → show as SL-only
             for (const slRule of slRuleObjs) {
                 result.push({
                     displayName: humanReadableName(slRule.identifier),
@@ -242,32 +263,7 @@ export function buildUnifiedRules(
                     },
                 });
             }
-            continue;
         }
-
-        // Non-correctable overlaps: show as overlap with handler selection
-        const handler = overlapPrefs[pair.sfRule] || pair.defaultHandler;
-
-        result.push({
-            displayName: humanReadableName(pair.sfRule),
-            category: SF_RULE_CATEGORIES[pair.sfRule] || 'style',
-            tool: 'overlap',
-            sfRule: sfRule ? {
-                identifier: sfRule.identifier,
-                isDefault: sfRule.isDefault,
-                effectiveEnabled: computeSfEnabled(sfRule, sfConfig),
-                isFormatRule: pair.sfIsFormat,
-            } : undefined,
-            slRule: slRuleObjs[0] ? {
-                identifier: slRuleObjs[0].identifier,
-                optIn: slRuleObjs[0].optIn,
-                correctable: slRuleObjs[0].correctable,
-                kind: slRuleObjs[0].kind,
-                enabled: computeSlEnabled(slRuleObjs[0], slConfig),
-                hasConfig: !!slConfig.ruleConfigs[slRuleObjs[0].identifier],
-            } : undefined,
-            overlap: { activeHandler: handler, sfIsFormat: pair.sfIsFormat, slCorrectable: pair.slCorrectable },
-        });
     }
 
     // 2. Remaining swift-format rules

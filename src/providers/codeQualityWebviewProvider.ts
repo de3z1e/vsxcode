@@ -5,7 +5,7 @@ import { execFile as execFileCallback } from 'child_process';
 import type { SwiftFormatConfig, SwiftFormatRule, SwiftLintConfig, SwiftLintRule } from '../types/interfaces';
 import { SwiftFormatProvider } from './swiftFormatProvider';
 import { SwiftLintProvider, fetchRuleDefaultConfig, type RuleDefaultConfig } from './swiftLintProvider';
-import { buildUnifiedRules, OVERLAP_PAIRS, CORRECTABLE_OVERLAP_SF_RULES, CATEGORY_ORDER, CATEGORY_LABELS, getSettingsOverlaps, humanReadableName, SF_FORMAT_RULES, type UnifiedRule, type UnifiedCategory, type SettingsOverlap } from '../types/ruleMapping';
+import { buildUnifiedRules, AUTO_DISABLE_SF_RULES, AUTO_DISABLE_SL_RULES, CATEGORY_ORDER, CATEGORY_LABELS, getSettingsOverlaps, SF_FORMAT_RULES, type UnifiedRule, type UnifiedCategory, type SettingsOverlap } from '../types/ruleMapping';
 
 const execFile = promisify(execFileCallback);
 
@@ -37,9 +37,8 @@ interface WebviewState {
     analyzerRules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
     // Save
     autoFixOnSave: boolean;
-    // Overlaps
+    // Settings overlaps (line length, trailing commas, file-scoped privacy)
     settingsOverlaps: SettingsOverlap[];
-    activeOverlapCount: number;
     // Excluded paths
     excludedPaths: string[];
 }
@@ -80,9 +79,8 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
         const slConfig = this.swiftLintProvider.getConfig();
         const sfRules = this.swiftFormatProvider.getRules();
         const slRules = this.swiftLintProvider.getRules();
-        const overlapPrefs = this.workspaceState.get<Record<string, 'swift-format' | 'swiftlint' | 'both'>>('codeQualityOverlapPrefs') || {};
 
-        const unifiedRules = buildUnifiedRules(sfRules, sfConfig, slRules, slConfig, overlapPrefs);
+        const unifiedRules = buildUnifiedRules(sfRules, sfConfig, slRules, slConfig);
 
         // Analyzer rules (separate from unified)
         let analyzerRules: WebviewState['analyzerRules'] = null;
@@ -95,18 +93,8 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             });
         }
 
-        // Settings overlaps
+        // Settings overlaps (line length, trailing commas, file-scoped privacy)
         const settingsOverlaps = getSettingsOverlaps(sfConfig, slConfig, slRules);
-
-        // Active overlap count: overlaps where both tools have the rule enabled
-        let activeOverlapCount = 0;
-        for (const rule of unifiedRules) {
-            if (rule.tool === 'overlap' && rule.sfRule && rule.slRule) {
-                if (rule.sfRule.effectiveEnabled && rule.slRule.enabled) {
-                    activeOverlapCount++;
-                }
-            }
-        }
 
         // Profile mode (read from swift-format provider — both should be in sync)
         const profileMode = this.swiftFormatProvider.getProfileMode();
@@ -134,7 +122,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             unifiedRules,
             analyzerRules,
             settingsOverlaps,
-            activeOverlapCount,
             excludedPaths: slConfig.excludedPaths,
         };
     }
@@ -155,7 +142,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
         switch (msg.type) {
             case 'ready':
                 this.log('[code-quality] webview ready');
-                await this.ensureCorrectableOverlapsSfDisabled();
+                await this.ensureOverlapRulesResolved();
                 this.postState();
                 if (this.brewAvailable === null) {
                     try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
@@ -634,155 +621,61 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 break;
             }
 
-            // ── Overlap handling ─────────────────────────────
-
-            case 'changeOverlapHandler': {
-                const sfRule = msg.sfRule as string;
-                const handler = msg.handler as 'swift-format' | 'swiftlint' | 'both';
-                const prefs = this.workspaceState.get<Record<string, string>>('codeQualityOverlapPrefs') || {};
-                prefs[sfRule] = handler;
-                await this.workspaceState.update('codeQualityOverlapPrefs', prefs);
-
-                // Find the overlap pair to get the SL rule ID(s)
-                const pair = OVERLAP_PAIRS.find((p) => p.sfRule === sfRule);
-                if (pair) {
-                    const slRuleIds = Array.isArray(pair.slRule) ? pair.slRule : [pair.slRule];
-
-                    if (handler === 'swift-format') {
-                        // Ensure SF rule is enabled
-                        await this.ensureSfRuleEnabled(sfRule, true);
-                        // Disable SL rule(s)
-                        for (const slId of slRuleIds) {
-                            await this.ensureSlRuleEnabled(slId, false);
-                        }
-                    } else if (handler === 'swiftlint') {
-                        // Disable SF rule
-                        await this.ensureSfRuleEnabled(sfRule, false);
-                        // Ensure SL rule(s) enabled
-                        for (const slId of slRuleIds) {
-                            await this.ensureSlRuleEnabled(slId, true);
-                        }
-                    } else {
-                        // 'both' — enable both sides
-                        await this.ensureSfRuleEnabled(sfRule, true);
-                        for (const slId of slRuleIds) {
-                            await this.ensureSlRuleEnabled(slId, true);
-                        }
-                    }
-                }
-
-                this.postState();
-                break;
-            }
-
-            case 'autoResolveOverlaps': {
-                const prefs = this.workspaceState.get<Record<string, string>>('codeQualityOverlapPrefs') || {};
-                let resolved = 0;
-
-                // Only resolve non-correctable overlaps (correctable ones are auto-handled as SL-only)
-                for (const pair of OVERLAP_PAIRS) {
-                    if (pair.slCorrectable) { continue; }
-                    const handler = pair.defaultHandler;
-                    prefs[pair.sfRule] = handler;
-                    const slRuleIds = Array.isArray(pair.slRule) ? pair.slRule : [pair.slRule];
-
-                    if (handler === 'swift-format') {
-                        await this.ensureSfRuleEnabled(pair.sfRule, true);
-                        for (const slId of slRuleIds) {
-                            await this.ensureSlRuleEnabled(slId, false);
-                        }
-                    } else {
-                        await this.ensureSfRuleEnabled(pair.sfRule, false);
-                        for (const slId of slRuleIds) {
-                            await this.ensureSlRuleEnabled(slId, true);
-                        }
-                    }
-                    resolved++;
-                }
-
-                await this.workspaceState.update('codeQualityOverlapPrefs', prefs);
-                this.postState();
-                vscode.window.showInformationMessage(`Auto-resolved ${resolved} overlap${resolved === 1 ? '' : 's'} using recommended defaults.`);
-                break;
-            }
         }
     }
 
-    // ── Rule enable/disable helpers ──────────────────────────
+    // ── Overlap auto-resolution ─────────────────────────────
 
-    private async ensureSfRuleEnabled(ruleId: string, enabled: boolean): Promise<void> {
-        const config = this.swiftFormatProvider.getConfig();
-        const rules = this.swiftFormatProvider.getRules() || [];
-        const rule = rules.find((r) => r.identifier === ruleId);
-        if (!rule) { return; }
-
-        const disabledRules = config.disabledRules.filter((r) => r !== ruleId);
-        const enabledRules = config.enabledRules.filter((r) => r !== ruleId);
-
-        if (enabled) {
-            // To enable: if default-on, just remove from disabled; if opt-in, add to enabled
-            if (!rule.isDefault) { enabledRules.push(ruleId); }
-        } else {
-            // To disable: if default-on, add to disabled; if opt-in, just remove from enabled
-            if (rule.isDefault) { disabledRules.push(ruleId); }
-        }
-
-        await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
-    }
-
-    private async ensureSlRuleEnabled(ruleId: string, enabled: boolean): Promise<void> {
-        const config = this.swiftLintProvider.getConfig();
-        const rules = this.swiftLintProvider.getRules() || [];
-        const rule = rules.find((r) => r.identifier === ruleId);
-        if (!rule) { return; }
-
-        const disabledRules = config.disabledRules.filter((r) => r !== ruleId);
-        const optInRules = config.optInRules.filter((r) => r !== ruleId);
-
-        if (enabled) {
-            // To enable: if opt-in, add to optInRules; if default, just remove from disabled
-            if (rule.optIn) { optInRules.push(ruleId); }
-        } else {
-            // To disable: if default-on, add to disabled; if opt-in, just remove from optIn
-            if (!rule.optIn) { disabledRules.push(ruleId); }
-        }
-
-        await this.swiftLintProvider.updateConfig({ disabledRules, optInRules });
-    }
-
-    /** Disable SF rules whose SL counterpart is correctable — SL handles these */
-    private async ensureCorrectableOverlapsSfDisabled(): Promise<void> {
+    /** Disable the losing side of each overlap pair so only the best tool handles each rule */
+    private async ensureOverlapRulesResolved(): Promise<void> {
+        // Disable SF rules that SL should handle
         const sfRules = this.swiftFormatProvider.getRules();
-        if (!sfRules) { return; }
-        const sfConfig = this.swiftFormatProvider.getConfig();
-        let changed = false;
-        const disabledRules = [...sfConfig.disabledRules];
-        const enabledRules = [...sfConfig.enabledRules];
+        if (sfRules) {
+            const sfConfig = this.swiftFormatProvider.getConfig();
+            let sfChanged = false;
+            const sfDisabled = [...sfConfig.disabledRules];
+            const sfEnabled = [...sfConfig.enabledRules];
 
-        for (const sfRuleId of CORRECTABLE_OVERLAP_SF_RULES) {
-            const rule = sfRules.find((r) => r.identifier === sfRuleId);
-            if (!rule) { continue; }
-
-            // Check if currently enabled
-            const isDisabled = disabledRules.includes(sfRuleId);
-            const isEnabled = enabledRules.includes(sfRuleId);
-            const effectiveEnabled = (rule.isDefault && !isDisabled) || isEnabled;
-            if (!effectiveEnabled) { continue; }
-
-            // Disable it
-            if (rule.isDefault && !isDisabled) {
-                disabledRules.push(sfRuleId);
-                changed = true;
+            for (const sfRuleId of AUTO_DISABLE_SF_RULES) {
+                const rule = sfRules.find((r) => r.identifier === sfRuleId);
+                if (!rule) { continue; }
+                const isDisabled = sfDisabled.includes(sfRuleId);
+                const isEnabled = sfEnabled.includes(sfRuleId);
+                const on = (rule.isDefault && !isDisabled) || isEnabled;
+                if (!on) { continue; }
+                if (rule.isDefault && !isDisabled) { sfDisabled.push(sfRuleId); sfChanged = true; }
+                if (isEnabled) { const idx = sfEnabled.indexOf(sfRuleId); if (idx >= 0) { sfEnabled.splice(idx, 1); sfChanged = true; } }
             }
-            if (isEnabled) {
-                const idx = enabledRules.indexOf(sfRuleId);
-                if (idx >= 0) { enabledRules.splice(idx, 1); changed = true; }
+
+            if (sfChanged) {
+                await this.swiftFormatProvider.updateConfig({ disabledRules: sfDisabled, enabledRules: sfEnabled });
+                this.log('[code-quality] auto-disabled SF overlap rules');
             }
         }
 
-        if (changed) {
-            await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
-            this.log('[code-quality] auto-disabled SF rules for correctable overlaps');
+        // Disable SL rules that SF should handle
+        const slRules = this.swiftLintProvider.getRules();
+        if (slRules) {
+            const slConfig = this.swiftLintProvider.getConfig();
+            let slChanged = false;
+            const slDisabled = [...slConfig.disabledRules];
+            const slOptIn = [...slConfig.optInRules];
+
+            for (const slRuleId of AUTO_DISABLE_SL_RULES) {
+                const rule = slRules.find((r) => r.identifier === slRuleId);
+                if (!rule) { continue; }
+                const isDisabled = slDisabled.includes(slRuleId);
+                const isOptedIn = slOptIn.includes(slRuleId);
+                const on = (!rule.optIn && !isDisabled) || isOptedIn;
+                if (!on) { continue; }
+                if (!rule.optIn && !isDisabled) { slDisabled.push(slRuleId); slChanged = true; }
+                if (isOptedIn) { const idx = slOptIn.indexOf(slRuleId); if (idx >= 0) { slOptIn.splice(idx, 1); slChanged = true; } }
+            }
+
+            if (slChanged) {
+                await this.swiftLintProvider.updateConfig({ disabledRules: slDisabled, optInRules: slOptIn });
+                this.log('[code-quality] auto-disabled SL overlap rules');
+            }
         }
     }
 
@@ -899,16 +792,7 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .tool-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.3px;padding:0 4px;border-radius:3px;line-height:16px;vertical-align:middle;opacity:.6;border:1px solid rgba(128,128,128,.3);white-space:nowrap;flex-shrink:0}
 .tool-badge.sf{color:var(--vscode-charts-blue,#4fc1ff);border-color:var(--vscode-charts-blue,#4fc1ff40)}
 .tool-badge.sl{color:var(--vscode-charts-orange,#cca700);border-color:var(--vscode-charts-orange,#cca70040)}
-.overlap-indicator{display:inline-flex;gap:2px;flex-shrink:0}
-.overlap-detail{padding:4px 14px 8px 50px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.1));font-size:11px}
-.overlap-detail .od-row{display:flex;align-items:center;gap:6px;margin-bottom:3px}
-.overlap-detail .od-label{opacity:.6;min-width:50px}
-.overlap-detail .od-value{opacity:.8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.overlap-detail select{font-size:11px;padding:1px 4px}
 .conflict-badge{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;font-size:10px;font-weight:bold;color:var(--vscode-errorForeground,#f48771);opacity:.7;margin-left:4px;cursor:help;vertical-align:middle;flex-shrink:0}
-.overlap-banner{padding:8px 14px;font-size:11px;background:var(--vscode-inputValidation-warningBackground,rgba(255,204,0,.1));border-bottom:1px solid var(--vscode-inputValidation-warningBorder,rgba(255,204,0,.3))}
-.overlap-banner button{margin-left:8px;padding:1px 8px;font-size:10px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.8}
-.overlap-banner button:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
 .analyzer-note{padding:2px 14px 6px;font-size:11px;opacity:.45;font-style:italic}
 .hidden{display:none!important}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
@@ -933,7 +817,7 @@ let state = null;
 const groupCollapsed = {};
 let savedSearch = '';
 let openConfigRuleId = null;
-let openOverlapSfRule = null;
+
 
 window.addEventListener('message', e => {
   const msg = e.data;
@@ -1173,21 +1057,12 @@ function render() {
     for (const r of rules) {
       if (r.tool === 'swift-format' && r.sfRule && r.sfRule.effectiveEnabled) enabledCount++;
       else if (r.tool === 'swiftlint' && r.slRule && r.slRule.enabled) enabledCount++;
-      else if (r.tool === 'overlap') {
-        if (r.sfRule && r.sfRule.effectiveEnabled) enabledCount++;
-        if (r.slRule && r.slRule.enabled && !(r.sfRule && r.sfRule.effectiveEnabled && r.overlap && r.overlap.activeHandler !== 'both')) enabledCount++;
-      }
     }
     for (const r of aRules) { if (r.enabled) enabledCount++; }
     const totalCount = rules.length + aRules.length;
 
     h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + totalCount + '</span></div>';
     h += '<div class="search-wrap" id="search-wrap"><input type="text" class="search" id="rules-search" placeholder="Filter rules..."><button class="search-clear" id="search-clear" title="Clear"><svg viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/></svg></button></div>';
-
-    // Overlap banner
-    if (state.activeOverlapCount > 0) {
-      h += '<div class="overlap-banner">' + state.activeOverlapCount + ' rule' + (state.activeOverlapCount === 1 ? '' : 's') + ' handled by both tools <button id="auto-resolve-btn">Auto-resolve</button></div>';
-    }
 
     // Categories
     const cats = ${JSON.stringify(CATEGORY_ORDER.filter((c) => c !== 'analyzer'))};
@@ -1255,10 +1130,6 @@ function render() {
       vscode.postMessage({ type: 'fetchRuleConfig', ruleId: openConfigRuleId });
     }
   }
-  if (openOverlapSfRule) {
-    const detail = document.querySelector('[data-overlap-detail="' + openOverlapSfRule + '"]');
-    if (detail) { detail.classList.remove('hidden'); }
-  }
 }
 
 // ── Unified rule row ──────────────────────────────────────
@@ -1266,7 +1137,6 @@ function render() {
 function unifiedRuleRow(r) {
   const isSf = r.tool === 'swift-format';
   const isSl = r.tool === 'swiftlint';
-  const isOv = r.tool === 'overlap';
 
   let enabled = false;
   let ruleId = '';
@@ -1290,36 +1160,10 @@ function unifiedRuleRow(r) {
     showGear = true;
     gearRuleId = r.slRule.identifier;
     gearClass = r.slRule.hasConfig ? ' active' : '';
-  } else if (isOv) {
-    // Overlap: show the primary tool's toggle state
-    if (r.overlap) {
-      const handler = r.overlap.activeHandler;
-      if (handler === 'swift-format' || handler === 'both') {
-        enabled = r.sfRule ? r.sfRule.effectiveEnabled : false;
-      } else {
-        enabled = r.slRule ? r.slRule.enabled : false;
-      }
-    }
-    ruleId = r.sfRule ? r.sfRule.identifier : (r.slRule ? r.slRule.identifier : '');
-    // Modified if either side is non-default
-    if (r.sfRule) {
-      const sfMod = r.sfRule.isDefault ? !r.sfRule.effectiveEnabled : r.sfRule.effectiveEnabled;
-      if (sfMod) modified = true;
-    }
-    if (r.slRule) {
-      const slMod = r.slRule.optIn ? r.slRule.enabled : !r.slRule.enabled;
-      if (slMod || r.slRule.hasConfig) modified = true;
-    }
-    if (r.slRule && r.slRule.correctable) tags.push('fixable');
-    if (r.slRule) {
-      showGear = true;
-      gearRuleId = r.slRule.identifier;
-      gearClass = r.slRule.hasConfig ? ' active' : '';
-    }
   }
 
   // Tool type data attribute for toggle routing
-  const toolAttr = isSf ? 'data-sf-rule="' + esc(ruleId) + '"' : isSl ? 'data-sl-rule="' + esc(ruleId) + '"' : 'data-overlap-rule="' + esc(r.sfRule ? r.sfRule.identifier : '') + '"';
+  const toolAttr = isSf ? 'data-sf-rule="' + esc(ruleId) + '"' : 'data-sl-rule="' + esc(ruleId) + '"';
 
   const desc = r.sfRule ? ruleDescs[r.sfRule.identifier] : '';
   const defaultLabel = isSf ? (r.sfRule && r.sfRule.isDefault ? 'Enabled' : 'Disabled') : (isSl ? (r.slRule && !r.slRule.optIn ? 'Enabled' : 'Disabled') : '');
@@ -1332,12 +1176,7 @@ function unifiedRuleRow(r) {
   if (tags.length) row += '<span class="rule-tags">' + tags.join(', ') + '</span>';
 
   // Tool badges
-  if (isOv) {
-    row += '<span class="overlap-indicator">';
-    row += '<span class="tool-badge sf">SF</span>';
-    row += '<span class="tool-badge sl">SL</span>';
-    row += '</span>';
-  } else if (isSf) {
+  if (isSf) {
     row += '<span class="tool-badge sf">SF</span>';
   } else if (isSl) {
     row += '<span class="tool-badge sl">SL</span>';
@@ -1347,21 +1186,6 @@ function unifiedRuleRow(r) {
     row += '<button class="gear-btn' + gearClass + '" data-gear="' + esc(gearRuleId) + '" title="Configure">\\u2699</button>';
   }
   row += '</div>';
-
-  // Overlap detail (hidden by default)
-  if (isOv) {
-    const detailHidden = openOverlapSfRule === (r.sfRule ? r.sfRule.identifier : '') ? '' : ' hidden';
-    row += '<div class="overlap-detail' + detailHidden + '" data-overlap-detail="' + esc(r.sfRule ? r.sfRule.identifier : '') + '">';
-    row += '<div class="od-row"><span class="od-label">SF:</span><span class="od-value">' + esc(r.sfRule ? r.sfRule.identifier : 'N/A') + (r.sfRule ? (r.sfRule.effectiveEnabled ? ' (on)' : ' (off)') : '') + '</span></div>';
-    row += '<div class="od-row"><span class="od-label">SL:</span><span class="od-value">' + esc(r.slRule ? r.slRule.identifier : 'N/A') + (r.slRule ? (r.slRule.enabled ? ' (on)' : ' (off)') : '') + '</span></div>';
-    row += '<div class="od-row"><span class="od-label">Handle:</span><select data-overlap-handler="' + esc(r.sfRule ? r.sfRule.identifier : '') + '">';
-    const handler = r.overlap ? r.overlap.activeHandler : 'both';
-    row += '<option value="swift-format"' + (handler === 'swift-format' ? ' selected' : '') + '>swift-format</option>';
-    row += '<option value="swiftlint"' + (handler === 'swiftlint' ? ' selected' : '') + '>SwiftLint</option>';
-    row += '<option value="both"' + (handler === 'both' ? ' selected' : '') + '>Both</option>';
-    row += '</select></div>';
-    row += '</div>';
-  }
 
   // SL rule config panel (hidden)
   if (showGear) {
@@ -1534,22 +1358,6 @@ function bind() {
     cb.addEventListener('change', e => vscode.postMessage({ type: 'toggleSlRule', ruleId: e.target.dataset.slRule, enabled: e.target.checked }));
   });
 
-  // Rule toggles (overlap — routes to the active handler's toggle)
-  document.querySelectorAll('input[data-overlap-rule]').forEach(cb => {
-    cb.addEventListener('change', e => {
-      const sfId = e.target.dataset.overlapRule;
-      const rule = (state?.unifiedRules || []).find(r => r.sfRule && r.sfRule.identifier === sfId);
-      if (!rule || !rule.overlap) return;
-      const handler = rule.overlap.activeHandler;
-      if (handler === 'swift-format' || handler === 'both') {
-        vscode.postMessage({ type: 'toggleSfRule', ruleId: sfId, enabled: e.target.checked });
-      }
-      if ((handler === 'swiftlint' || handler === 'both') && rule.slRule) {
-        vscode.postMessage({ type: 'toggleSlRule', ruleId: rule.slRule.identifier, enabled: e.target.checked });
-      }
-    });
-  });
-
   // Analyzer rule toggles
   document.querySelectorAll('input[data-analyzer-rule]').forEach(cb => {
     cb.addEventListener('change', e => vscode.postMessage({ type: 'toggleAnalyzerRule', ruleId: e.target.dataset.analyzerRule, enabled: e.target.checked }));
@@ -1606,43 +1414,14 @@ function bind() {
     btn.addEventListener('click', (e) => { e.stopPropagation(); toggleRuleConfig(btn.dataset.gear); });
   });
 
-  // Click on rule row to open config (SL rules) or overlap detail (overlap rules)
+  // Click on rule row to open config
   document.querySelectorAll('.rule-row').forEach(row => {
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.switch') || e.target.closest('.gear-btn') || e.target.closest('.overlap-indicator')) return;
-      // Check if this is an overlap rule
-      const overlapInput = row.querySelector('input[data-overlap-rule]');
-      if (overlapInput) {
-        const sfId = overlapInput.dataset.overlapRule;
-        toggleOverlapDetail(sfId);
-        return;
-      }
-      // Otherwise try gear config
+      if (e.target.closest('.switch') || e.target.closest('.gear-btn')) return;
       const gear = row.querySelector('.gear-btn');
       if (gear) { toggleRuleConfig(gear.dataset.gear); }
     });
   });
-
-  // Overlap detail toggle via badges
-  document.querySelectorAll('.overlap-indicator').forEach(ind => {
-    ind.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const row = ind.closest('.rule-row');
-      const overlapInput = row?.querySelector('input[data-overlap-rule]');
-      if (overlapInput) { toggleOverlapDetail(overlapInput.dataset.overlapRule); }
-    });
-  });
-
-  // Overlap handler selectors
-  document.querySelectorAll('select[data-overlap-handler]').forEach(sel => {
-    sel.addEventListener('click', (e) => e.stopPropagation());
-    sel.addEventListener('change', e => {
-      vscode.postMessage({ type: 'changeOverlapHandler', sfRule: e.target.dataset.overlapHandler, handler: e.target.value });
-    });
-  });
-
-  // Auto-resolve
-  document.getElementById('auto-resolve-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'autoResolveOverlaps' }));
 
   // Reset all
   document.getElementById('reset-all-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetAllRules' }));
@@ -1653,22 +1432,6 @@ function bind() {
   });
   document.getElementById('add-path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'addExcludedPath' }));
   document.getElementById('add-folder-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'addExcludedFolder' }));
-}
-
-// ── Overlap detail toggle ─────────────────────────────────
-
-function toggleOverlapDetail(sfRule) {
-  const detail = document.querySelector('[data-overlap-detail="' + sfRule + '"]');
-  if (!detail) return;
-  if (detail.classList.contains('hidden')) {
-    // Close any other open detail
-    document.querySelectorAll('.overlap-detail:not(.hidden)').forEach(d => d.classList.add('hidden'));
-    detail.classList.remove('hidden');
-    openOverlapSfRule = sfRule;
-  } else {
-    detail.classList.add('hidden');
-    openOverlapSfRule = null;
-  }
 }
 
 // ── Rule config panel ─────────────────────────────────────
