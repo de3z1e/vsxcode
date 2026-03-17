@@ -489,6 +489,12 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .add-btns{display:flex;gap:6px;padding:6px 14px}
 .add-btns button{padding:2px 8px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
 .add-btns button:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
+.info-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle}
+.info-btn{background:none;border:none;cursor:pointer;opacity:.3;padding:0;margin-left:6px;line-height:1;display:inline-flex;align-items:center;vertical-align:middle}
+.info-btn:hover{opacity:.7}
+.info-btn svg{width:12px;height:12px;fill:var(--vscode-foreground)}
+.info-tip{display:none;position:absolute;left:0;top:calc(100% + 4px);background:var(--vscode-editorHoverWidget-background,var(--vscode-editor-background));border:1px solid var(--vscode-editorHoverWidget-border,var(--vscode-widget-border,rgba(128,128,128,.4)));border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.4;white-space:normal;width:200px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.info-wrap.open .info-tip{display:block}
 .update-row{padding:4px 14px 0;font-size:11px;opacity:.6}
 .update-btn{padding:1px 6px;font-size:10px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.8;margin-left:4px}
 .update-btn:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
@@ -579,13 +585,13 @@ function render() {
   // toggles + severity
   h += '<div class="section">';
   h += toggleRow('Enabled', 'toggle-enabled', c.enabled);
-  h += toggleRow('Fix on Save', 'toggle-fixOnSave', c.fixOnSave);
-  h += '<div class="row"><span>Severity</span><select id="severity-select" title="Normal: warnings stay warnings, errors stay errors.\\nStrict: all violations become errors.\\nLenient: all violations become warnings.">';
+  h += toggleRow('Fix on Save', 'toggle-fixOnSave', c.fixOnSave, 'Auto-corrects fixable rule violations when saving a Swift file. Only rules marked as fixable can be corrected.');
+  h += '<div class="row"><span>Severity' + infoIcon('<b>Normal</b>: warnings stay warnings, errors stay errors.<br><b>Strict</b>: all violations become errors.<br><b>Lenient</b>: all violations become warnings.') + '</span><select id="severity-select">';
   for (const v of ['normal','strict','lenient']) {
     h += '<option value="' + v + '"' + (c.severity === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
   }
   h += '</select></div>';
-  h += '<div class="row"><span>Profile</span><select id="profile-select" title="Local: rules are specific to this project.\\nGlobal: rules are shared across all projects.">';
+  h += '<div class="row"><span>Profile' + infoIcon('<b>Global</b>: rules are shared across all projects.<br><b>Local</b>: rules are specific to this project.<br>Excluded paths are always per-project.') + '</span><select id="profile-select">';
   h += '<option value="global"' + (state.profileMode === 'global' ? ' selected' : '') + '>Global</option>';
   h += '<option value="local"' + (state.profileMode === 'local' ? ' selected' : '') + '>Local</option>';
   h += '</select></div></div>';
@@ -674,8 +680,12 @@ function render() {
   }
 }
 
-function toggleRow(label, id, checked) {
-  return '<div class="row"><span>' + label + '</span><label class="switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="slider"></span></label></div>';
+function toggleRow(label, id, checked, info) {
+  return '<div class="row"><span>' + label + (info ? infoIcon(info) : '') + '</span><label class="switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="slider"></span></label></div>';
+}
+
+function infoIcon(text) {
+  return '<span class="info-wrap"><button class="info-btn" data-info><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 12.6A5.6 5.6 0 1 1 8 2.4a5.6 5.6 0 0 1 0 11.2zM7.4 5h1.2V3.8H7.4V5zm0 7.2h1.2V6.2H7.4v6z"/></svg></button><span class="info-tip">' + text + '</span></span>';
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -708,6 +718,17 @@ function applySearch() {
 }
 
 function bind() {
+  document.querySelectorAll('.info-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const wrap = btn.closest('.info-wrap');
+      const wasOpen = wrap?.classList.contains('open');
+      document.querySelectorAll('.info-wrap.open').forEach(w => w.classList.remove('open'));
+      if (!wasOpen) { wrap?.classList.add('open'); }
+    });
+  });
+  document.addEventListener('click', () => document.querySelectorAll('.info-wrap.open').forEach(w => w.classList.remove('open')));
+
   document.getElementById('path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
   document.getElementById('gh-link')?.addEventListener('click', e => { e.stopPropagation(); vscode.postMessage({ type: 'openInstallGuide' }); });
   document.getElementById('update-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'updateSwiftLint' }));
