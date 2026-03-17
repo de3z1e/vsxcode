@@ -217,6 +217,7 @@ export function buildPackageSwift({
     defaultLocalization: "${defaultLocalization}",` : '';
     return `// swift-tools-version: ${swiftVersion}
 // The swift-tools-version declares the minimum version of Swift required to build this package.
+// Managed by VSXcode — changes will be overwritten
 
 import PackageDescription
 
