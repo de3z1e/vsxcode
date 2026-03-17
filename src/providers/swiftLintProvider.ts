@@ -277,8 +277,20 @@ export class SwiftLintProvider implements vscode.Disposable {
     getLatestVersion(): string | null { return this.latestVersion; }
     isPathResolved(): boolean { return this._pathResolved; }
 
-    async checkForUpdate(): Promise<void> {
+    private static readonly UPDATE_CHECK_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+    async checkForUpdate(force = false): Promise<void> {
         if (!this.resolvedVersion) { return; }
+
+        if (!force) {
+            const lastCheck = this.workspaceState.get<number>('swiftLintLastUpdateCheck', 0);
+            const cached = this.workspaceState.get<string>('swiftLintLatestVersion');
+            if (Date.now() - lastCheck < SwiftLintProvider.UPDATE_CHECK_COOLDOWN_MS && cached) {
+                this.latestVersion = cached;
+                return;
+            }
+        }
+
         this.log('[swiftlint] checking for updates...');
         try {
             const { stdout } = await execFile('curl', [
@@ -287,6 +299,8 @@ export class SwiftLintProvider implements vscode.Disposable {
             ], { encoding: 'utf8', timeout: 10000 });
             const tag = JSON.parse(stdout).tag_name as string;
             this.latestVersion = tag.replace(/^v/, '') || null;
+            await this.workspaceState.update('swiftLintLastUpdateCheck', Date.now());
+            await this.workspaceState.update('swiftLintLatestVersion', this.latestVersion);
             if (this.isUpdateAvailable()) {
                 this.log(`[swiftlint] update available: v${this.resolvedVersion} → v${this.latestVersion}`);
             } else {

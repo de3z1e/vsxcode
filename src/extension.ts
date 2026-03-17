@@ -639,6 +639,8 @@ export function activate(context: vscode.ExtensionContext): void {
     swiftLintProvider.resolvePathAndVersion().then(() => {
         linterWebviewProvider.refresh();
         swiftLintProvider.lintOpenDocuments();
+        // Check for updates after binary resolved (uses 24h cooldown)
+        swiftLintProvider.checkForUpdate().then(() => linterWebviewProvider.refresh());
     }).catch((e) => {
         log(`[swiftlint] resolvePathAndVersion failed: ${e}`);
         linterWebviewProvider.refresh();

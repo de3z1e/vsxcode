@@ -104,15 +104,11 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
         switch (msg.type) {
             case 'ready':
                 this.log('[linter] webview ready');
-                // Send state immediately, check brew + updates in background
+                // Send state immediately, check brew in background
                 this.postState();
                 if (this.brewAvailable === null) {
                     try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
                     this.log(`[linter] brew available: ${this.brewAvailable}`);
-                    this.postState();
-                }
-                if (this.swiftLintProvider.getLatestVersion() === null) {
-                    await this.swiftLintProvider.checkForUpdate();
                     this.postState();
                 }
                 break;
@@ -162,7 +158,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 try {
                     await execFile(updateBrewPath, ['upgrade', 'swiftlint'], { encoding: 'utf8', timeout: 300000 });
                     await this.swiftLintProvider.resolvePathAndVersion();
-                    await this.swiftLintProvider.checkForUpdate();
+                    await this.swiftLintProvider.checkForUpdate(true);
                     this.log(`[linter] SwiftLint updated to v${this.swiftLintProvider.getResolvedVersion()}`);
                     vscode.window.showInformationMessage(`SwiftLint updated to v${this.swiftLintProvider.getResolvedVersion()}.`);
                 } catch (error: unknown) {
