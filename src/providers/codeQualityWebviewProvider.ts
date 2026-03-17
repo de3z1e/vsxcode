@@ -5,7 +5,7 @@ import { execFile as execFileCallback } from 'child_process';
 import type { SwiftFormatConfig, SwiftFormatRule, SwiftLintConfig, SwiftLintRule } from '../types/interfaces';
 import { SwiftFormatProvider } from './swiftFormatProvider';
 import { SwiftLintProvider, fetchRuleDefaultConfig, type RuleDefaultConfig } from './swiftLintProvider';
-import { buildUnifiedRules, AUTO_DISABLE_SF_RULES, AUTO_DISABLE_SL_RULES, CATEGORY_ORDER, CATEGORY_LABELS, getSettingsOverlaps, SF_FORMAT_RULES, type UnifiedRule, type UnifiedCategory, type SettingsOverlap } from '../types/ruleMapping';
+import { buildUnifiedRules, AUTO_DISABLE_SF_RULES, AUTO_DISABLE_SL_RULES, SETTINGS_OVERLAP_HIDDEN_SL_RULES, CATEGORY_ORDER, CATEGORY_LABELS, SF_FORMAT_RULES, type UnifiedRule, type UnifiedCategory } from '../types/ruleMapping';
 
 const execFile = promisify(execFileCallback);
 
@@ -37,8 +37,6 @@ interface WebviewState {
     analyzerRules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
     // Save
     autoFixOnSave: boolean;
-    // Settings overlaps (line length, trailing commas, file-scoped privacy)
-    settingsOverlaps: SettingsOverlap[];
     // Excluded paths
     excludedPaths: string[];
 }
@@ -93,9 +91,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             });
         }
 
-        // Settings overlaps (line length, trailing commas, file-scoped privacy)
-        const settingsOverlaps = getSettingsOverlaps(sfConfig, slConfig, slRules);
-
         // Profile mode (read from swift-format provider — both should be in sync)
         const profileMode = this.swiftFormatProvider.getProfileMode();
 
@@ -121,7 +116,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             autoFixOnSave: sfConfig.formatOnSave || slConfig.fixOnSave,
             unifiedRules,
             analyzerRules,
-            settingsOverlaps,
             excludedPaths: slConfig.excludedPaths,
         };
     }
@@ -653,7 +647,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             }
         }
 
-        // Disable SL rules that SF should handle
+        // Disable SL rules that SF should handle (rule overlaps + settings overlaps)
         const slRules = this.swiftLintProvider.getRules();
         if (slRules) {
             const slConfig = this.swiftLintProvider.getConfig();
@@ -661,7 +655,8 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             const slDisabled = [...slConfig.disabledRules];
             const slOptIn = [...slConfig.optInRules];
 
-            for (const slRuleId of AUTO_DISABLE_SL_RULES) {
+            const allDisableSl = new Set([...AUTO_DISABLE_SL_RULES, ...SETTINGS_OVERLAP_HIDDEN_SL_RULES]);
+            for (const slRuleId of allDisableSl) {
                 const rule = slRules.find((r) => r.identifier === slRuleId);
                 if (!rule) { continue; }
                 const isDisabled = slDisabled.includes(slRuleId);
@@ -792,7 +787,6 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .tool-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.3px;padding:0 4px;border-radius:3px;line-height:16px;vertical-align:middle;opacity:.6;border:1px solid rgba(128,128,128,.3);white-space:nowrap;flex-shrink:0}
 .tool-badge.sf{color:var(--vscode-charts-blue,#4fc1ff);border-color:var(--vscode-charts-blue,#4fc1ff40)}
 .tool-badge.sl{color:var(--vscode-charts-orange,#cca700);border-color:var(--vscode-charts-orange,#cca70040)}
-.conflict-badge{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;font-size:10px;font-weight:bold;color:var(--vscode-errorForeground,#f48771);opacity:.7;margin-left:4px;cursor:help;vertical-align:middle;flex-shrink:0}
 .analyzer-note{padding:2px 14px 6px;font-size:11px;opacity:.45;font-style:italic}
 .hidden{display:none!important}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
@@ -996,11 +990,6 @@ function render() {
   if (sfFound) {
     const df = {indentation:'spaces',indentationCount:4,lineLength:100,maximumBlankLines:1,respectsExistingLineBreaks:true,lineBreakBeforeControlFlowKeywords:false,lineBreakBeforeEachArgument:false,lineBreakBeforeEachGenericRequirement:false,lineBreakAroundMultilineExpressionChainComponents:false,lineBreakBeforeSwitchCaseBody:false,lineBreakBetweenDeclarationAttributes:false,indentConditionalCompilationBlocks:true,indentSwitchCaseLabels:false,fileScopedDeclarationPrivacy:'private',multiElementCollectionTrailingCommas:true,prioritizeKeepingFunctionOutputTogether:false,spacesAroundRangeFormationOperators:false,spacesBeforeEndOfLineComments:2,reflowMultilineStringLiterals:'never'};
 
-    const so = state.settingsOverlaps || [];
-    const lineLengthConflict = so.find(o => o.name === 'Line Length' && o.conflict);
-    const privacyConflict = so.find(o => o.name === 'File-Scoped Privacy' && o.conflict);
-    const trailingConflict = so.find(o => o.name === 'Trailing Commas' && o.conflict);
-
     h += '<div class="section">';
     h += '<div class="row"><span class="label">Formatting Options</span></div>';
 
@@ -1013,25 +1002,13 @@ function render() {
       h += '<div class="row"><span title="' + esc('Number of spaces per indentation level.\\nDefault: 4') + '">Indent Width' + modDot(sfC.indentationCount !== df.indentationCount) + '</span><input type="number" id="indent-count" value="' + sfC.indentationCount + '" min="1" max="8"></div>';
     }
 
-    h += '<div class="row"><span title="' + esc('Maximum number of characters per line before wrapping.\\nDefault: 100') + '">Line Length' + modDot(sfC.lineLength !== df.lineLength) + (lineLengthConflict ? conflictBadge('swift-format line length exceeds SwiftLint line_length warning threshold') : '') + '</span><input type="number" id="lineLength" value="' + sfC.lineLength + '" min="1" max="999"></div>';
-    h += '<div class="row"><span title="' + esc('Maximum number of consecutive blank lines allowed.\\nDefault: 1') + '">Max Blank Lines' + modDot(sfC.maximumBlankLines !== df.maximumBlankLines) + '</span><input type="number" id="maximumBlankLines" value="' + sfC.maximumBlankLines + '" min="0" max="10"></div>';
-
     h += toggleRow('Respects Existing Line Breaks', 'opt-respectsExistingLineBreaks', sfC.respectsExistingLineBreaks, 'Preserves existing line breaks in source code.', sfC.respectsExistingLineBreaks !== df.respectsExistingLineBreaks, 'On');
-    h += toggleRow('Break Before Control Flow Keywords', 'opt-lineBreakBeforeControlFlowKeywords', sfC.lineBreakBeforeControlFlowKeywords, 'Places else, catch on a new line.', sfC.lineBreakBeforeControlFlowKeywords !== df.lineBreakBeforeControlFlowKeywords, 'Off');
     h += toggleRow('Break Before Each Argument', 'opt-lineBreakBeforeEachArgument', sfC.lineBreakBeforeEachArgument, 'Each argument on its own line when wrapping.', sfC.lineBreakBeforeEachArgument !== df.lineBreakBeforeEachArgument, 'Off');
     h += toggleRow('Break Before Generic Requirements', 'opt-lineBreakBeforeEachGenericRequirement', sfC.lineBreakBeforeEachGenericRequirement, 'Each generic requirement on its own line.', sfC.lineBreakBeforeEachGenericRequirement !== df.lineBreakBeforeEachGenericRequirement, 'Off');
     h += toggleRow('Break Around Multiline Chains', 'opt-lineBreakAroundMultilineExpressionChainComponents', sfC.lineBreakAroundMultilineExpressionChainComponents, 'Adds line breaks around multiline chain components.', sfC.lineBreakAroundMultilineExpressionChainComponents !== df.lineBreakAroundMultilineExpressionChainComponents, 'Off');
     h += toggleRow('Break Before Switch Case Body', 'opt-lineBreakBeforeSwitchCaseBody', sfC.lineBreakBeforeSwitchCaseBody, 'Case body on line after the label.', sfC.lineBreakBeforeSwitchCaseBody !== df.lineBreakBeforeSwitchCaseBody, 'Off');
     h += toggleRow('Break Between Declaration Attributes', 'opt-lineBreakBetweenDeclarationAttributes', sfC.lineBreakBetweenDeclarationAttributes, 'Places each declaration attribute on its own line.', sfC.lineBreakBetweenDeclarationAttributes !== df.lineBreakBetweenDeclarationAttributes, 'Off');
     h += toggleRow('Indent #if/#else Blocks', 'opt-indentConditionalCompilationBlocks', sfC.indentConditionalCompilationBlocks, 'Indents code inside conditional compilation blocks.', sfC.indentConditionalCompilationBlocks !== df.indentConditionalCompilationBlocks, 'On');
-    h += toggleRow('Indent Switch Case Labels', 'opt-indentSwitchCaseLabels', sfC.indentSwitchCaseLabels, 'Indents case labels relative to switch.', sfC.indentSwitchCaseLabels !== df.indentSwitchCaseLabels, 'Off');
-
-    h += '<div class="row"><span title="' + esc('File-scoped declarations use private or fileprivate.\\nDefault: private') + '">File-Scoped Privacy' + modDot(sfC.fileScopedDeclarationPrivacy !== df.fileScopedDeclarationPrivacy) + (privacyConflict ? conflictBadge('swift-format uses fileprivate but SwiftLint private_over_fileprivate is enabled') : '') + '</span><select id="fileScopedDeclarationPrivacy">';
-    h += '<option value="private"' + (sfC.fileScopedDeclarationPrivacy === 'private' ? ' selected' : '') + '>private</option>';
-    h += '<option value="fileprivate"' + (sfC.fileScopedDeclarationPrivacy === 'fileprivate' ? ' selected' : '') + '>fileprivate</option>';
-    h += '</select></div>';
-
-    h += toggleRow('Trailing Commas', 'opt-multiElementCollectionTrailingCommas', sfC.multiElementCollectionTrailingCommas, 'Adds trailing comma after last element in multi-line collections.' + (trailingConflict ? ' Conflicts with SwiftLint trailing_comma config.' : ''), sfC.multiElementCollectionTrailingCommas !== df.multiElementCollectionTrailingCommas, 'On', trailingConflict);
     h += toggleRow('Prioritize Function Output Together', 'opt-prioritizeKeepingFunctionOutputTogether', sfC.prioritizeKeepingFunctionOutputTogether, 'Keeps the return type on the same line as the closing parenthesis when wrapping.', sfC.prioritizeKeepingFunctionOutputTogether !== df.prioritizeKeepingFunctionOutputTogether, 'Off');
     h += toggleRow('Spaces Around Range Operators', 'opt-spacesAroundRangeFormationOperators', sfC.spacesAroundRangeFormationOperators, 'Adds spaces around range operators (... and ..<).', sfC.spacesAroundRangeFormationOperators !== df.spacesAroundRangeFormationOperators, 'Off');
 
@@ -1210,9 +1187,7 @@ function modDot(isModified) {
   return isModified ? '<span class="opt-modified"></span>' : '';
 }
 
-function conflictBadge(tooltip) {
-  return '<span class="conflict-badge" title="' + esc(tooltip) + '">!</span>';
-}
+
 
 function infoIcon(text) {
   return '<span class="info-wrap"><button class="info-btn" data-info><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 12.6A5.6 5.6 0 1 1 8 2.4a5.6 5.6 0 0 1 0 11.2zM7.4 5h1.2V3.8H7.4V5zm0 7.2h1.2V6.2H7.4v6z"/></svg></button><span class="info-tip">' + text + '</span></span>';

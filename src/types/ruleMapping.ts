@@ -51,13 +51,19 @@ export const OVERLAP_PAIRS: OverlapPair[] = [
     { sfRule: 'NoAccessLevelOnExtensionDeclaration', slRule: 'no_extension_access_modifier', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
     { sfRule: 'AlwaysUseLiteralForEmptyCollectionInit', slRule: 'empty_collection_literal', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
     { sfRule: 'NoCasesWithOnlyFallthrough', slRule: 'no_fallthrough_only', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
+    { sfRule: 'UseLetInEveryBoundCaseVariable', slRule: 'pattern_matching_keywords', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
+    { sfRule: 'UseWhereClausesInForLoops', slRule: 'for_where', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
+    { sfRule: 'OnlyOneTrailingClosureArgument', slRule: 'multiple_closures_with_trailing_closure', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
     { sfRule: 'NoEmptyLinesOpeningClosingBraces', slRule: ['vertical_whitespace_opening_braces', 'vertical_whitespace_closing_braces'], sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
+    { sfRule: 'UseEarlyExits', slRule: 'superfluous_else', sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
+    { sfRule: 'GroupNumericLiterals', slRule: 'number_separator', sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
     // Both lint-only — default to SwiftLint (richer config)
     { sfRule: 'NeverForceUnwrap', slRule: 'force_unwrapping', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swiftlint' },
     { sfRule: 'NeverUseForceTry', slRule: 'force_try', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swiftlint' },
     { sfRule: 'NeverUseImplicitlyUnwrappedOptionals', slRule: 'implicitly_unwrapped_optional', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swiftlint' },
     { sfRule: 'AlwaysUseLowerCamelCase', slRule: 'identifier_name', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swiftlint' },
     { sfRule: 'TypeNamesShouldBeCapitalized', slRule: 'type_name', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swiftlint' },
+    { sfRule: 'NoPlaygroundLiterals', slRule: 'object_literal', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swiftlint' },
 ];
 
 // ── swift-format formatting rules (auto-fix) ────────────────────
@@ -128,21 +134,6 @@ const SF_RULE_CATEGORIES: Record<string, UnifiedCategory> = {
     UseSingleLinePropertyGetter: 'formatting',
 };
 
-// ── SwiftLint style rules that are formatting-oriented ──────────
-
-const SL_FORMATTING_STYLE_RULES = new Set([
-    'trailing_whitespace', 'vertical_whitespace', 'vertical_whitespace_between_cases',
-    'vertical_whitespace_closing_braces', 'vertical_whitespace_opening_braces',
-    'colon', 'comma', 'opening_brace', 'closing_brace', 'leading_whitespace',
-    'trailing_newline', 'return_arrow_whitespace', 'statement_position',
-    'function_name_whitespace', 'attribute_name_spacing', 'no_space_in_method_call',
-    'closure_spacing', 'operator_usage_whitespace', 'period_spacing',
-    'protocol_property_accessors_order', 'switch_case_alignment',
-    'redundant_discardable_let', 'empty_parameters', 'empty_enum_arguments',
-    'implicit_optional_initialization', 'trailing_comma',
-    'indentation_width', 'closure_end_indentation', 'literal_expression_end_indentation',
-    'collection_alignment', 'let_var_whitespace', 'number_separator',
-]);
 
 // SwiftLint doc-oriented lint rules
 const SL_DOC_RULES = new Set([
@@ -178,9 +169,11 @@ function computeSlEnabled(rule: SwiftLintRule, config: SwiftLintConfig): boolean
 
 function mapSlKindToCategory(rule: SwiftLintRule): UnifiedCategory {
     if (rule.analyzer) { return 'analyzer'; }
+    // All fixable rules go under formatting
+    if (rule.correctable) { return 'formatting'; }
     if (SL_DOC_RULES.has(rule.identifier)) { return 'documentation'; }
     switch (rule.kind) {
-        case 'style': return SL_FORMATTING_STYLE_RULES.has(rule.identifier) ? 'formatting' : 'style';
+        case 'style': return 'style';
         case 'lint': return 'lint';
         case 'idiomatic': return 'idiomatic';
         case 'metrics': return 'metrics';
@@ -192,21 +185,29 @@ function mapSlKindToCategory(rule: SwiftLintRule): UnifiedCategory {
 // ── Overlap resolution sets ─────────────────────────────────────
 
 /**
- * All overlaps are hard-resolved — no user handler selection needed.
- * - SL correctable → SL handles it (SF rule auto-disabled)
- * - SF fixable + SL not correctable → SF handles it (SL rule auto-disabled)
- * - Both lint-only → SL handles it (richer config / severity)
+ * All overlaps are hard-resolved:
+ * - SL fixable → SL only (SF rule auto-disabled)
+ * - SL not fixable → SF only (SL rule auto-disabled)
  */
 
-/** SF rule IDs that should be auto-disabled (SL correctable OR both lint-only) */
+/** SF rule IDs that should be auto-disabled (SL is fixable → SL wins) */
 export const AUTO_DISABLE_SF_RULES = new Set(
-    OVERLAP_PAIRS.filter((p) => p.slCorrectable || !p.sfIsFormat).map((p) => p.sfRule),
+    OVERLAP_PAIRS.filter((p) => p.slCorrectable).map((p) => p.sfRule),
 );
 
-/** SL rule IDs that should be auto-disabled (SF fixable + SL not correctable) */
+/** SL rule IDs that should be auto-disabled (SL is NOT fixable → SF wins) */
 export const AUTO_DISABLE_SL_RULES = new Set(
-    OVERLAP_PAIRS.filter((p) => p.sfIsFormat && !p.slCorrectable).flatMap((p) => Array.isArray(p.slRule) ? p.slRule : [p.slRule]),
+    OVERLAP_PAIRS.filter((p) => !p.slCorrectable).flatMap((p) => Array.isArray(p.slRule) ? p.slRule : [p.slRule]),
 );
+
+/** SL rules that overlap with SF formatting options and are NOT correctable.
+ *  SF options always apply during formatting, so these SL lint checks are redundant.
+ *  Auto-disabled (if default) and hidden from the rules list. */
+export const SETTINGS_OVERLAP_HIDDEN_SL_RULES = new Set([
+    'line_length',           // SF lineLength handles this
+    'indentation_width',     // SF indentation + indentationCount handles this
+    'switch_case_alignment', // SF indentSwitchCaseLabels handles this
+]);
 
 // ── Build unified rules ─────────────────────────────────────────
 
@@ -220,6 +221,9 @@ export function buildUnifiedRules(
     const consumedSf = new Set<string>();
     const consumedSl = new Set<string>();
 
+    // 0. Hide SL rules that overlap with SF formatting options (non-correctable)
+    for (const slId of SETTINGS_OVERLAP_HIDDEN_SL_RULES) { consumedSl.add(slId); }
+
     // 1. Process overlaps — each pair is hard-resolved to one tool
     for (const pair of OVERLAP_PAIRS) {
         const sfRule = sfRules?.find((r) => r.identifier === pair.sfRule);
@@ -231,8 +235,25 @@ export function buildUnifiedRules(
         consumedSf.add(pair.sfRule);
         for (const id of slRuleIds) { consumedSl.add(id); }
 
-        if (pair.sfIsFormat && !pair.slCorrectable) {
-            // SF can auto-fix, SL cannot → show as SF-only
+        if (pair.slCorrectable) {
+            // SL is fixable → show as SL-only
+            for (const slRule of slRuleObjs) {
+                result.push({
+                    displayName: humanReadableName(slRule.identifier),
+                    category: 'formatting',
+                    tool: 'swiftlint',
+                    slRule: {
+                        identifier: slRule.identifier,
+                        optIn: slRule.optIn,
+                        correctable: slRule.correctable,
+                        kind: slRule.kind,
+                        enabled: computeSlEnabled(slRule, slConfig),
+                        hasConfig: !!slConfig.ruleConfigs[slRule.identifier],
+                    },
+                });
+            }
+        } else {
+            // SL is NOT fixable → show as SF-only
             if (sfRule) {
                 result.push({
                     displayName: humanReadableName(sfRule.identifier),
@@ -242,24 +263,7 @@ export function buildUnifiedRules(
                         identifier: sfRule.identifier,
                         isDefault: sfRule.isDefault,
                         effectiveEnabled: computeSfEnabled(sfRule, sfConfig),
-                        isFormatRule: true,
-                    },
-                });
-            }
-        } else {
-            // SL correctable OR both lint-only → show as SL-only
-            for (const slRule of slRuleObjs) {
-                result.push({
-                    displayName: humanReadableName(slRule.identifier),
-                    category: mapSlKindToCategory(slRule),
-                    tool: 'swiftlint',
-                    slRule: {
-                        identifier: slRule.identifier,
-                        optIn: slRule.optIn,
-                        correctable: slRule.correctable,
-                        kind: slRule.kind,
-                        enabled: computeSlEnabled(slRule, slConfig),
-                        hasConfig: !!slConfig.ruleConfigs[slRule.identifier],
+                        isFormatRule: SF_FORMAT_RULES.has(sfRule.identifier),
                     },
                 });
             }
@@ -350,18 +354,8 @@ export function getSettingsOverlaps(
             || lintConfig.optInRules.includes(ruleId);
     };
 
-    // Line length
-    const lineLengthEnabled = isRuleEnabled('line_length');
-    const lineConfig = lintConfig.ruleConfigs['line_length'];
-    const lintWarning = parseInt(lineConfig?.warning || '120');
-    overlaps.push({
-        name: 'Line Length',
-        formatValue: `${fmtConfig.lineLength}`,
-        lintRuleId: 'line_length',
-        lintValue: `${lintWarning}`,
-        lintRuleEnabled: lineLengthEnabled,
-        conflict: lineLengthEnabled && fmtConfig.lineLength > lintWarning,
-    });
+    // Line length, indentation width, switch case alignment: handled entirely
+    // by SF formatting options — SL rules auto-disabled and hidden from list.
 
     // File-scoped privacy
     const privateEnabled = isRuleEnabled('private_over_fileprivate');
@@ -386,6 +380,33 @@ export function getSettingsOverlaps(
         lintValue: '',
         lintRuleEnabled: trailingEnabled,
         conflict: trailingEnabled && ((fmtAdds && !mandatoryComma) || (!fmtAdds && mandatoryComma)),
+    });
+
+    // Max blank lines
+    const vertWsEnabled = isRuleEnabled('vertical_whitespace');
+    const vertWsConfig = lintConfig.ruleConfigs['vertical_whitespace'];
+    const slMaxEmpty = parseInt(vertWsConfig?.max_empty_lines || '1');
+    overlaps.push({
+        name: 'Max Blank Lines',
+        formatValue: `${fmtConfig.maximumBlankLines}`,
+        lintRuleId: 'vertical_whitespace',
+        lintValue: `${slMaxEmpty}`,
+        lintRuleEnabled: vertWsEnabled,
+        conflict: vertWsEnabled && fmtConfig.maximumBlankLines > slMaxEmpty,
+    });
+
+    // Control flow keyword placement
+    const stmtPosEnabled = isRuleEnabled('statement_position');
+    const stmtPosConfig = lintConfig.ruleConfigs['statement_position'];
+    const slUncuddled = stmtPosConfig?.statement_mode === 'uncuddled_else';
+    const sfNewline = fmtConfig.lineBreakBeforeControlFlowKeywords;
+    overlaps.push({
+        name: 'Control Flow Keywords',
+        formatValue: sfNewline ? 'new line' : 'same line',
+        lintRuleId: 'statement_position',
+        lintValue: slUncuddled ? 'uncuddled' : 'default',
+        lintRuleEnabled: stmtPosEnabled,
+        conflict: stmtPosEnabled && sfNewline !== slUncuddled,
     });
 
     return overlaps;
