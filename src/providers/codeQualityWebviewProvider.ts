@@ -1454,16 +1454,37 @@ function showRuleConfig(ruleId, defaults, current, description) {
   if (description) {
     h += '<div class="config-desc">' + esc(description) + '</div>';
   }
+  // Known enum options for specific rule config fields (rule_id.key → choices)
+  const enumChoices = {
+    'implicit_optional_initialization.style': ['always', 'never'],
+    'implicitly_unwrapped_optional.mode': ['all_except_iboutlets', 'all'],
+    'computed_accessors_order.order': ['get_set', 'set_get'],
+    'statement_position.statement_mode': ['default', 'uncuddled_else'],
+    'sorted_imports.grouping': ['names', 'attributes'],
+    'multiline_arguments.first_argument_location': ['any_line', 'next_line'],
+    'non_overridable_class_declaration.final_class_modifier': ['final class', 'static'],
+    'identifier_name.unallowed_symbols_severity': ['error', 'warning'],
+    'identifier_name.validates_start_with_lowercase': ['error', 'warning'],
+    'type_name.unallowed_symbols_severity': ['error', 'warning'],
+    'type_name.validates_start_with_lowercase': ['error', 'warning'],
+  };
+
   for (const [key, defRaw] of entries) {
     const defVal = String(defRaw).trim();
     const sv = String(vals[key] ?? defRaw).trim();
     const changed = sv !== defVal;
     const isBool = sv === 'true' || sv === 'false';
-    const isSeverity = sv === 'warning' || sv === 'error';
+    const isSeverity = key === 'severity' && (defVal === 'warning' || defVal === 'error');
+    const enumKey = ruleId + '.' + key;
+    const enumOpts = enumChoices[enumKey];
     h += '<div class="config-row">';
     h += '<span class="config-modified' + (changed ? '' : ' default') + '" data-dot="' + esc(key) + '"></span>';
     h += '<label title="' + esc(key) + '">' + esc(key) + '</label>';
-    if (isBool) {
+    if (enumOpts) {
+      h += '<select data-key="' + esc(key) + '">';
+      for (const opt of enumOpts) { h += '<option value="' + esc(opt) + '"' + (sv === opt ? ' selected' : '') + '>' + esc(opt) + '</option>'; }
+      h += '</select>';
+    } else if (isBool) {
       h += '<select data-key="' + esc(key) + '"><option value="true"' + (sv === 'true' ? ' selected' : '') + '>true</option><option value="false"' + (sv === 'false' ? ' selected' : '') + '>false</option></select>';
     } else if (isSeverity) {
       h += '<select data-key="' + esc(key) + '"><option value="warning"' + (sv === 'warning' ? ' selected' : '') + '>warning</option><option value="error"' + (sv === 'error' ? ' selected' : '') + '>error</option></select>';
