@@ -176,6 +176,7 @@ export class SwiftLintProvider implements vscode.Disposable {
     private cachedRules: SwiftLintRule[] | null = null;
     private analyzing = false;
     private _writingConfigFile = false;
+    private latestVersion: string | null = null;
 
     private _onDidSyncConfig = new vscode.EventEmitter<void>();
     readonly onDidSyncConfig = this._onDidSyncConfig.event;
@@ -263,7 +264,7 @@ export class SwiftLintProvider implements vscode.Disposable {
             this.log(`[swiftlint] found: ${this.resolvedPath} (v${this.resolvedVersion})`);
             this.cachedRules = await parseSwiftLintRules(this.resolvedPath);
             const analyzerCount = this.cachedRules.filter((r) => r.analyzer).length;
-            this.log(`[swiftlint] loaded ${this.cachedRules.length - analyzerCount} rules (${analyzerCount} analyzer rules excluded)`);
+            this.log(`[swiftlint] loaded ${this.cachedRules.length} rules (${analyzerCount} analyzer)`);
         } else {
             this.log('[swiftlint] binary not found');
         }
@@ -273,7 +274,27 @@ export class SwiftLintProvider implements vscode.Disposable {
 
     getResolvedPath(): string | null { return this.resolvedPath; }
     getResolvedVersion(): string | null { return this.resolvedVersion; }
+    getLatestVersion(): string | null { return this.latestVersion; }
     isPathResolved(): boolean { return this._pathResolved; }
+
+    async checkForUpdate(): Promise<void> {
+        if (!this.resolvedVersion) { return; }
+        try {
+            const { stdout } = await execFile('curl', [
+                '-sf', '--max-time', '5',
+                'https://api.github.com/repos/realm/SwiftLint/releases/latest',
+            ], { encoding: 'utf8', timeout: 10000 });
+            const tag = JSON.parse(stdout).tag_name as string;
+            this.latestVersion = tag.replace(/^v/, '') || null;
+        } catch {
+            this.latestVersion = null;
+        }
+    }
+
+    isUpdateAvailable(): boolean {
+        if (!this.resolvedVersion || !this.latestVersion) { return false; }
+        return this.latestVersion !== this.resolvedVersion;
+    }
 
     // ── Rules access ─────────────────────────────────────────
 

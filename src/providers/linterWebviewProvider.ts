@@ -11,10 +11,13 @@ interface WebviewState {
     pathResolved: boolean;
     resolvedPath: string | null;
     version: string | null;
+    updateAvailable: boolean;
+    latestVersion: string | null;
     config: SwiftLintConfig;
     rules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
     analyzerRules: Array<SwiftLintRule & { enabled: boolean; hasConfig: boolean }> | null;
     installing: boolean;
+    updating: boolean;
     brewAvailable: boolean;
 }
 
@@ -22,6 +25,7 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private ruleDefaultsCache = new Map<string, RuleDefaultConfig>();
     private installing = false;
+    private updating = false;
     private brewAvailable: boolean | null = null;
 
     constructor(
@@ -73,10 +77,13 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
             pathResolved: this.swiftLintProvider.isPathResolved(),
             resolvedPath: this.swiftLintProvider.getResolvedPath(),
             version: this.swiftLintProvider.getResolvedVersion(),
+            updateAvailable: this.swiftLintProvider.isUpdateAvailable(),
+            latestVersion: this.swiftLintProvider.getLatestVersion(),
             config,
             rules,
             analyzerRules,
             installing: this.installing,
+            updating: this.updating,
             brewAvailable: this.brewAvailable ?? false,
         };
     }
@@ -97,11 +104,15 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
         switch (msg.type) {
             case 'ready':
                 this.log('[linter] webview ready');
-                // Send state immediately, check brew in background
+                // Send state immediately, check brew + updates in background
                 this.postState();
                 if (this.brewAvailable === null) {
                     try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
                     this.log(`[linter] brew available: ${this.brewAvailable}`);
+                    this.postState();
+                }
+                if (this.swiftLintProvider.getLatestVersion() === null) {
+                    await this.swiftLintProvider.checkForUpdate();
                     this.postState();
                 }
                 break;
@@ -131,6 +142,36 @@ export class LinterWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 this.installing = false;
+                this.postState();
+                break;
+            }
+
+            case 'updateSwiftLint': {
+                this.log('[linter] updating SwiftLint via Homebrew');
+                this.updating = true;
+                this.postState();
+
+                const updateBrewPath = await this.findBrew();
+                if (!updateBrewPath) {
+                    vscode.window.showErrorMessage('Homebrew not found. Update manually.');
+                    this.updating = false;
+                    this.postState();
+                    break;
+                }
+
+                try {
+                    await execFile(updateBrewPath, ['upgrade', 'swiftlint'], { encoding: 'utf8', timeout: 300000 });
+                    await this.swiftLintProvider.resolvePathAndVersion();
+                    await this.swiftLintProvider.checkForUpdate();
+                    this.log(`[linter] SwiftLint updated to v${this.swiftLintProvider.getResolvedVersion()}`);
+                    vscode.window.showInformationMessage(`SwiftLint updated to v${this.swiftLintProvider.getResolvedVersion()}.`);
+                } catch (error: unknown) {
+                    const message = (error as { stderr?: string }).stderr || 'Update failed';
+                    this.log(`[linter] SwiftLint update failed: ${message}`);
+                    vscode.window.showErrorMessage(`SwiftLint update failed: ${message.split('\n')[0]}`);
+                }
+
+                this.updating = false;
                 this.postState();
                 break;
             }
@@ -425,6 +466,11 @@ select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-
 .add-btns{display:flex;gap:6px;padding:6px 14px}
 .add-btns button{padding:2px 8px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
 .add-btns button:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
+.update-row{padding:4px 14px 0;font-size:11px;opacity:.6}
+.update-btn{padding:1px 6px;font-size:10px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.8;margin-left:4px}
+.update-btn:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
+.update-link{cursor:pointer;opacity:.8;margin-left:4px;text-decoration:underline}
+.update-link:hover{opacity:1}
 .analyzer-note{padding:2px 14px 6px;font-size:11px;opacity:.45;font-style:italic}
 .hidden{display:none!important}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
@@ -489,12 +535,22 @@ function render() {
   const c = state.config;
   const rules = state.rules || [];
   const kinds = ['style','lint','idiomatic','metrics','performance'];
-  const enabledCount = rules.filter(r => r.enabled).length;
+  const aRulesAll = state.analyzerRules || [];
+  const enabledCount = rules.filter(r => r.enabled).length + aRulesAll.filter(r => r.enabled).length;
+  const totalCount = rules.length + aRulesAll.length;
 
   let h = '';
   // header
   h += '<div class="section">';
   h += '<div class="row"><span>SwiftLint' + ghIcon + '</span><span class="value" id="path-btn">' + esc(state.version ? 'v' + state.version : state.resolvedPath) + '</span></div>';
+  if (state.updating) {
+    h += '<div class="update-row">Updating via Homebrew\u2026</div>';
+  } else if (state.updateAvailable && state.latestVersion) {
+    h += '<div class="update-row">v' + esc(state.latestVersion) + ' available';
+    if (state.brewAvailable) { h += ' <button class="update-btn" id="update-btn">Update</button>'; }
+    else { h += ' <a class="update-link" id="update-link">View release</a>'; }
+    h += '</div>';
+  }
   h += '</div>';
 
   // toggles + severity
@@ -508,7 +564,7 @@ function render() {
   h += '</select></div></div>';
 
   // rules
-  h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + rules.length + '</span></div>';
+  h += '<div class="rules-header"><span class="label">Rules</span><span class="badge">' + enabledCount + ' / ' + totalCount + '</span></div>';
   h += '<div class="search-wrap" id="search-wrap"><input type="text" class="search" id="rules-search" placeholder="Filter rules..."><button class="search-clear" id="search-clear" title="Clear"><svg viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/></svg></button></div>';
 
   for (const kind of kinds) {
@@ -627,6 +683,8 @@ function applySearch() {
 function bind() {
   document.getElementById('path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
   document.getElementById('gh-link')?.addEventListener('click', e => { e.stopPropagation(); vscode.postMessage({ type: 'openInstallGuide' }); });
+  document.getElementById('update-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'updateSwiftLint' }));
+  document.getElementById('update-link')?.addEventListener('click', () => vscode.postMessage({ type: 'openInstallGuide' }));
   document.getElementById('toggle-enabled')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleEnabled', value: e.target.checked }));
   document.getElementById('toggle-fixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFixOnSave', value: e.target.checked }));
   document.getElementById('severity-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeSeverity', value: e.target.value }));
