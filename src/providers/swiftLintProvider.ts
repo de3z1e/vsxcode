@@ -221,6 +221,10 @@ export class SwiftLintProvider implements vscode.Disposable {
         return this.workspaceState.get<'local' | 'global'>('swiftLintProfileMode', 'global');
     }
 
+    isProfileModeExplicit(): boolean {
+        return this.workspaceState.get('swiftLintProfileMode') !== undefined;
+    }
+
     async setProfileMode(mode: 'local' | 'global'): Promise<void> {
         const prevMode = this.getProfileMode();
         if (mode === prevMode) { return; }

@@ -639,12 +639,13 @@ export function activate(context: vscode.ExtensionContext): void {
     swiftLintProvider.resolvePathAndVersion().then(async () => {
         // Sync config from .swiftlint.yml if it exists (e.g., cloned repo)
         await swiftLintProvider.syncFromConfigFile();
-        // Projects with local config or .yml stay in local mode; otherwise default to global
-        if (swiftLintProvider.hasWorkspaceConfig() || swiftLintProvider.hasConfigFile()) {
-            await swiftLintProvider.setProfileMode('local');
-        } else if (!swiftLintProvider.hasGlobalProfile()) {
-            // Ensure global profile is initialized with defaults
-            await swiftLintProvider.setProfileMode('global');
+        // Auto-detect profile mode only on first activation
+        if (!swiftLintProvider.isProfileModeExplicit()) {
+            if (swiftLintProvider.hasWorkspaceConfig() || swiftLintProvider.hasConfigFile()) {
+                await swiftLintProvider.setProfileMode('local');
+            } else {
+                await swiftLintProvider.setProfileMode('global');
+            }
         }
         linterWebviewProvider.refresh();
         swiftLintProvider.lintOpenDocuments();
