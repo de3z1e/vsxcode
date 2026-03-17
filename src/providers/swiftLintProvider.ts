@@ -661,7 +661,7 @@ export class SwiftLintProvider implements vscode.Disposable {
         return { disabledRules, optInRules, analyzerRules, excludedPaths, ruleConfigs };
     }
 
-    private async syncFromConfigFile(): Promise<void> {
+    async syncFromConfigFile(): Promise<void> {
         if (this._writingConfigFile) { return; }
 
         try {

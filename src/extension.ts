@@ -636,7 +636,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const linterViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.linter', linterWebviewProvider);
 
     // Initialize SwiftLint (async, non-blocking)
-    swiftLintProvider.resolvePathAndVersion().then(() => {
+    swiftLintProvider.resolvePathAndVersion().then(async () => {
+        // Sync config from .swiftlint.yml if it exists (e.g., cloned repo)
+        await swiftLintProvider.syncFromConfigFile();
         linterWebviewProvider.refresh();
         swiftLintProvider.lintOpenDocuments();
         // Check for updates after binary resolved (uses 24h cooldown)
