@@ -34,6 +34,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
     private sfInstalling = false;
     private sfUpdating = false;
     private brewAvailable: boolean | null = null;
+    private _suppressRefresh = false;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -51,6 +52,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     refresh(): void {
+        if (this._suppressRefresh) { return; }
         this.postState();
     }
 
@@ -257,8 +259,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 if (rule.isDefault && !enabled) { disabledRules.push(ruleId); }
                 if (!rule.isDefault && enabled) { enabledRules.push(ruleId); }
 
-                await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
-                this.postState();
+                await this.updateRulesAndPatch({ disabledRules, enabledRules });
                 break;
             }
 
@@ -267,21 +268,52 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 const config = this.swiftFormatProvider.getConfig();
                 const disabledRules = config.disabledRules.filter((r) => r !== ruleId);
                 const enabledRules = config.enabledRules.filter((r) => r !== ruleId);
-                await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
-                this.postState();
+                await this.updateRulesAndPatch({ disabledRules, enabledRules });
                 break;
             }
 
-            case 'resetAllRules': {
+            case 'resetSectionRules': {
+                const section = msg.section as string;
+                const label = section === 'format' ? 'format' : 'lint';
                 const answer = await vscode.window.showWarningMessage(
-                    'Reset all swift-format rules to defaults?',
+                    `Reset all ${label} rules to defaults?`,
                     { modal: true },
                     'Reset',
                 );
                 if (answer === 'Reset') {
-                    await this.swiftFormatProvider.updateConfig({ disabledRules: [], enabledRules: [] });
-                    this.postState();
+                    const rules = this.swiftFormatProvider.getRules() || [];
+                    const config = this.swiftFormatProvider.getConfig();
+                    const sectionRuleIds = new Set(rules.filter((r) => section === 'format' ? SF_FORMAT_RULES.has(r.identifier) : !SF_FORMAT_RULES.has(r.identifier)).map((r) => r.identifier));
+                    const disabledRules = config.disabledRules.filter((r) => !sectionRuleIds.has(r));
+                    const enabledRules = config.enabledRules.filter((r) => !sectionRuleIds.has(r));
+                    await this.updateRulesAndPatch({ disabledRules, enabledRules });
                 }
+                break;
+            }
+
+            case 'toggleAllSection': {
+                const section = msg.section as string;
+                const enabled = msg.enabled as boolean;
+                const rules = this.swiftFormatProvider.getRules() || [];
+                const config = this.swiftFormatProvider.getConfig();
+                const sectionRules = rules.filter((r) => section === 'format' ? SF_FORMAT_RULES.has(r.identifier) : !SF_FORMAT_RULES.has(r.identifier));
+                const disabledRules = [...config.disabledRules];
+                const enabledRules = [...config.enabledRules];
+
+                for (const rule of sectionRules) {
+                    const idx_d = disabledRules.indexOf(rule.identifier);
+                    const idx_e = enabledRules.indexOf(rule.identifier);
+                    if (idx_d >= 0) { disabledRules.splice(idx_d, 1); }
+                    if (idx_e >= 0) { enabledRules.splice(idx_e, 1); }
+
+                    if (enabled) {
+                        if (!rule.isDefault) { enabledRules.push(rule.identifier); }
+                    } else {
+                        if (rule.isDefault) { disabledRules.push(rule.identifier); }
+                    }
+                }
+
+                await this.updateRulesAndPatch({ disabledRules, enabledRules });
                 break;
             }
 
@@ -364,6 +396,26 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    // ── Lightweight rule update (no full re-render) ────────
+
+    private async updateRulesAndPatch(patch: { disabledRules: string[]; enabledRules: string[] }): Promise<void> {
+        this._suppressRefresh = true;
+        await this.swiftFormatProvider.updateConfig(patch);
+        this._suppressRefresh = false;
+
+        // Compute current rule states and send patch
+        const config = this.swiftFormatProvider.getConfig();
+        const rules = this.swiftFormatProvider.getRules() || [];
+        const ruleStates: Array<{ id: string; enabled: boolean; isDefault: boolean; isFormatRule: boolean }> = [];
+        for (const r of rules) {
+            const isDisabled = config.disabledRules.includes(r.identifier);
+            const isEnabled = config.enabledRules.includes(r.identifier);
+            const effectiveEnabled = (r.isDefault && !isDisabled) || isEnabled;
+            ruleStates.push({ id: r.identifier, enabled: effectiveEnabled, isDefault: r.isDefault, isFormatRule: SF_FORMAT_RULES.has(r.identifier) });
+        }
+        this._view?.webview.postMessage({ type: 'rulesPatch', ruleStates });
+    }
+
     // ── Brew helpers ────────────────────────────────────────
 
     private async findBrew(): Promise<string | null> {
@@ -424,6 +476,8 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .search-wrap.has-value .search-clear{display:block}
 .group-header{padding:4px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.5;background:var(--vscode-sideBar-background,transparent);cursor:pointer;display:flex;align-items:center;gap:4px;user-select:none}
 .group-header:hover{opacity:.8}
+.group-toggle{margin-left:auto;flex-shrink:0}
+.switch input:checked+.slider.partial::after{content:'';position:absolute;width:5px;height:5px;border:1.5px solid rgba(255,255,255,.6);border-radius:50%;left:5px;top:50%;transform:translateY(-50%)}
 .group-chevron{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;transition:transform .15s}
 .group-chevron svg{width:10px;height:10px;fill:var(--vscode-foreground)}
 .group-header.collapsed .group-chevron{transform:rotate(-90deg)}
@@ -486,6 +540,7 @@ window.addEventListener('message', e => {
   const msg = e.data;
   if (msg.type === 'setState') { state = msg.state; render(); }
   if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.description); }
+  if (msg.type === 'rulesPatch') { applyRulesPatch(msg.ruleStates); }
 });
 
 vscode.postMessage({ type: 'ready' });
@@ -587,6 +642,67 @@ function infoIcon(text) {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// ── Lightweight rule patch (no full re-render) ────────────
+
+function applyRulesPatch(ruleStates) {
+  if (!state || !state.rules) return;
+
+  // Update cached state
+  for (const rs of ruleStates) {
+    const rule = state.rules.find(r => r.identifier === rs.id);
+    if (rule) { rule.effectiveEnabled = rs.enabled; }
+  }
+
+  // Update individual checkboxes and modified dots
+  for (const rs of ruleStates) {
+    const cb = document.querySelector('input[data-rule="' + rs.id + '"]');
+    if (!cb) continue;
+    cb.checked = rs.enabled;
+    const row = cb.closest('.rule-row');
+    if (!row) continue;
+    const dot = row.querySelector('.rule-modified');
+    const modified = rs.isDefault ? !rs.enabled : rs.enabled;
+    if (modified && !dot) {
+      const name = row.querySelector('.rule-name');
+      if (name) { const d = document.createElement('span'); d.className = 'rule-modified'; d.title = 'Modified from default'; name.after(d); }
+    } else if (!modified && dot) { dot.remove(); }
+  }
+
+  // Update section headers (counts + toggle state + partial indicator)
+  for (const section of ['format', 'lint']) {
+    const isFormat = section === 'format';
+    const sectionRules = state.rules.filter(r => isFormat ? SF_FORMAT_RULES.has(r.identifier) : !SF_FORMAT_RULES.has(r.identifier));
+    const enabledCount = sectionRules.filter(r => r.effectiveEnabled).length;
+    const totalCount = sectionRules.length;
+    const anyOn = enabledCount > 0;
+    const partial = enabledCount > 0 && enabledCount < totalCount;
+
+    const gh = document.querySelector('[data-group="' + section + '"]');
+    if (!gh) continue;
+
+    // Update count text
+    const label = isFormat ? 'Format Rules' : 'Lint Rules';
+    const chevron = gh.querySelector('.group-chevron');
+    const toggle = gh.querySelector('.group-toggle');
+    if (chevron && toggle) {
+      let node = chevron.nextSibling;
+      while (node && node !== toggle) { const next = node.nextSibling; node.remove(); node = next; }
+      chevron.after(document.createTextNode(label + ' (' + enabledCount + ' / ' + totalCount + ')'));
+    }
+
+    // Update section toggle
+    const sectionCb = gh.querySelector('input[type="checkbox"]');
+    if (sectionCb) { sectionCb.checked = anyOn; }
+    const slider = gh.querySelector('.slider');
+    if (slider) { slider.classList.toggle('partial', partial); }
+  }
+
+  // Update overall count
+  const overall = state.rules.filter(r => r.effectiveEnabled).length;
+  const badge = document.querySelector('.rules-header .badge');
+  if (badge) { badge.textContent = overall + ' / ' + state.rules.length; }
+}
 
 // ── Render ────────────────────────────────────────────────
 
@@ -713,23 +829,27 @@ function render() {
 
     if (formatRules.length > 0) {
       const fmtEnabled = formatRules.filter(r => r.effectiveEnabled).length;
+      const fmtAnyOn = fmtEnabled > 0;
+      const fmtPartial = fmtEnabled > 0 && fmtEnabled < formatRules.length;
       const gc = (groupCollapsed['format'] ?? true) ? ' collapsed' : '';
-      h += '<div class="group-header' + gc + '" data-group="format"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Format Rules (' + fmtEnabled + ' / ' + formatRules.length + ')</div>';
+      h += '<div class="group-header' + gc + '" data-group="format"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Format Rules (' + fmtEnabled + ' / ' + formatRules.length + ')<label class="switch group-toggle" title="Toggle all format rules"><input type="checkbox" id="toggle-all-format"' + (fmtAnyOn ? ' checked' : '') + '><span class="slider' + (fmtPartial ? ' partial' : '') + '"></span></label></div>';
       h += '<div class="group-body' + gc + '" data-group-body="format">';
       for (const r of formatRules) { h += ruleRow(r); }
+      h += '<div class="add-btns"><button class="btn-reset" id="reset-format-btn">Reset Format Rules to Defaults</button></div>';
       h += '</div>';
     }
 
     if (lintRules.length > 0) {
       const lintEnabled = lintRules.filter(r => r.effectiveEnabled).length;
+      const lintAnyOn = lintEnabled > 0;
+      const lintPartial = lintEnabled > 0 && lintEnabled < lintRules.length;
       const gc = (groupCollapsed['lint'] ?? true) ? ' collapsed' : '';
-      h += '<div class="group-header' + gc + '" data-group="lint"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Lint Rules (' + lintEnabled + ' / ' + lintRules.length + ')</div>';
+      h += '<div class="group-header' + gc + '" data-group="lint"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Lint Rules (' + lintEnabled + ' / ' + lintRules.length + ')<label class="switch group-toggle" title="Toggle all lint rules"><input type="checkbox" id="toggle-all-lint"' + (lintAnyOn ? ' checked' : '') + '><span class="slider' + (lintPartial ? ' partial' : '') + '"></span></label></div>';
       h += '<div class="group-body' + gc + '" data-group-body="lint">';
       for (const r of lintRules) { h += ruleRow(r); }
+      h += '<div class="add-btns"><button class="btn-reset" id="reset-lint-btn">Reset Lint Rules to Defaults</button></div>';
       h += '</div>';
     }
-
-    h += '<div class="add-btns" style="padding-top:4px"><button id="reset-all-btn">Reset All Rules to Defaults</button></div>';
   }
 
   app.innerHTML = h;
@@ -893,7 +1013,8 @@ function bind() {
   document.querySelectorAll('.group-header').forEach(gh => {
     const group = gh.dataset.group;
     if (!(group in groupCollapsed)) { groupCollapsed[group] = true; }
-    gh.addEventListener('click', () => {
+    gh.addEventListener('click', (e) => {
+      if (e.target.closest('.group-toggle')) return;
       const body = document.querySelector('[data-group-body="' + group + '"]');
       if (!body) return;
       const isCollapsed = !gh.classList.contains('collapsed');
@@ -948,7 +1069,10 @@ function bind() {
   });
 
   // Reset all
-  document.getElementById('reset-all-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetAllRules' }));
+  document.getElementById('reset-format-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetSectionRules', section: 'format' }));
+  document.getElementById('reset-lint-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'resetSectionRules', section: 'lint' }));
+  document.getElementById('toggle-all-format')?.addEventListener('change', e => { e.stopPropagation(); vscode.postMessage({ type: 'toggleAllSection', section: 'format', enabled: e.target.checked }); });
+  document.getElementById('toggle-all-lint')?.addEventListener('change', e => { e.stopPropagation(); vscode.postMessage({ type: 'toggleAllSection', section: 'lint', enabled: e.target.checked }); });
 }
 
 // ── Rule config panel ─────────────────────────────────────
