@@ -769,6 +769,20 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         return !!this.globalState.get('swiftFormatGlobalProfile');
     }
 
+    /** Check if local profile fields differ from the global profile */
+    localDiffersFromGlobal(): boolean {
+        const local = this.getConfig(); // current effective config (local mode)
+        const globalProfile = this.globalState.get<Partial<SwiftFormatConfig>>('swiftFormatGlobalProfile');
+        const globalBase: SwiftFormatConfig = { ...DEFAULT_CONFIG, ...globalProfile };
+
+        for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
+            const lv = (local as unknown as Record<string, unknown>)[key];
+            const gv = (globalBase as unknown as Record<string, unknown>)[key];
+            if (JSON.stringify(lv) !== JSON.stringify(gv)) { return true; }
+        }
+        return false;
+    }
+
     hasWorkspaceConfig(): boolean {
         return !!this.workspaceState.get('swiftFormatConfig');
     }

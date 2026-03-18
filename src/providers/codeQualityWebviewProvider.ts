@@ -299,9 +299,9 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
             case 'changeProfileMode': {
                 const newMode = msg.value as 'local' | 'global';
-                if (newMode === 'global') {
+                if (newMode === 'global' && this.swiftFormatProvider.localDiffersFromGlobal()) {
                     const answer = await vscode.window.showWarningMessage(
-                        'Switch to global profile? swift-format will use your global settings instead of the local config file.',
+                        'Local settings differ from global profile. How would you like to switch?',
                         { modal: true },
                         'Save Local to Global & Switch',
                         'Switch to Global',
