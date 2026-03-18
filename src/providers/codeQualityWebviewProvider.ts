@@ -280,12 +280,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
             // ── Toggle controls ──────────────────────────────
 
-            case 'toggleFormatterEnabled':
-                await this.swiftFormatProvider.updateConfig({ enabled: msg.value as boolean });
-                this.postState();
-                break;
-
-            case 'toggleAutoFixOnSave': {
+            case 'toggleFormatOnSave': {
                 const enabled = msg.value as boolean;
                 await this.swiftFormatProvider.updateConfig({ formatOnSave: enabled });
                 await this.swiftLintProvider.updateConfig({ fixOnSave: enabled });
@@ -986,11 +981,8 @@ function render() {
   // ── Section 2: Controls ───────────────────────────────
 
   h += '<div class="section">';
-  if (sfFound) {
-    h += toggleRow('Formatter', 'toggle-formatter', sfC.enabled);
-  }
   if (sfFound || slFound) {
-    h += toggleRow('Auto-fix on Save', 'toggle-autoFixOnSave', state.autoFixOnSave, 'Applies swift-format formatting and SwiftLint auto-corrections when saving a Swift file.');
+    h += toggleRow('Format on Save', 'toggle-formatOnSave', state.autoFixOnSave, 'Applies swift-format formatting and SwiftLint auto-corrections when saving a Swift file.');
   }
   if (sfFound || slFound) {
     const lintOn = (sfFound && sfC.lintMode) || (slFound && slC.enabled);
@@ -1275,8 +1267,7 @@ function bind() {
   document.getElementById('sl-update-link')?.addEventListener('click', () => vscode.postMessage({ type: 'openSwiftLintGithub' }));
 
   // Controls
-  document.getElementById('toggle-formatter')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFormatterEnabled', value: e.target.checked }));
-  document.getElementById('toggle-autoFixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleAutoFixOnSave', value: e.target.checked }));
+  document.getElementById('toggle-formatOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFormatOnSave', value: e.target.checked }));
   document.getElementById('toggle-lintMode')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleLintMode', value: e.target.checked }));
   document.getElementById('severity-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeSeverity', value: e.target.value }));
   document.getElementById('profile-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeProfileMode', value: e.target.value }));

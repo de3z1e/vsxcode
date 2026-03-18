@@ -292,7 +292,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         }
 
         const updatedConfig = this.getConfig();
-        if (!updatedConfig.enabled || !updatedConfig.lintMode) {
+        if (!updatedConfig.lintMode) {
             this.diagnosticCollection.clear();
         } else {
             this.lintOpenDocuments();
@@ -489,9 +489,6 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         }
         if (!this.resolvedPath) { return []; }
 
-        const config = this.getConfig();
-        if (!config.enabled) { return []; }
-
         const text = document.getText();
         if (!text.trim()) { return []; }
 
@@ -541,7 +538,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         if (event.document.uri.scheme !== 'file') { return; }
 
         const config = this.getConfig();
-        if (!config.enabled || !config.formatOnSave) { return; }
+        if (!config.formatOnSave) { return; }
         if (!this.resolvedPath) { return; }
 
         const filePath = event.document.uri.fsPath;
@@ -562,7 +559,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         if (document.uri.scheme !== 'file') { return; }
 
         const config = this.getConfig();
-        if (!config.enabled || !config.lintMode) { return; }
+        if (!config.lintMode) { return; }
 
         await this.lintDocument(document);
     }
@@ -572,7 +569,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         if (document.uri.scheme !== 'file') { return; }
 
         const config = this.getConfig();
-        if (!config.enabled || !config.lintMode) {
+        if (!config.lintMode) {
             this.diagnosticCollection.delete(document.uri);
             return;
         }
