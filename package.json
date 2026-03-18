@@ -57,8 +57,8 @@
                     "when": "vsxcode.hasXcodeProject"
                 },
                 {
-                    "id": "vsxcode.codeQuality",
-                    "name": "Code Quality",
+                    "id": "vsxcode.codeFormat",
+                    "name": "Code Format",
                     "type": "webview",
                     "when": "vsxcode.hasXcodeProject"
                 }

@@ -688,7 +688,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const codeQualityProvider = new CodeQualityWebviewProvider(
         context.extensionUri, swiftFormatProvider, context.workspaceState, log,
     );
-    const codeQualityViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.codeQuality', codeQualityProvider);
+    const codeQualityViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.codeFormat', codeQualityProvider);
     context.subscriptions.push(codeQualityViewDisposable, swiftFormatProvider, formatterEditProvider);
 
     swiftFormatProvider.resolvePathAndVersion().then(async () => {
