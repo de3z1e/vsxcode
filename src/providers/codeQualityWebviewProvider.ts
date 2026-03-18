@@ -989,7 +989,7 @@ function render() {
   if (sfFound) {
     h += toggleRow('Formatter', 'toggle-formatter', sfC.enabled);
   }
-  if ((sfFound && sfC.enabled) || (slFound && slC.enabled)) {
+  if (sfFound || slFound) {
     h += toggleRow('Auto-fix on Save', 'toggle-autoFixOnSave', state.autoFixOnSave, 'Applies swift-format formatting and SwiftLint auto-corrections when saving a Swift file.');
   }
   if (sfFound || slFound) {
