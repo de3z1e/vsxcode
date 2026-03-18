@@ -676,7 +676,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 await swiftFormatProvider.setProfileMode('global');
             }
         }
-        await swiftFormatProvider.writeConfigFile();
         codeQualityProvider.refresh();
         swiftFormatProvider.checkForUpdate().then(() => codeQualityProvider.refresh());
     }).catch((e) => {
