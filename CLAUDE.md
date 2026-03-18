@@ -14,7 +14,7 @@ No test framework or linter is configured.
 
 **Important**: After every code change, always compile, package, and install the extension into VS Code:
 ```
-npm run compile && npm run package && code --install-extension *.vsix --force
+rm -f *.vsix && npm run compile && npm run package && code --install-extension *.vsix --force
 ```
 
 ## Architecture

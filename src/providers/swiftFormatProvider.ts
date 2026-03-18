@@ -750,14 +750,10 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
 
             if (Object.keys(patch).length === 0) { return; }
 
-            // Update config without triggering a file write
-            if (this.getProfileMode() === 'global') {
-                const current = this.globalState.get<Partial<SwiftFormatConfig>>('swiftFormatGlobalProfile') || {};
-                await this.globalState.update('swiftFormatGlobalProfile', { ...current, ...patch });
-            } else {
-                const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
-                await this.workspaceState.update('swiftFormatConfig', { ...current, ...patch });
-            }
+            // Always write to workspace (local) state — the config file is a local artifact.
+            // In global mode the global overlay in getConfig() hides these values.
+            const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
+            await this.workspaceState.update('swiftFormatConfig', { ...current, ...patch });
 
             this.log('[swift-format] config synced from .swift-format');
             if (this.getConfig().lintMode) {
