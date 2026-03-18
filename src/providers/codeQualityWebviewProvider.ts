@@ -334,25 +334,25 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             case 'changeProfileMode': {
                 const newMode = msg.value as 'local' | 'global';
                 if (newMode === 'global') {
-                    const config = this.swiftFormatProvider.getConfig();
-                    const hasLocalChanges = config.disabledRules.length > 0
-                        || config.enabledRules.length > 0;
-                    if (hasLocalChanges) {
-                        const answer = await vscode.window.showWarningMessage(
-                            'Switch to global profile? This project\'s local rule customizations will be replaced by the global profile.',
-                            { modal: true },
-                            'Switch to Global',
-                        );
-                        if (answer !== 'Switch to Global') {
-                            this.postState();
-                            break;
-                        }
+                    const answer = await vscode.window.showWarningMessage(
+                        'Switch to global profile? Local settings will be replaced by the global profile.',
+                        { modal: true },
+                        'Save Local to Global & Switch',
+                        'Switch Without Saving',
+                    );
+                    if (!answer) {
+                        this.postState();
+                        break;
+                    }
+                    if (answer === 'Save Local to Global & Switch') {
+                        await this.swiftFormatProvider.saveLocalToGlobal();
                     }
                 }
                 await this.swiftFormatProvider.setProfileMode(newMode);
                 this.postState();
                 break;
             }
+
 
             // ── Binary path change ──────────────────────────
 

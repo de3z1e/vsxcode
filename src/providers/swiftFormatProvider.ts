@@ -204,27 +204,44 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         const prevMode = this.getProfileMode();
         if (mode === prevMode) { return; }
 
-        if (mode === 'global' && !this.globalState.get('swiftFormatGlobalProfile')) {
-            const profile: Partial<SwiftFormatConfig> = {};
-            for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
-                (profile as unknown as Record<string, unknown>)[key] = DEFAULT_CONFIG[key];
+        if (mode === 'global') {
+            if (!this.globalState.get('swiftFormatGlobalProfile')) {
+                // Initialize global profile with defaults
+                const profile: Partial<SwiftFormatConfig> = {};
+                for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
+                    (profile as unknown as Record<string, unknown>)[key] = DEFAULT_CONFIG[key];
+                }
+                await this.globalState.update('swiftFormatGlobalProfile', profile);
+                this.log('[swift-format] initialized global profile with defaults');
             }
-            await this.globalState.update('swiftFormatGlobalProfile', profile);
-            this.log('[swift-format] initialized global profile with defaults');
         }
 
         if (mode === 'local') {
-            const global = this.globalState.get<Partial<SwiftFormatConfig>>('swiftFormatGlobalProfile');
-            if (global) {
-                const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
-                await this.workspaceState.update('swiftFormatConfig', { ...current, ...global });
-                this.log('[swift-format] copied global profile to local settings');
+            // Copy effective config (merged defaults + global) to local as starting point
+            const effective = this.getConfig();
+            const local: Partial<SwiftFormatConfig> = {};
+            for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
+                (local as unknown as Record<string, unknown>)[key] = (effective as unknown as Record<string, unknown>)[key];
             }
+            const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
+            await this.workspaceState.update('swiftFormatConfig', { ...current, ...local });
+            this.log('[swift-format] copied effective config to local settings');
         }
 
         await this.workspaceState.update('swiftFormatProfileMode', mode);
         this.log(`[swift-format] profile mode: ${mode}`);
         await this.writeConfigFile();
+    }
+
+    /** Save current local settings to the global profile */
+    async saveLocalToGlobal(): Promise<void> {
+        const effective = this.getConfig();
+        const profile: Partial<SwiftFormatConfig> = {};
+        for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
+            (profile as unknown as Record<string, unknown>)[key] = (effective as unknown as Record<string, unknown>)[key];
+        }
+        await this.globalState.update('swiftFormatGlobalProfile', profile);
+        this.log('[swift-format] saved local settings to global profile');
     }
 
     hasConfigFile(): boolean {
