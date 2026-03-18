@@ -165,13 +165,14 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             }),
         );
 
+        // File watcher for local profile two-way sync
         const rootUri = vscode.workspace.workspaceFolders?.[0]?.uri;
         if (rootUri) {
             const watcher = vscode.workspace.createFileSystemWatcher(
                 new vscode.RelativePattern(rootUri, '.vscode/.swift-format'),
             );
-            watcher.onDidChange(() => this.syncFromConfigFile());
-            watcher.onDidCreate(() => this.syncFromConfigFile());
+            watcher.onDidChange(() => { if (this.getProfileMode() === 'local') { this.syncFromConfigFile(); } });
+            watcher.onDidCreate(() => { if (this.getProfileMode() === 'local') { this.syncFromConfigFile(); } });
             this.disposables.push(watcher);
         }
     }
@@ -215,21 +216,36 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             }
         }
 
+        // Capture effective config before mode switch (includes global overrides if currently global)
+        const effectiveBeforeSwitch = this.getConfig();
+
+        // Store mode early so syncFromConfigFile and writeConfigFile see the new mode
+        await this.workspaceState.update('swiftFormatProfileMode', mode);
+
         if (mode === 'local') {
-            // Copy effective config (merged defaults + global) to local as starting point
-            const effective = this.getConfig();
-            const local: Partial<SwiftFormatConfig> = {};
-            for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
-                (local as unknown as Record<string, unknown>)[key] = (effective as unknown as Record<string, unknown>)[key];
+            if (this.hasConfigFile()) {
+                // Import existing .swift-format file — intentionally preferred over global
+                // settings so the project-level config is always respected on switch-back
+                await this.syncFromConfigFile();
+                this.log('[swift-format] imported existing .swift-format into local settings');
+            } else {
+                // Copy effective config (captured before mode switch) to local as starting point
+                const local: Partial<SwiftFormatConfig> = {};
+                for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
+                    (local as unknown as Record<string, unknown>)[key] = (effectiveBeforeSwitch as unknown as Record<string, unknown>)[key];
+                }
+                const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
+                await this.workspaceState.update('swiftFormatConfig', { ...current, ...local });
+                this.log('[swift-format] copied effective config to local settings');
             }
-            const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
-            await this.workspaceState.update('swiftFormatConfig', { ...current, ...local });
-            this.log('[swift-format] copied effective config to local settings');
         }
 
-        await this.workspaceState.update('swiftFormatProfileMode', mode);
         this.log(`[swift-format] profile mode: ${mode}`);
-        await this.writeConfigFile();
+        try {
+            await this.writeConfigFile();
+        } catch {
+            this.log('[swift-format] failed to write config file');
+        }
     }
 
     /** Save current local settings to the global profile */
@@ -393,16 +409,10 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         return path.join(rootPath, '.vscode', '.swift-format');
     }
 
-    async writeConfigFile(): Promise<void> {
-        const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!rootPath) { return; }
-
-        const vscodeDir = path.join(rootPath, '.vscode');
-        await fs.promises.mkdir(vscodeDir, { recursive: true });
-
+    /** Build the JSON config string from current settings */
+    buildConfigJson(): string {
         const config = this.getConfig();
 
-        // Build swift-format JSON config
         const formatConfig: Record<string, unknown> = {
             version: 1,
             lineLength: config.lineLength,
@@ -443,8 +453,26 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             formatConfig.rules = rules;
         }
 
+        return JSON.stringify(formatConfig, null, 2);
+    }
+
+    /** Get the --configuration argument for swift-format (always inline JSON for consistency) */
+    getConfigArgs(): string[] {
+        return ['--configuration', this.buildConfigJson()];
+    }
+
+    async writeConfigFile(): Promise<void> {
+        // Only write config file in local mode
+        if (this.getProfileMode() !== 'local') { return; }
+
+        const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!rootPath) { return; }
+
+        const vscodeDir = path.join(rootPath, '.vscode');
+        await fs.promises.mkdir(vscodeDir, { recursive: true });
+
         this._writingConfigFile = true;
-        await fs.promises.writeFile(this.getConfigFilePath(), JSON.stringify(formatConfig, null, 2) + '\n');
+        await fs.promises.writeFile(this.getConfigFilePath(), this.buildConfigJson() + '\n');
         setTimeout(() => { this._writingConfigFile = false; }, 500);
     }
 
@@ -467,10 +495,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         const text = document.getText();
         if (!text.trim()) { return []; }
 
-        const args = ['format'];
-        if (this.hasConfigFile()) {
-            args.push('--configuration', this.getConfigFilePath());
-        }
+        const args = ['format', ...this.getConfigArgs()];
 
         try {
             const formatted = await this.execWithStdin(this.resolvedPath, args, text);
@@ -558,10 +583,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         const cwd = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath
             || path.dirname(filePath);
 
-        const args = ['lint'];
-        if (this.hasConfigFile()) {
-            args.push('--configuration', this.getConfigFilePath());
-        }
+        const args = ['lint', ...this.getConfigArgs()];
         args.push(filePath);
 
         try {

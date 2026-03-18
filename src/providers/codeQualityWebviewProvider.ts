@@ -56,7 +56,8 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
     // ── State ────────────────────────────────────────────────
 
     private postState(): void {
-        if (!this.swiftFormatProvider.hasConfigFile() && this.swiftFormatProvider.isPathResolved()) {
+        // In local mode, ensure config file exists
+        if (this.swiftFormatProvider.getProfileMode() === 'local' && !this.swiftFormatProvider.hasConfigFile() && this.swiftFormatProvider.isPathResolved()) {
             this.swiftFormatProvider.writeConfigFile();
         }
         this._view?.webview.postMessage({ type: 'setState', state: this.getState() });
@@ -300,10 +301,10 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 const newMode = msg.value as 'local' | 'global';
                 if (newMode === 'global') {
                     const answer = await vscode.window.showWarningMessage(
-                        'Switch to global profile? Local settings will be replaced by the global profile.',
+                        'Switch to global profile? swift-format will use your global settings instead of the local config file.',
                         { modal: true },
                         'Save Local to Global & Switch',
-                        'Switch Without Saving',
+                        'Switch to Global',
                     );
                     if (!answer) {
                         this.postState();
