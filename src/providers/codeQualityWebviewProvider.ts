@@ -352,8 +352,9 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
             case 'resetSfRule': {
                 const ruleId = msg.ruleId as string;
+                // Keep auto-disabled overlap rules in disabledRules
                 const config = this.swiftFormatProvider.getConfig();
-                const disabledRules = config.disabledRules.filter((r) => r !== ruleId);
+                const disabledRules = config.disabledRules.filter((r) => r !== ruleId || AUTO_DISABLE_SF_RULES.has(r));
                 const enabledRules = config.enabledRules.filter((r) => r !== ruleId);
                 await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
                 this.postState();
@@ -363,6 +364,8 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             case 'toggleSfRule': {
                 const ruleId = msg.ruleId as string;
                 const enabled = msg.enabled as boolean;
+                // Reject enabling auto-disabled SF rules
+                if (enabled && AUTO_DISABLE_SF_RULES.has(ruleId)) { this.postState(); break; }
                 const config = this.swiftFormatProvider.getConfig();
                 const rules = this.swiftFormatProvider.getRules() || [];
                 const rule = rules.find((r) => r.identifier === ruleId);
@@ -382,6 +385,8 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             case 'toggleSlRule': {
                 const ruleId = msg.ruleId as string;
                 const enabled = msg.enabled as boolean;
+                // Reject enabling auto-disabled SL rules
+                if (enabled && (AUTO_DISABLE_SL_RULES.has(ruleId) || SETTINGS_OVERLAP_HIDDEN_SL_RULES.has(ruleId))) { this.postState(); break; }
                 const config = this.swiftLintProvider.getConfig();
                 const rules = this.swiftLintProvider.getRules() || [];
                 const rule = rules.find((r) => r.identifier === ruleId);
@@ -487,15 +492,17 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                     'Reset',
                 );
                 if (answer === 'Reset') {
-                    await this.swiftFormatProvider.updateConfig({ disabledRules: [], enabledRules: [] });
+                    // Preserve auto-disabled overlap rules
+                    const sfDisabled = [...AUTO_DISABLE_SF_RULES];
+                    const slDisabled = [...AUTO_DISABLE_SL_RULES, ...SETTINGS_OVERLAP_HIDDEN_SL_RULES];
+                    await this.swiftFormatProvider.updateConfig({ disabledRules: sfDisabled, enabledRules: [] });
                     await this.swiftLintProvider.updateConfig({
-                        disabledRules: [],
+                        disabledRules: slDisabled,
                         optInRules: [],
                         analyzerRules: [],
                         ruleConfigs: {},
                     });
                     this.ruleDefaultsCache.clear();
-                    await this.workspaceState.update('codeQualityOverlapPrefs', {});
                     this.postState();
                 }
                 break;
@@ -1018,6 +1025,8 @@ function render() {
       h += '<div class="row"><span title="' + esc('Number of spaces per indentation level.\\nDefault: 4') + '">Indent Width' + modDot(sfC.indentationCount !== df.indentationCount) + '</span><input type="number" id="indent-count" value="' + sfC.indentationCount + '" min="1" max="8"></div>';
     }
 
+    h += '<div class="row"><span title="' + esc('Maximum number of characters per line before wrapping.\\nDefault: 100') + '">Line Length' + modDot(sfC.lineLength !== df.lineLength) + '</span><input type="number" id="lineLength" value="' + sfC.lineLength + '" min="1" max="999"></div>';
+
     h += toggleRow('Respects Existing Line Breaks', 'opt-respectsExistingLineBreaks', sfC.respectsExistingLineBreaks, 'Preserves existing line breaks in source code.', sfC.respectsExistingLineBreaks !== df.respectsExistingLineBreaks, 'On');
     h += toggleRow('Break Before Each Argument', 'opt-lineBreakBeforeEachArgument', sfC.lineBreakBeforeEachArgument, 'Each argument on its own line when wrapping.', sfC.lineBreakBeforeEachArgument !== df.lineBreakBeforeEachArgument, 'Off');
     h += toggleRow('Break Before Generic Requirements', 'opt-lineBreakBeforeEachGenericRequirement', sfC.lineBreakBeforeEachGenericRequirement, 'Each generic requirement on its own line.', sfC.lineBreakBeforeEachGenericRequirement !== df.lineBreakBeforeEachGenericRequirement, 'Off');
@@ -1025,6 +1034,7 @@ function render() {
     h += toggleRow('Break Before Switch Case Body', 'opt-lineBreakBeforeSwitchCaseBody', sfC.lineBreakBeforeSwitchCaseBody, 'Case body on line after the label.', sfC.lineBreakBeforeSwitchCaseBody !== df.lineBreakBeforeSwitchCaseBody, 'Off');
     h += toggleRow('Break Between Declaration Attributes', 'opt-lineBreakBetweenDeclarationAttributes', sfC.lineBreakBetweenDeclarationAttributes, 'Places each declaration attribute on its own line.', sfC.lineBreakBetweenDeclarationAttributes !== df.lineBreakBetweenDeclarationAttributes, 'Off');
     h += toggleRow('Indent #if/#else Blocks', 'opt-indentConditionalCompilationBlocks', sfC.indentConditionalCompilationBlocks, 'Indents code inside conditional compilation blocks.', sfC.indentConditionalCompilationBlocks !== df.indentConditionalCompilationBlocks, 'On');
+    h += toggleRow('Indent Switch Case Labels', 'opt-indentSwitchCaseLabels', sfC.indentSwitchCaseLabels, 'Indents case labels relative to switch.', sfC.indentSwitchCaseLabels !== df.indentSwitchCaseLabels, 'Off');
     h += toggleRow('Prioritize Function Output Together', 'opt-prioritizeKeepingFunctionOutputTogether', sfC.prioritizeKeepingFunctionOutputTogether, 'Keeps the return type on the same line as the closing parenthesis when wrapping.', sfC.prioritizeKeepingFunctionOutputTogether !== df.prioritizeKeepingFunctionOutputTogether, 'Off');
     h += toggleRow('Spaces Around Range Operators', 'opt-spacesAroundRangeFormationOperators', sfC.spacesAroundRangeFormationOperators, 'Adds spaces around range operators (... and ..<).', sfC.spacesAroundRangeFormationOperators !== df.spacesAroundRangeFormationOperators, 'Off');
 

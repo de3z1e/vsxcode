@@ -200,13 +200,12 @@ export const AUTO_DISABLE_SL_RULES = new Set(
     OVERLAP_PAIRS.filter((p) => !p.slCorrectable).flatMap((p) => Array.isArray(p.slRule) ? p.slRule : [p.slRule]),
 );
 
-/** SL rules that overlap with SF formatting options and are NOT correctable.
- *  SF options always apply during formatting, so these SL lint checks are redundant.
- *  Auto-disabled (if default) and hidden from the rules list. */
+/** SL rules that overlap with SF formatting options where SL is NOT fixable.
+ *  SF option is the only enforcer. SL rule is redundant — auto-disabled and hidden. */
 export const SETTINGS_OVERLAP_HIDDEN_SL_RULES = new Set([
-    'line_length',           // SF lineLength handles this
-    'indentation_width',     // SF indentation + indentationCount handles this
-    'switch_case_alignment', // SF indentSwitchCaseLabels handles this
+    'line_length',           // SL not fixable → SF lineLength handles
+    'indentation_width',     // SL not fixable → SF indentation handles
+    'switch_case_alignment', // SL not fixable → SF indentSwitchCaseLabels handles
 ]);
 
 // ── Build unified rules ─────────────────────────────────────────
@@ -221,7 +220,7 @@ export function buildUnifiedRules(
     const consumedSf = new Set<string>();
     const consumedSl = new Set<string>();
 
-    // 0. Hide SL rules that overlap with SF formatting options (non-correctable)
+    // 0. Hide SL rules where SF formatting option handles and SL is not fixable
     for (const slId of SETTINGS_OVERLAP_HIDDEN_SL_RULES) { consumedSl.add(slId); }
 
     // 1. Process overlaps — each pair is hard-resolved to one tool

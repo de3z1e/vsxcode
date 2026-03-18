@@ -428,14 +428,17 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         const config = this.getConfig();
 
         // Build swift-format JSON config
+        // Options with fixable SL equivalents are omitted — SL --fix handles them:
+        //   maximumBlankLines (SL vertical_whitespace), lineBreakBeforeControlFlowKeywords (SL statement_position),
+        //   fileScopedDeclarationPrivacy (SL private_over_fileprivate), multiElementCollectionTrailingCommas (SL trailing_comma)
+        // Options with non-fixable SL equivalents are kept — SF is the only enforcer:
+        //   lineLength (SL line_length not fixable), indentSwitchCaseLabels (SL switch_case_alignment not fixable)
         const formatConfig: Record<string, unknown> = {
             version: 1,
             lineLength: config.lineLength,
             indentation: config.indentation === 'tabs' ? { tabs: 1 } : { spaces: config.indentationCount },
             tabWidth: 8,
-            maximumBlankLines: config.maximumBlankLines,
             respectsExistingLineBreaks: config.respectsExistingLineBreaks,
-            lineBreakBeforeControlFlowKeywords: config.lineBreakBeforeControlFlowKeywords,
             lineBreakBeforeEachArgument: config.lineBreakBeforeEachArgument,
             lineBreakBeforeEachGenericRequirement: config.lineBreakBeforeEachGenericRequirement,
             lineBreakAroundMultilineExpressionChainComponents: config.lineBreakAroundMultilineExpressionChainComponents,
@@ -443,8 +446,6 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             lineBreakBetweenDeclarationAttributes: config.lineBreakBetweenDeclarationAttributes,
             indentConditionalCompilationBlocks: config.indentConditionalCompilationBlocks,
             indentSwitchCaseLabels: config.indentSwitchCaseLabels,
-            fileScopedDeclarationPrivacy: { accessLevel: config.fileScopedDeclarationPrivacy },
-            multiElementCollectionTrailingCommas: config.multiElementCollectionTrailingCommas,
             prioritizeKeepingFunctionOutputTogether: config.prioritizeKeepingFunctionOutputTogether,
             spacesAroundRangeFormationOperators: config.spacesAroundRangeFormationOperators,
             spacesBeforeEndOfLineComments: config.spacesBeforeEndOfLineComments,
