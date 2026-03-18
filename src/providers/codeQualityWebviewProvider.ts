@@ -458,6 +458,7 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .add-btns button,.btn-reset{padding:3px 10px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
 .add-btns button:hover,.btn-reset:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.15))}
 .config-actions{padding:4px 0 0}
+.reset-options-wrap{margin-top:6px!important}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
 </style>
 </head>
@@ -559,6 +560,15 @@ function humanReadableName(identifier) {
   return identifier.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
 }
 
+function boolOptionRow(label, id, value, desc, modified, defaultLabel) {
+  let tip = '';
+  if (desc && defaultLabel) { tip = desc + '\\nDefault: ' + defaultLabel; }
+  else if (desc) { tip = desc; }
+  else if (defaultLabel) { tip = 'Default: ' + defaultLabel; }
+  const titleAttr = tip ? ' title="' + esc(tip) + '"' : '';
+  return '<div class="row"><span' + titleAttr + '>' + label + modDot(modified) + '</span><select id="' + id + '"><option value="true"' + (value ? ' selected' : '') + '>true</option><option value="false"' + (!value ? ' selected' : '') + '>false</option></select></div>';
+}
+
 function toggleRow(label, id, checked, desc, modified, defaultLabel) {
   let tip = '';
   if (desc && defaultLabel) { tip = desc + '\\nDefault: ' + defaultLabel; }
@@ -655,24 +665,24 @@ function render() {
 
     h += '<div class="row"><span title="' + esc('Maximum number of consecutive blank lines allowed.\\nDefault: 1') + '">Max Blank Lines' + modDot(c.maximumBlankLines !== df.maximumBlankLines) + '</span><input type="number" id="maximumBlankLines" value="' + c.maximumBlankLines + '" min="0" max="10"></div>';
 
-    h += toggleRow('Respects Existing Line Breaks', 'opt-respectsExistingLineBreaks', c.respectsExistingLineBreaks, 'Preserves existing line breaks in source code.', c.respectsExistingLineBreaks !== df.respectsExistingLineBreaks, 'On');
-    h += toggleRow('Break Before Control Flow Keywords', 'opt-lineBreakBeforeControlFlowKeywords', c.lineBreakBeforeControlFlowKeywords, 'Places else, catch on a new line.', c.lineBreakBeforeControlFlowKeywords !== df.lineBreakBeforeControlFlowKeywords, 'Off');
-    h += toggleRow('Break Before Each Argument', 'opt-lineBreakBeforeEachArgument', c.lineBreakBeforeEachArgument, 'Each argument on its own line when wrapping.', c.lineBreakBeforeEachArgument !== df.lineBreakBeforeEachArgument, 'Off');
-    h += toggleRow('Break Before Generic Requirements', 'opt-lineBreakBeforeEachGenericRequirement', c.lineBreakBeforeEachGenericRequirement, 'Each generic requirement on its own line.', c.lineBreakBeforeEachGenericRequirement !== df.lineBreakBeforeEachGenericRequirement, 'Off');
-    h += toggleRow('Break Around Multiline Chains', 'opt-lineBreakAroundMultilineExpressionChainComponents', c.lineBreakAroundMultilineExpressionChainComponents, 'Adds line breaks around multiline chain components.', c.lineBreakAroundMultilineExpressionChainComponents !== df.lineBreakAroundMultilineExpressionChainComponents, 'Off');
-    h += toggleRow('Break Before Switch Case Body', 'opt-lineBreakBeforeSwitchCaseBody', c.lineBreakBeforeSwitchCaseBody, 'Case body on line after the label.', c.lineBreakBeforeSwitchCaseBody !== df.lineBreakBeforeSwitchCaseBody, 'Off');
-    h += toggleRow('Break Between Declaration Attributes', 'opt-lineBreakBetweenDeclarationAttributes', c.lineBreakBetweenDeclarationAttributes, 'Places each declaration attribute on its own line.', c.lineBreakBetweenDeclarationAttributes !== df.lineBreakBetweenDeclarationAttributes, 'Off');
-    h += toggleRow('Indent #if/#else Blocks', 'opt-indentConditionalCompilationBlocks', c.indentConditionalCompilationBlocks, 'Indents code inside conditional compilation blocks.', c.indentConditionalCompilationBlocks !== df.indentConditionalCompilationBlocks, 'On');
-    h += toggleRow('Indent Switch Case Labels', 'opt-indentSwitchCaseLabels', c.indentSwitchCaseLabels, 'Indents case labels relative to switch.', c.indentSwitchCaseLabels !== df.indentSwitchCaseLabels, 'Off');
+    h += boolOptionRow('Respects Existing Line Breaks', 'opt-respectsExistingLineBreaks', c.respectsExistingLineBreaks, 'Preserves existing line breaks in source code.', c.respectsExistingLineBreaks !== df.respectsExistingLineBreaks, 'true');
+    h += boolOptionRow('Break Before Control Flow Keywords', 'opt-lineBreakBeforeControlFlowKeywords', c.lineBreakBeforeControlFlowKeywords, 'Places else, catch on a new line.', c.lineBreakBeforeControlFlowKeywords !== df.lineBreakBeforeControlFlowKeywords, 'false');
+    h += boolOptionRow('Break Before Each Argument', 'opt-lineBreakBeforeEachArgument', c.lineBreakBeforeEachArgument, 'Each argument on its own line when wrapping.', c.lineBreakBeforeEachArgument !== df.lineBreakBeforeEachArgument, 'false');
+    h += boolOptionRow('Break Before Generic Requirements', 'opt-lineBreakBeforeEachGenericRequirement', c.lineBreakBeforeEachGenericRequirement, 'Each generic requirement on its own line.', c.lineBreakBeforeEachGenericRequirement !== df.lineBreakBeforeEachGenericRequirement, 'false');
+    h += boolOptionRow('Break Around Multiline Chains', 'opt-lineBreakAroundMultilineExpressionChainComponents', c.lineBreakAroundMultilineExpressionChainComponents, 'Adds line breaks around multiline chain components.', c.lineBreakAroundMultilineExpressionChainComponents !== df.lineBreakAroundMultilineExpressionChainComponents, 'false');
+    h += boolOptionRow('Break Before Switch Case Body', 'opt-lineBreakBeforeSwitchCaseBody', c.lineBreakBeforeSwitchCaseBody, 'Case body on line after the label.', c.lineBreakBeforeSwitchCaseBody !== df.lineBreakBeforeSwitchCaseBody, 'false');
+    h += boolOptionRow('Break Between Declaration Attributes', 'opt-lineBreakBetweenDeclarationAttributes', c.lineBreakBetweenDeclarationAttributes, 'Places each declaration attribute on its own line.', c.lineBreakBetweenDeclarationAttributes !== df.lineBreakBetweenDeclarationAttributes, 'false');
+    h += boolOptionRow('Indent #if/#else Blocks', 'opt-indentConditionalCompilationBlocks', c.indentConditionalCompilationBlocks, 'Indents code inside conditional compilation blocks.', c.indentConditionalCompilationBlocks !== df.indentConditionalCompilationBlocks, 'true');
+    h += boolOptionRow('Indent Switch Case Labels', 'opt-indentSwitchCaseLabels', c.indentSwitchCaseLabels, 'Indents case labels relative to switch.', c.indentSwitchCaseLabels !== df.indentSwitchCaseLabels, 'false');
 
     h += '<div class="row"><span title="' + esc('File-scoped declarations use private or fileprivate.\\nDefault: private') + '">File-Scoped Privacy' + modDot(c.fileScopedDeclarationPrivacy !== df.fileScopedDeclarationPrivacy) + '</span><select id="fileScopedDeclarationPrivacy">';
     h += '<option value="private"' + (c.fileScopedDeclarationPrivacy === 'private' ? ' selected' : '') + '>private</option>';
     h += '<option value="fileprivate"' + (c.fileScopedDeclarationPrivacy === 'fileprivate' ? ' selected' : '') + '>fileprivate</option>';
     h += '</select></div>';
 
-    h += toggleRow('Trailing Commas', 'opt-multiElementCollectionTrailingCommas', c.multiElementCollectionTrailingCommas, 'Adds trailing comma after last element in multi-line collections.', c.multiElementCollectionTrailingCommas !== df.multiElementCollectionTrailingCommas, 'On');
-    h += toggleRow('Prioritize Function Output Together', 'opt-prioritizeKeepingFunctionOutputTogether', c.prioritizeKeepingFunctionOutputTogether, 'Keeps the return type on the same line as the closing parenthesis when wrapping.', c.prioritizeKeepingFunctionOutputTogether !== df.prioritizeKeepingFunctionOutputTogether, 'Off');
-    h += toggleRow('Spaces Around Range Operators', 'opt-spacesAroundRangeFormationOperators', c.spacesAroundRangeFormationOperators, 'Adds spaces around range operators (... and ..<).', c.spacesAroundRangeFormationOperators !== df.spacesAroundRangeFormationOperators, 'Off');
+    h += boolOptionRow('Trailing Commas', 'opt-multiElementCollectionTrailingCommas', c.multiElementCollectionTrailingCommas, 'Adds trailing comma after last element in multi-line collections.', c.multiElementCollectionTrailingCommas !== df.multiElementCollectionTrailingCommas, 'true');
+    h += boolOptionRow('Prioritize Function Output Together', 'opt-prioritizeKeepingFunctionOutputTogether', c.prioritizeKeepingFunctionOutputTogether, 'Keeps the return type on the same line as the closing parenthesis when wrapping.', c.prioritizeKeepingFunctionOutputTogether !== df.prioritizeKeepingFunctionOutputTogether, 'false');
+    h += boolOptionRow('Spaces Around Range Operators', 'opt-spacesAroundRangeFormationOperators', c.spacesAroundRangeFormationOperators, 'Adds spaces around range operators (... and ..<).', c.spacesAroundRangeFormationOperators !== df.spacesAroundRangeFormationOperators, 'false');
 
     h += '<div class="row"><span title="' + esc('Number of spaces before end-of-line comments.\\nDefault: 2') + '">Spaces Before EOL Comments' + modDot(c.spacesBeforeEndOfLineComments !== df.spacesBeforeEndOfLineComments) + '</span><input type="number" id="spacesBeforeEndOfLineComments" value="' + c.spacesBeforeEndOfLineComments + '" min="1" max="10"></div>';
 
@@ -681,7 +691,7 @@ function render() {
     h += '<option value="always"' + (c.reflowMultilineStringLiterals === 'always' ? ' selected' : '') + '>always</option>';
     h += '</select></div>';
 
-    h += '<div class="add-btns" style="padding-top:4px"><button id="reset-options-btn">Reset Options to Defaults</button></div>';
+    h += '<div class="reset-options-wrap"><button class="btn-reset" id="reset-options-btn">Reset Options to Defaults</button></div>';
     h += '</div>';
   }
 
@@ -697,20 +707,23 @@ function render() {
     h += '<div class="search-wrap" id="search-wrap"><input type="text" class="search" id="rules-search" placeholder="Filter rules..."><button class="search-clear" id="search-clear" title="Clear"><svg viewBox="0 0 16 16"><path d="M8 8.707l3.646 3.647.708-.708L8.707 8l3.647-3.646-.708-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/></svg></button></div>';
 
     // Format Rules group
-    const formatRules = rules.filter(r => r.isFormatRule);
-    const lintRules = rules.filter(r => !r.isFormatRule);
+    const nameSort = (a, b) => humanReadableName(a.identifier).localeCompare(humanReadableName(b.identifier));
+    const formatRules = rules.filter(r => r.isFormatRule).sort(nameSort);
+    const lintRules = rules.filter(r => !r.isFormatRule).sort(nameSort);
 
     if (formatRules.length > 0) {
-      const gc = (groupCollapsed['format'] ?? false) ? ' collapsed' : '';
-      h += '<div class="group-header' + gc + '" data-group="format"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Format Rules (' + formatRules.length + ')</div>';
+      const fmtEnabled = formatRules.filter(r => r.effectiveEnabled).length;
+      const gc = (groupCollapsed['format'] ?? true) ? ' collapsed' : '';
+      h += '<div class="group-header' + gc + '" data-group="format"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Format Rules (' + fmtEnabled + ' / ' + formatRules.length + ')</div>';
       h += '<div class="group-body' + gc + '" data-group-body="format">';
       for (const r of formatRules) { h += ruleRow(r); }
       h += '</div>';
     }
 
     if (lintRules.length > 0) {
+      const lintEnabled = lintRules.filter(r => r.effectiveEnabled).length;
       const gc = (groupCollapsed['lint'] ?? true) ? ' collapsed' : '';
-      h += '<div class="group-header' + gc + '" data-group="lint"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Lint Rules (' + lintRules.length + ')</div>';
+      h += '<div class="group-header' + gc + '" data-group="lint"><span class="group-chevron"><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4z"/></svg></span>Lint Rules (' + lintEnabled + ' / ' + lintRules.length + ')</div>';
       h += '<div class="group-body' + gc + '" data-group-body="lint">';
       for (const r of lintRules) { h += ruleRow(r); }
       h += '</div>';
@@ -777,7 +790,7 @@ function applySearch() {
       gh.classList.toggle('collapsed', !hasVisible);
       if (body) body.classList.toggle('collapsed', !hasVisible);
     } else {
-      const collapsed = groupCollapsed[group] ?? (group !== 'format');
+      const collapsed = groupCollapsed[group] ?? true;
       gh.classList.toggle('collapsed', collapsed);
       if (body) body.classList.toggle('collapsed', collapsed);
     }
@@ -865,7 +878,7 @@ function bind() {
   ];
   for (const opt of boolOptions) {
     document.getElementById('opt-' + opt)?.addEventListener('change', e => {
-      vscode.postMessage({ type: 'updateOption', key: opt, value: e.target.checked });
+      vscode.postMessage({ type: 'updateOption', key: opt, value: e.target.value === 'true' });
     });
   }
 
@@ -879,7 +892,7 @@ function bind() {
   // Group collapse
   document.querySelectorAll('.group-header').forEach(gh => {
     const group = gh.dataset.group;
-    if (!(group in groupCollapsed)) { groupCollapsed[group] = group !== 'format'; }
+    if (!(group in groupCollapsed)) { groupCollapsed[group] = true; }
     gh.addEventListener('click', () => {
       const body = document.querySelector('[data-group-body="' + group + '"]');
       if (!body) return;
