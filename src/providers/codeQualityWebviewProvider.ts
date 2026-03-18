@@ -72,6 +72,11 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
     // ── State ────────────────────────────────────────────────
 
+    private async postState(): Promise<void> {
+        await this.ensureOverlapRulesResolved();
+        this._view?.webview.postMessage({ type: 'setState', state: this.getState() });
+    }
+
     private getState(): WebviewState {
         const sfConfig = this.swiftFormatProvider.getConfig();
         const slConfig = this.swiftLintProvider.getConfig();
@@ -120,9 +125,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
         };
     }
 
-    private postState(): void {
-        this._view?.webview.postMessage({ type: 'setState', state: this.getState() });
-    }
 
     // ── Messages ─────────────────────────────────────────────
 
@@ -136,7 +138,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
         switch (msg.type) {
             case 'ready':
                 this.log('[code-quality] webview ready');
-                await this.ensureOverlapRulesResolved();
                 this.postState();
                 if (this.brewAvailable === null) {
                     try { this.brewAvailable = await this.checkBrewAvailable(); } catch { this.brewAvailable = false; }
@@ -297,7 +298,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 await this.swiftFormatProvider.updateConfig({ lintMode: lintEnabled });
                 await this.swiftLintProvider.updateConfig({ enabled: lintEnabled });
                 if (!lintEnabled) {
-                    // Clear all lint diagnostics from both tools
                     this.swiftFormatProvider.lintOpenDocuments();
                     this.swiftLintProvider.lintOpenDocuments();
                 }
