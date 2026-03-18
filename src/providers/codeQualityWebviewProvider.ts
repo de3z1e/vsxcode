@@ -74,10 +74,12 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
     private async postState(): Promise<void> {
         await this.ensureOverlapRulesResolved();
-        // Ensure config files exist (overlap resolution writes SF config via updateConfig,
-        // but on first launch with no changes detected we still need the file)
-        if (!this.swiftFormatProvider.hasConfigFile() && this.swiftFormatProvider.isPathResolved()) {
+        // Ensure config files exist after overlap resolution
+        if (this.swiftFormatProvider.isPathResolved() && !this.swiftFormatProvider.hasConfigFile()) {
             await this.swiftFormatProvider.writeConfigFile();
+        }
+        if (this.swiftLintProvider.isPathResolved() && this.swiftLintProvider.hasConfigOverrides() && !this.swiftLintProvider.hasConfigFile()) {
+            await this.swiftLintProvider.writeConfigFile();
         }
         this._view?.webview.postMessage({ type: 'setState', state: this.getState() });
     }
