@@ -2,7 +2,7 @@ import type { SwiftFormatConfig, SwiftFormatRule, SwiftLintConfig, SwiftLintRule
 
 // ── Types ────────────────────────────────────────────────────────
 
-export type UnifiedCategory = 'formatting' | 'style' | 'lint' | 'idiomatic' | 'metrics' | 'performance' | 'documentation' | 'analyzer';
+export type UnifiedCategory = 'format' | 'lint' | 'analyzer';
 
 export interface OverlapPair {
     sfRule: string;
@@ -46,16 +46,16 @@ export const OVERLAP_PAIRS: OverlapPair[] = [
     // New fixable overlaps
     { sfRule: 'OmitExplicitReturns', slRule: 'implicit_return', sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
     { sfRule: 'UseShorthandTypeNames', slRule: 'syntactic_sugar', sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
-    { sfRule: 'UseSynthesizedInitializer', slRule: 'unneeded_synthesized_initializer', sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
+    { sfRule: 'UseSynthesizedInitializer', slRule: 'unneeded_synthesized_initializer', sfIsFormat: false, slCorrectable: true, defaultHandler: 'swift-format' },
     // SF format + SL not correctable
     { sfRule: 'NoAccessLevelOnExtensionDeclaration', slRule: 'no_extension_access_modifier', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
     { sfRule: 'AlwaysUseLiteralForEmptyCollectionInit', slRule: 'empty_collection_literal', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
     { sfRule: 'NoCasesWithOnlyFallthrough', slRule: 'no_fallthrough_only', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
     { sfRule: 'UseLetInEveryBoundCaseVariable', slRule: 'pattern_matching_keywords', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
-    { sfRule: 'UseWhereClausesInForLoops', slRule: 'for_where', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
-    { sfRule: 'OnlyOneTrailingClosureArgument', slRule: 'multiple_closures_with_trailing_closure', sfIsFormat: true, slCorrectable: false, defaultHandler: 'swift-format' },
+    { sfRule: 'UseWhereClausesInForLoops', slRule: 'for_where', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swift-format' },
+    { sfRule: 'OnlyOneTrailingClosureArgument', slRule: 'multiple_closures_with_trailing_closure', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swift-format' },
     { sfRule: 'NoEmptyLinesOpeningClosingBraces', slRule: ['vertical_whitespace_opening_braces', 'vertical_whitespace_closing_braces'], sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
-    { sfRule: 'UseEarlyExits', slRule: 'superfluous_else', sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
+    { sfRule: 'UseEarlyExits', slRule: 'superfluous_else', sfIsFormat: false, slCorrectable: true, defaultHandler: 'swift-format' },
     { sfRule: 'GroupNumericLiterals', slRule: 'number_separator', sfIsFormat: true, slCorrectable: true, defaultHandler: 'swift-format' },
     // Both lint-only — default to SwiftLint (richer config)
     { sfRule: 'NeverForceUnwrap', slRule: 'force_unwrapping', sfIsFormat: false, slCorrectable: false, defaultHandler: 'swiftlint' },
@@ -68,77 +68,26 @@ export const OVERLAP_PAIRS: OverlapPair[] = [
 
 // ── swift-format formatting rules (auto-fix) ────────────────────
 
+// Validated via `swift-format format` — these actually modify code (21 rules)
 export const SF_FORMAT_RULES = new Set([
     'AlwaysUseLiteralForEmptyCollectionInit', 'DoNotUseSemicolons', 'FileScopedDeclarationPrivacy',
     'FullyIndirectEnum', 'GroupNumericLiterals', 'NoAccessLevelOnExtensionDeclaration',
-    'NoAssignmentInExpressions', 'NoCasesWithOnlyFallthrough', 'NoEmptyLinesOpeningClosingBraces',
-    'NoEmptyTrailingClosureParentheses', 'NoLabelsInCasePatterns', 'NoLeadingUnderscores',
+    'NoCasesWithOnlyFallthrough', 'NoEmptyLinesOpeningClosingBraces',
+    'NoEmptyTrailingClosureParentheses', 'NoLabelsInCasePatterns',
     'NoParensAroundConditions', 'NoVoidReturnOnFunctionSignature', 'OmitExplicitReturns',
-    'OneCasePerLine', 'OneVariableDeclarationPerLine', 'OnlyOneTrailingClosureArgument',
-    'OrderedImports', 'ReplaceForEachWithForLoop', 'ReturnVoidInsteadOfEmptyTuple',
-    'UseEarlyExits', 'UseExplicitNilCheckInConditions', 'UseLetInEveryBoundCaseVariable',
-    'UseShorthandTypeNames', 'UseSingleLinePropertyGetter', 'UseSynthesizedInitializer',
-    'UseTripleSlashForDocumentationComments', 'UseWhereClausesInForLoops',
+    'OneVariableDeclarationPerLine', 'OrderedImports', 'ReturnVoidInsteadOfEmptyTuple',
+    'UseExplicitNilCheckInConditions', 'UseLetInEveryBoundCaseVariable',
+    'UseShorthandTypeNames', 'UseSingleLinePropertyGetter',
+    'UseTripleSlashForDocumentationComments',
 ]);
 
 // ── swift-format → category mapping ─────────────────────────────
 
-const SF_RULE_CATEGORIES: Record<string, UnifiedCategory> = {
-    // Documentation
-    AllPublicDeclarationsHaveDocumentation: 'documentation',
-    BeginDocumentationCommentWithOneLineSummary: 'documentation',
-    ValidateDocumentationComments: 'documentation',
-    UseTripleSlashForDocumentationComments: 'documentation',
-    // Style (naming / conventions)
-    AlwaysUseLowerCamelCase: 'style',
-    TypeNamesShouldBeCapitalized: 'style',
-    IdentifiersMustBeASCII: 'style',
-    DontRepeatTypeInStaticProperties: 'style',
-    NoLeadingUnderscores: 'style',
-    NoBlockComments: 'style',
-    // Lint (safety)
-    NeverForceUnwrap: 'lint',
-    NeverUseForceTry: 'lint',
-    NeverUseImplicitlyUnwrappedOptionals: 'lint',
-    AmbiguousTrailingClosureOverload: 'lint',
-    AvoidRetroactiveConformances: 'lint',
-    NoAssignmentInExpressions: 'lint',
-    NoPlaygroundLiterals: 'lint',
-    // Idiomatic
-    ReplaceForEachWithForLoop: 'idiomatic',
-    UseEarlyExits: 'idiomatic',
-    UseWhereClausesInForLoops: 'idiomatic',
-    OmitExplicitReturns: 'idiomatic',
-    UseShorthandTypeNames: 'idiomatic',
-    UseSynthesizedInitializer: 'idiomatic',
-    UseExplicitNilCheckInConditions: 'idiomatic',
-    AlwaysUseLiteralForEmptyCollectionInit: 'idiomatic',
-    NoCasesWithOnlyFallthrough: 'idiomatic',
-    FullyIndirectEnum: 'idiomatic',
-    // Formatting (code layout)
-    DoNotUseSemicolons: 'formatting',
-    FileScopedDeclarationPrivacy: 'formatting',
-    GroupNumericLiterals: 'formatting',
-    NoAccessLevelOnExtensionDeclaration: 'formatting',
-    NoEmptyLinesOpeningClosingBraces: 'formatting',
-    NoEmptyTrailingClosureParentheses: 'formatting',
-    NoLabelsInCasePatterns: 'formatting',
-    NoParensAroundConditions: 'formatting',
-    NoVoidReturnOnFunctionSignature: 'formatting',
-    OneCasePerLine: 'formatting',
-    OneVariableDeclarationPerLine: 'formatting',
-    OnlyOneTrailingClosureArgument: 'formatting',
-    OrderedImports: 'formatting',
-    ReturnVoidInsteadOfEmptyTuple: 'formatting',
-    UseLetInEveryBoundCaseVariable: 'formatting',
-    UseSingleLinePropertyGetter: 'formatting',
-};
+function sfRuleCategory(ruleId: string): UnifiedCategory {
+    return SF_FORMAT_RULES.has(ruleId) ? 'format' : 'lint';
+}
 
 
-// SwiftLint doc-oriented lint rules
-const SL_DOC_RULES = new Set([
-    'missing_docs', 'orphaned_doc_comment', 'local_doc_comment',
-]);
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -169,17 +118,7 @@ function computeSlEnabled(rule: SwiftLintRule, config: SwiftLintConfig): boolean
 
 function mapSlKindToCategory(rule: SwiftLintRule): UnifiedCategory {
     if (rule.analyzer) { return 'analyzer'; }
-    // All fixable rules go under formatting
-    if (rule.correctable) { return 'formatting'; }
-    if (SL_DOC_RULES.has(rule.identifier)) { return 'documentation'; }
-    switch (rule.kind) {
-        case 'style': return 'style';
-        case 'lint': return 'lint';
-        case 'idiomatic': return 'idiomatic';
-        case 'metrics': return 'metrics';
-        case 'performance': return 'performance';
-        default: return 'style';
-    }
+    return rule.correctable ? 'format' : 'lint';
 }
 
 // ── Overlap resolution sets ─────────────────────────────────────
@@ -240,7 +179,7 @@ export function buildUnifiedRules(
             for (const slRule of slRuleObjs) {
                 result.push({
                     displayName: humanReadableName(slRule.identifier),
-                    category: 'formatting',
+                    category: 'format',
                     tool: 'swiftlint',
                     slRule: {
                         identifier: slRule.identifier,
@@ -256,7 +195,7 @@ export function buildUnifiedRules(
             // SL is fixable but NOT installed → fall back to SF rule
             result.push({
                 displayName: humanReadableName(sfRule.identifier),
-                category: SF_RULE_CATEGORIES[sfRule.identifier] || 'formatting',
+                category: sfRuleCategory(sfRule.identifier),
                 tool: 'swift-format',
                 sfRule: {
                     identifier: sfRule.identifier,
@@ -270,7 +209,7 @@ export function buildUnifiedRules(
             if (sfRule) {
                 result.push({
                     displayName: humanReadableName(sfRule.identifier),
-                    category: SF_RULE_CATEGORIES[sfRule.identifier] || 'style',
+                    category: sfRuleCategory(sfRule.identifier),
                     tool: 'swift-format',
                     sfRule: {
                         identifier: sfRule.identifier,
@@ -289,7 +228,7 @@ export function buildUnifiedRules(
             if (consumedSf.has(rule.identifier)) { continue; }
             result.push({
                 displayName: humanReadableName(rule.identifier),
-                category: SF_RULE_CATEGORIES[rule.identifier] || 'style',
+                category: sfRuleCategory(rule.identifier),
                 tool: 'swift-format',
                 sfRule: {
                     identifier: rule.identifier,
@@ -328,18 +267,13 @@ export function buildUnifiedRules(
 // ── Category display order and labels ───────────────────────────
 
 export const CATEGORY_ORDER: UnifiedCategory[] = [
-    'formatting', 'style', 'idiomatic', 'lint', 'metrics', 'performance', 'documentation', 'analyzer',
+    'format', 'lint', 'analyzer',
 ];
 
 export const CATEGORY_LABELS: Record<UnifiedCategory, string> = {
-    formatting: 'Formatting',
-    style: 'Style',
-    idiomatic: 'Idiomatic',
-    lint: 'Lint',
-    metrics: 'Metrics',
-    performance: 'Performance',
-    documentation: 'Documentation',
-    analyzer: 'Analyzer',
+    format: 'Format Rules',
+    lint: 'Lint Rules',
+    analyzer: 'Analyzer Rules',
 };
 
 // ── Settings overlaps ───────────────────────────────────────────

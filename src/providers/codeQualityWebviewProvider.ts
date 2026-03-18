@@ -1233,13 +1233,13 @@ function unifiedRuleRow(r) {
 
 // ── Helpers ───────────────────────────────────────────────
 
-function toggleRow(label, id, checked, desc, modified, defaultLabel, hasConflict) {
+function toggleRow(label, id, checked, desc, modified, defaultLabel) {
   let tip = '';
   if (desc && defaultLabel) { tip = desc + '\\nDefault: ' + defaultLabel; }
   else if (desc) { tip = desc; }
   else if (defaultLabel) { tip = 'Default: ' + defaultLabel; }
   const titleAttr = tip ? ' title="' + esc(tip) + '"' : '';
-  return '<div class="row"><span' + titleAttr + '>' + label + modDot(modified) + (hasConflict ? conflictBadge('Settings conflict detected with SwiftLint') : '') + '</span><label class="switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="slider"></span></label></div>';
+  return '<div class="row"><span' + titleAttr + '>' + label + modDot(modified) + '</span><label class="switch"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '><span class="slider"></span></label></div>';
 }
 
 function modDot(isModified) {
@@ -1398,7 +1398,7 @@ function bind() {
   // Group collapse
   document.querySelectorAll('.group-header').forEach(gh => {
     const group = gh.dataset.group;
-    if (!(group in groupCollapsed)) { groupCollapsed[group] = true; }
+    if (!(group in groupCollapsed)) { groupCollapsed[group] = group !== 'format'; }
     gh.addEventListener('click', () => {
       const body = document.querySelector('[data-group-body="' + group + '"]');
       if (!body) return;
