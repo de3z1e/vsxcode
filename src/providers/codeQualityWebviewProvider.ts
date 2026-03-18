@@ -284,11 +284,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 this.postState();
                 break;
 
-            case 'toggleLinterEnabled':
-                await this.swiftLintProvider.updateConfig({ enabled: msg.value as boolean });
-                this.postState();
-                break;
-
             case 'toggleAutoFixOnSave': {
                 const enabled = msg.value as boolean;
                 await this.swiftFormatProvider.updateConfig({ formatOnSave: enabled });
@@ -297,10 +292,18 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 break;
             }
 
-            case 'toggleLintMode':
-                await this.swiftFormatProvider.updateConfig({ lintMode: msg.value as boolean });
+            case 'toggleLintMode': {
+                const lintEnabled = msg.value as boolean;
+                await this.swiftFormatProvider.updateConfig({ lintMode: lintEnabled });
+                await this.swiftLintProvider.updateConfig({ enabled: lintEnabled });
+                if (!lintEnabled) {
+                    // Clear all lint diagnostics from both tools
+                    this.swiftFormatProvider.lintOpenDocuments();
+                    this.swiftLintProvider.lintOpenDocuments();
+                }
                 this.postState();
                 break;
+            }
 
             case 'changeSeverity':
                 await this.swiftLintProvider.updateConfig({ severity: msg.value as SwiftLintConfig['severity'] });
@@ -986,14 +989,12 @@ function render() {
   if (sfFound) {
     h += toggleRow('Formatter', 'toggle-formatter', sfC.enabled);
   }
-  if (slFound) {
-    h += toggleRow('Linter', 'toggle-linter', slC.enabled);
-  }
   if ((sfFound && sfC.enabled) || (slFound && slC.enabled)) {
     h += toggleRow('Auto-fix on Save', 'toggle-autoFixOnSave', state.autoFixOnSave, 'Applies swift-format formatting and SwiftLint auto-corrections when saving a Swift file.');
   }
-  if (sfFound && sfC.enabled) {
-    h += toggleRow('Lint Mode', 'toggle-lintMode', sfC.lintMode, 'Shows swift-format violations as diagnostics in the Problems panel.');
+  if (sfFound || slFound) {
+    const lintOn = (sfFound && sfC.lintMode) || (slFound && slC.enabled);
+    h += toggleRow('Lint Mode', 'toggle-lintMode', lintOn, 'Shows code quality violations as diagnostics in the Problems panel.');
   }
   if (slFound && slC.enabled) {
     h += '<div class="row"><span>Severity' + infoIcon('<b>Normal</b>: warnings stay warnings, errors stay errors.<br><b>Strict</b>: all violations become errors.<br><b>Lenient</b>: all violations become warnings.') + '</span><select id="severity-select">';
@@ -1275,7 +1276,6 @@ function bind() {
 
   // Controls
   document.getElementById('toggle-formatter')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFormatterEnabled', value: e.target.checked }));
-  document.getElementById('toggle-linter')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleLinterEnabled', value: e.target.checked }));
   document.getElementById('toggle-autoFixOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleAutoFixOnSave', value: e.target.checked }));
   document.getElementById('toggle-lintMode')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleLintMode', value: e.target.checked }));
   document.getElementById('severity-select')?.addEventListener('change', e => vscode.postMessage({ type: 'changeSeverity', value: e.target.value }));
