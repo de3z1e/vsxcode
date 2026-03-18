@@ -314,7 +314,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                         if (answer === 'Save Local to Global & Switch') {
                             await this.swiftFormatProvider.saveLocalToGlobal();
                         }
-                    } else {
+                    } else if (this.swiftFormatProvider.hasLocalProfile()) {
                         const answer = await vscode.window.showWarningMessage(
                             'Global settings differ from local profile. How would you like to switch?',
                             { modal: true },

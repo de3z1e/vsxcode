@@ -220,25 +220,20 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         // Capture effective config before mode switch (includes global overrides if currently global)
         const effectiveBeforeSwitch = this.getConfig();
 
-        // Store mode early so syncFromConfigFile and writeConfigFile see the new mode
+        // Store mode early so writeConfigFile sees the new mode
         await this.workspaceState.update('swiftFormatProfileMode', mode);
 
-        if (mode === 'local') {
-            if (this.hasConfigFile()) {
-                // Import existing .swift-format file — intentionally preferred over global
-                // settings so the project-level config is always respected on switch-back
-                await this.syncFromConfigFile();
-                this.log('[swift-format] imported existing .swift-format into local settings');
-            } else {
-                // Copy effective config (captured before mode switch) to local as starting point
-                const local: Partial<SwiftFormatConfig> = {};
-                for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
-                    (local as unknown as Record<string, unknown>)[key] = (effectiveBeforeSwitch as unknown as Record<string, unknown>)[key];
-                }
-                const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
-                await this.workspaceState.update('swiftFormatConfig', { ...current, ...local });
-                this.log('[swift-format] copied effective config to local settings');
+        // When switching to local without a config file, seed workspace state from the
+        // current effective config. When a config file exists, the file watcher already
+        // keeps workspace state in sync — no re-import needed.
+        if (mode === 'local' && !this.hasConfigFile()) {
+            const local: Partial<SwiftFormatConfig> = {};
+            for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
+                (local as unknown as Record<string, unknown>)[key] = (effectiveBeforeSwitch as unknown as Record<string, unknown>)[key];
             }
+            const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
+            await this.workspaceState.update('swiftFormatConfig', { ...current, ...local });
+            this.log('[swift-format] copied effective config to local settings');
         }
 
         this.log(`[swift-format] profile mode: ${mode}`);
@@ -669,7 +664,9 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             const content = await fs.promises.readFile(this.getConfigFilePath(), 'utf8');
             const parsed = JSON.parse(content) as DumpConfig;
 
-            const config = this.getConfig();
+            // Compare against raw workspace state so the sync is 1:1 regardless of profile mode
+            const stored = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig');
+            const config: SwiftFormatConfig = { ...DEFAULT_CONFIG, ...stored };
             const patch: Partial<SwiftFormatConfig> = {};
 
             // Sync formatting options
@@ -797,6 +794,14 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             if (JSON.stringify(lv) !== JSON.stringify(gv)) { return true; }
         }
         return false;
+    }
+
+    /** Whether workspace state has any profile fields or a config file exists */
+    hasLocalProfile(): boolean {
+        if (this.hasConfigFile()) { return true; }
+        const stored = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig');
+        if (!stored) { return false; }
+        return SwiftFormatProvider.PROFILE_FIELDS.some((key) => key in stored);
     }
 
     hasWorkspaceConfig(): boolean {
