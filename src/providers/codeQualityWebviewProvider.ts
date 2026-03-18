@@ -22,8 +22,6 @@ interface WebviewState {
     pathResolved: boolean;
     resolvedPath: string | null;
     version: string | null;
-    updateAvailable: boolean;
-    latestVersion: string | null;
     config: SwiftFormatConfig;
     rules: Array<SwiftFormatRule & { effectiveEnabled: boolean; isFormatRule: boolean }> | null;
     profileMode: 'local' | 'global';
@@ -32,7 +30,6 @@ interface WebviewState {
 export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private sfInstalling = false;
-    private sfUpdating = false;
     private brewAvailable: boolean | null = null;
     private _suppressRefresh = false;
 
@@ -86,8 +83,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             pathResolved: this.swiftFormatProvider.isPathResolved(),
             resolvedPath: this.swiftFormatProvider.getResolvedPath(),
             version: this.swiftFormatProvider.getResolvedVersion(),
-            updateAvailable: this.swiftFormatProvider.isUpdateAvailable(),
-            latestVersion: this.swiftFormatProvider.getLatestVersion(),
             config,
             rules,
             profileMode,
@@ -141,36 +136,6 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 }
 
                 this.sfInstalling = false;
-                this.postState();
-                break;
-            }
-
-            case 'updateSwiftFormat': {
-                this.log('[code-quality] updating swift-format via Homebrew');
-                this.sfUpdating = true;
-                this.postState();
-
-                const updateBrewPath = await this.findBrew();
-                if (!updateBrewPath) {
-                    vscode.window.showErrorMessage('Homebrew not found. Update manually.');
-                    this.sfUpdating = false;
-                    this.postState();
-                    break;
-                }
-
-                try {
-                    await execFile(updateBrewPath, ['upgrade', 'swift-format'], { encoding: 'utf8', timeout: 300000 });
-                    await this.swiftFormatProvider.resolvePathAndVersion();
-                    await this.swiftFormatProvider.checkForUpdate(true);
-                    this.log(`[code-quality] swift-format updated to v${this.swiftFormatProvider.getResolvedVersion()}`);
-                    vscode.window.showInformationMessage(`swift-format updated to v${this.swiftFormatProvider.getResolvedVersion()}.`);
-                } catch (error: unknown) {
-                    const message = (error as { stderr?: string }).stderr || 'Update failed';
-                    this.log(`[code-quality] swift-format update failed: ${message}`);
-                    vscode.window.showErrorMessage(`swift-format update failed: ${message.split('\n')[0]}`);
-                }
-
-                this.sfUpdating = false;
                 this.postState();
                 break;
             }
@@ -498,10 +463,6 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .info-tip{display:none;position:absolute;left:0;top:calc(100% + 4px);background:var(--vscode-editorHoverWidget-background,var(--vscode-editor-background));border:1px solid var(--vscode-editorHoverWidget-border,var(--vscode-widget-border,rgba(128,128,128,.4)));border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.4;white-space:normal;width:200px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .info-wrap.open .info-tip{display:block}
 .update-row{padding:4px 14px 0;font-size:11px;opacity:.6}
-.update-btn{padding:1px 6px;font-size:10px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.8;margin-left:4px}
-.update-btn:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
-.update-link{cursor:pointer;opacity:.8;margin-left:4px;text-decoration:underline}
-.update-link:hover{opacity:1}
 .gear-btn{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;opacity:.4;font-size:13px;padding:2px 4px;line-height:1;user-select:none}
 .gear-btn:hover{opacity:1}
 .gear-btn.active{opacity:1;color:var(--vscode-button-background)}
@@ -737,12 +698,6 @@ function render() {
     h += '<div class="add-btns" style="padding-top:4px">';
     h += '<button id="sf-install-btn">Install via Homebrew</button>';
     h += '<button id="sf-path-btn2">Set Path</button></div>';
-  } else if (sfFound) {
-    if (state.updateAvailable && state.latestVersion) {
-      h += '<div class="update-row">v' + esc(state.latestVersion) + ' available';
-      h += ' <button class="update-btn" id="sf-update-btn">Update</button>';
-      h += '</div>';
-    }
   }
 
   h += '</div>';
@@ -937,7 +892,6 @@ function bind() {
   document.getElementById('sf-path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
   document.getElementById('sf-path-btn2')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
   document.getElementById('sf-install-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'installSwiftFormat' }));
-  document.getElementById('sf-update-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'updateSwiftFormat' }));
 
   // Controls
   document.getElementById('toggle-formatOnSave')?.addEventListener('change', e => vscode.postMessage({ type: 'toggleFormatOnSave', value: e.target.checked }));

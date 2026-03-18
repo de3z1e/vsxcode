@@ -142,7 +142,6 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
     private cachedRules: SwiftFormatRule[] | null = null;
     private defaultDumpConfig: DumpConfig | null = null;
     private _writingConfigFile = false;
-    private latestVersion: string | null = null;
     private formattingFiles = new Set<string>();
 
     private _onDidSyncConfig = new vscode.EventEmitter<void>();
@@ -340,49 +339,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
 
     getResolvedPath(): string | null { return this.resolvedPath; }
     getResolvedVersion(): string | null { return this.resolvedVersion; }
-    getLatestVersion(): string | null { return this.latestVersion; }
     isPathResolved(): boolean { return this._pathResolved; }
-
-
-    private static readonly UPDATE_CHECK_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-    async checkForUpdate(force = false): Promise<void> {
-        if (!this.resolvedVersion) { return; }
-
-        if (!force) {
-            const lastCheck = this.workspaceState.get<number>('swiftFormatLastUpdateCheck', 0);
-            const cached = this.workspaceState.get<string>('swiftFormatLatestVersion');
-            if (Date.now() - lastCheck < SwiftFormatProvider.UPDATE_CHECK_COOLDOWN_MS && cached) {
-                this.latestVersion = cached;
-                return;
-            }
-        }
-
-        this.log('[swift-format] checking for updates...');
-        try {
-            const { stdout } = await execFile('curl', [
-                '-sf', '--max-time', '5',
-                'https://api.github.com/repos/apple/swift-format/releases/latest',
-            ], { encoding: 'utf8', timeout: 10000 });
-            const tag = JSON.parse(stdout).tag_name as string;
-            this.latestVersion = tag.replace(/^v/, '') || null;
-            await this.workspaceState.update('swiftFormatLastUpdateCheck', Date.now());
-            await this.workspaceState.update('swiftFormatLatestVersion', this.latestVersion);
-            if (this.isUpdateAvailable()) {
-                this.log(`[swift-format] update available: v${this.resolvedVersion} → v${this.latestVersion}`);
-            } else {
-                this.log(`[swift-format] up to date (v${this.resolvedVersion})`);
-            }
-        } catch {
-            this.latestVersion = null;
-            this.log('[swift-format] update check failed');
-        }
-    }
-
-    isUpdateAvailable(): boolean {
-        if (!this.resolvedVersion || !this.latestVersion) { return false; }
-        return this.latestVersion !== this.resolvedVersion;
-    }
 
     // ── Rules access ─────────────────────────────────────────
 

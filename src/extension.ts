@@ -701,7 +701,6 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }
         codeQualityProvider.refresh();
-        swiftFormatProvider.checkForUpdate().then(() => codeQualityProvider.refresh());
     }).catch((e) => {
         log(`[swift-format] resolvePathAndVersion failed: ${e}`);
         codeQualityProvider.refresh();
