@@ -2,7 +2,7 @@
 
 > Formerly called Swift Package Helper.
 
-Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, and full debugging with breakpoints and console output on both simulators and physical devices, with a single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS apps directly from VS Code.
+Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on both simulators and physical devices, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS apps directly from VS Code.
 
 ### How It Works
 
@@ -55,6 +55,18 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
 
+### Code Format (swift-format)
+
+A dedicated Code Format panel in the sidebar provides native [swift-format](https://github.com/apple/swift-format) integration — the formatter bundled with Xcode. No extra tools to install.
+
+- **Format on Save** — automatically formats Swift files when saving using `swift-format format`.
+- **Lint Mode** — shows swift-format violations as diagnostics in the Problems panel using `swift-format lint`.
+- **18 formatting options** — indentation, line length, line breaks, trailing commas, and more. All configurable from the sidebar with true/false dropdowns and number inputs.
+- **43 rules** organized into Format Rules (21 auto-fix rules) and Lint Rules (22 report-only rules). Each rule has a toggle, description, default state, and reset button.
+- **Per-section controls** — enable/disable all rules in a section with a single toggle. Partial state indicator when some rules are enabled.
+- **Global / Local profiles** — Global profile shares formatting options and rules across all projects. Local profile keeps settings per-project. Switch between them with an option to save local changes to global.
+- **Config file sync** — settings auto-generate `.vscode/.swift-format`. Manual edits to the config file are synced back to the UI.
+
 ### Keyboard Shortcuts
 
 | Shortcut | Context | Action |
@@ -69,7 +81,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.1.0.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.2.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -77,5 +89,5 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.1.0.vsix
+code --install-extension vsxcode-3.2.0.vsix
 ```
