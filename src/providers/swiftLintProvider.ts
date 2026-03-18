@@ -516,18 +516,21 @@ export class SwiftLintProvider implements vscode.Disposable {
         if (this.fixingFiles.has(filePath)) { return; }
 
         const config = this.getConfig();
-        if (!config.enabled) { return; }
 
         if (!this._pathResolved) {
             await this.resolvePathAndVersion();
         }
         if (!this.resolvedPath) { return; }
 
+        // Fix on save runs independently of lint enabled state
         if (config.fixOnSave) {
             await this.fixDocument(document);
         }
 
-        await this.lintDocument(document);
+        // Linting only runs when enabled
+        if (config.enabled) {
+            await this.lintDocument(document);
+        }
     }
 
     private async fixDocument(document: vscode.TextDocument): Promise<void> {
