@@ -150,27 +150,6 @@ export interface BuildTaskConfig {
     deviceIdentifier?: string;
 }
 
-export interface SwiftLintConfig {
-    enabled: boolean;
-    path: string;
-    severity: 'normal' | 'strict' | 'lenient';
-    fixOnSave: boolean;
-    disabledRules: string[];
-    optInRules: string[];
-    analyzerRules: string[];
-    excludedPaths: string[];
-    ruleConfigs: Record<string, Record<string, string>>;
-}
-
-export interface SwiftLintRule {
-    identifier: string;
-    optIn: boolean;
-    correctable: boolean;
-    enabledByDefault: boolean;
-    kind: string;
-    analyzer: boolean;
-}
-
 export interface SwiftFormatConfig {
     enabled: boolean;
     path: string;

@@ -75,4 +75,3 @@ export const SWIFT_VERSION_MAP: Record<string, string> = {
     '5': '.v5'
 };
 
-// Overlap data moved to src/types/ruleMapping.ts (OVERLAP_PAIRS)

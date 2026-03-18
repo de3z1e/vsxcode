@@ -25,8 +25,6 @@ import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
-import { SwiftLintProvider } from './providers/swiftLintProvider';
-import { resolvedBuildLogPath } from './generators/buildTasks';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
 import { CodeQualityWebviewProvider } from './providers/codeQualityWebviewProvider';
 import type { BuildTaskConfig } from './types/interfaces';
@@ -623,9 +621,6 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[${timestamp}] ${message}`);
     };
 
-    // SwiftLint provider (independent of build config)
-    const swiftLintProvider = new SwiftLintProvider(context.workspaceState, context.globalState, log);
-
     // Always register sidebar (shows welcome message when no project found)
     const sidebarProvider = new SidebarProvider(context.workspaceState);
     const treeView = vscode.window.createTreeView('vsxcode.sidebar', {
@@ -639,32 +634,12 @@ export function activate(context: vscode.ExtensionContext): void {
         swiftFormatProvider,
     );
 
-    // Unified Code Quality sidebar (replaces separate Formatter + Linter panels)
+    // Code Quality sidebar
     const codeQualityProvider = new CodeQualityWebviewProvider(
-        context.extensionUri, swiftFormatProvider, swiftLintProvider, context.workspaceState, log,
+        context.extensionUri, swiftFormatProvider, context.workspaceState, log,
     );
     const codeQualityViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.codeQuality', codeQualityProvider);
-
-    // Initialize SwiftLint (async, non-blocking)
-    swiftLintProvider.resolvePathAndVersion().then(async () => {
-        await swiftLintProvider.syncFromConfigFile();
-        if (!swiftLintProvider.isProfileModeExplicit()) {
-            if (swiftLintProvider.hasWorkspaceConfig() || swiftLintProvider.hasConfigFile()) {
-                await swiftLintProvider.setProfileMode('local');
-            } else {
-                await swiftLintProvider.setProfileMode('global');
-            }
-        }
-        codeQualityProvider.refresh();
-        swiftLintProvider.lintOpenDocuments();
-        swiftLintProvider.checkForUpdate().then(() => codeQualityProvider.refresh());
-    }).catch((e) => {
-        log(`[swiftlint] resolvePathAndVersion failed: ${e}`);
-        codeQualityProvider.refresh();
-    });
-
-    swiftLintProvider.onDidSyncConfig(() => codeQualityProvider.refresh());
-    context.subscriptions.push(swiftLintProvider, codeQualityViewDisposable);
+    context.subscriptions.push(codeQualityViewDisposable);
 
     // Initialize swift-format (async, non-blocking)
     swiftFormatProvider.resolvePathAndVersion().then(async () => {
@@ -974,7 +949,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (exitCode === 0) {
                     const btConfig = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
                     if (btConfig) {
-                        swiftLintProvider.analyzeWorkspace(resolvedBuildLogPath(btConfig));
                     }
                 }
             } else {
@@ -1012,7 +986,6 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
         log('[simulator-debug] build succeeded');
-        swiftLintProvider.analyzeWorkspace(resolvedBuildLogPath(config));
 
         const udid = config.simulatorUdid || config.simulatorDevice;
         const homeDir = require('os').homedir();
@@ -1104,7 +1077,6 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
         log('[physical-debug] build succeeded');
-        swiftLintProvider.analyzeWorkspace(resolvedBuildLogPath(config));
 
         const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
         const homeDir = require('os').homedir();
