@@ -174,6 +174,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             );
             watcher.onDidChange(() => this.syncFromConfigFile());
             watcher.onDidCreate(() => this.syncFromConfigFile());
+            watcher.onDidDelete(() => this.onConfigFileDeleted());
             this.disposables.push(watcher);
         }
     }
@@ -772,6 +773,26 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             }
             this._onDidSyncConfig.fire();
         } catch { /* file may not exist or be invalid */ }
+    }
+
+    private async onConfigFileDeleted(): Promise<void> {
+        if (this.getProfileMode() !== 'local') { return; }
+
+        // Reset profile fields to defaults, preserve non-profile fields
+        const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
+        const reset: Partial<SwiftFormatConfig> = {};
+        for (const [key, value] of Object.entries(current)) {
+            if (!SwiftFormatProvider.PROFILE_FIELDS.includes(key as keyof SwiftFormatConfig)) {
+                (reset as Record<string, unknown>)[key] = value;
+            }
+        }
+        await this.workspaceState.update('swiftFormatConfig', reset);
+
+        this.log('[swift-format] config file deleted, local profile reset to defaults');
+        if (this.getConfig().lintMode) {
+            this.lintOpenDocuments();
+        }
+        this._onDidSyncConfig.fire();
     }
 
     // ── Global profile ────────────────────────────────────────
