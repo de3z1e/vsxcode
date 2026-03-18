@@ -165,14 +165,15 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             }),
         );
 
-        // File watcher for local profile two-way sync
+        // File watcher — always sync to workspace state so local profile stays
+        // up to date even when global mode is active (global overlay hides the values)
         const rootUri = vscode.workspace.workspaceFolders?.[0]?.uri;
         if (rootUri) {
             const watcher = vscode.workspace.createFileSystemWatcher(
                 new vscode.RelativePattern(rootUri, '.vscode/.swift-format'),
             );
-            watcher.onDidChange(() => { if (this.getProfileMode() === 'local') { this.syncFromConfigFile(); } });
-            watcher.onDidCreate(() => { if (this.getProfileMode() === 'local') { this.syncFromConfigFile(); } });
+            watcher.onDidChange(() => this.syncFromConfigFile());
+            watcher.onDidCreate(() => this.syncFromConfigFile());
             this.disposables.push(watcher);
         }
     }
@@ -261,6 +262,19 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         }
         await this.globalState.update('swiftFormatGlobalProfile', profile);
         this.log('[swift-format] saved local settings to global profile');
+    }
+
+    /** Save global profile settings to the local workspace config */
+    async saveGlobalToLocal(): Promise<void> {
+        const globalProfile = this.globalState.get<Partial<SwiftFormatConfig>>('swiftFormatGlobalProfile');
+        const globalBase: SwiftFormatConfig = { ...DEFAULT_CONFIG, ...globalProfile };
+        const local: Partial<SwiftFormatConfig> = {};
+        for (const key of SwiftFormatProvider.PROFILE_FIELDS) {
+            (local as unknown as Record<string, unknown>)[key] = (globalBase as unknown as Record<string, unknown>)[key];
+        }
+        const current = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig') || {};
+        await this.workspaceState.update('swiftFormatConfig', { ...current, ...local });
+        this.log('[swift-format] saved global settings to local profile');
     }
 
     hasConfigFile(): boolean {
@@ -771,7 +785,9 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
 
     /** Check if local profile fields differ from the global profile */
     localDiffersFromGlobal(): boolean {
-        const local = this.getConfig(); // current effective config (local mode)
+        // Read raw workspace state — not getConfig() which applies global overlay
+        const stored = this.workspaceState.get<Partial<SwiftFormatConfig>>('swiftFormatConfig');
+        const local: SwiftFormatConfig = { ...DEFAULT_CONFIG, ...stored };
         const globalProfile = this.globalState.get<Partial<SwiftFormatConfig>>('swiftFormatGlobalProfile');
         const globalBase: SwiftFormatConfig = { ...DEFAULT_CONFIG, ...globalProfile };
 

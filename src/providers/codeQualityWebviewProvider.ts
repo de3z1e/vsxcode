@@ -299,19 +299,35 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
             case 'changeProfileMode': {
                 const newMode = msg.value as 'local' | 'global';
-                if (newMode === 'global' && this.swiftFormatProvider.localDiffersFromGlobal()) {
-                    const answer = await vscode.window.showWarningMessage(
-                        'Local settings differ from global profile. How would you like to switch?',
-                        { modal: true },
-                        'Save Local to Global & Switch',
-                        'Switch to Global',
-                    );
-                    if (!answer) {
-                        this.postState();
-                        break;
-                    }
-                    if (answer === 'Save Local to Global & Switch') {
-                        await this.swiftFormatProvider.saveLocalToGlobal();
+                if (this.swiftFormatProvider.localDiffersFromGlobal()) {
+                    if (newMode === 'global') {
+                        const answer = await vscode.window.showWarningMessage(
+                            'Local settings differ from global profile. How would you like to switch?',
+                            { modal: true },
+                            'Save Local to Global & Switch',
+                            'Switch to Global',
+                        );
+                        if (!answer) {
+                            this.postState();
+                            break;
+                        }
+                        if (answer === 'Save Local to Global & Switch') {
+                            await this.swiftFormatProvider.saveLocalToGlobal();
+                        }
+                    } else {
+                        const answer = await vscode.window.showWarningMessage(
+                            'Global settings differ from local profile. How would you like to switch?',
+                            { modal: true },
+                            'Save Global to Local & Switch',
+                            'Switch to Local',
+                        );
+                        if (!answer) {
+                            this.postState();
+                            break;
+                        }
+                        if (answer === 'Save Global to Local & Switch') {
+                            await this.swiftFormatProvider.saveGlobalToLocal();
+                        }
                     }
                 }
                 await this.swiftFormatProvider.setProfileMode(newMode);
