@@ -518,7 +518,7 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 </head>
 <body>
 <div id="app">
-  <div class="not-found" id="loading">Detecting tools...</div>
+  <div class="not-found" id="loading">Detecting swift-format\u2026</div>
 </div>
 <script nonce="${nonce}">
 ${this.getScript()}
@@ -539,7 +539,7 @@ let openConfigRuleId = null;
 window.addEventListener('message', e => {
   const msg = e.data;
   if (msg.type === 'setState') { state = msg.state; render(); }
-  if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.description); }
+if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.description); }
   if (msg.type === 'rulesPatch') { applyRulesPatch(msg.ruleStates); }
 });
 
@@ -751,8 +751,8 @@ function render() {
 
   if (sfFound) {
     h += '<div class="section">';
-    h += toggleRow('Format on Save', 'toggle-formatOnSave', c.formatOnSave, 'Applies swift-format formatting when saving a Swift file.');
-    h += toggleRow('Lint Mode', 'toggle-lintMode', c.lintMode, 'Shows code quality violations as diagnostics in the Problems panel.');
+    h += toggleRow('Format on Save' + infoIcon('Applies swift-format formatting when saving a Swift file. Per-project setting, not part of the profile.'), 'toggle-formatOnSave', c.formatOnSave);
+    h += toggleRow('Lint Mode' + infoIcon('Shows code quality violations as diagnostics in the Problems panel. Per-project setting, not part of the profile.'), 'toggle-lintMode', c.lintMode);
     h += '<div class="row"><span>Profile' + infoIcon('<b>Global</b>: options and rules shared across all projects.<br><b>Local</b>: options and rules specific to this project.') + '</span><select id="profile-select">';
     h += '<option value="global"' + (state.profileMode === 'global' ? ' selected' : '') + '>Global</option>';
     h += '<option value="local"' + (state.profileMode === 'local' ? ' selected' : '') + '>Local</option>';

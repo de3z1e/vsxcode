@@ -621,27 +621,76 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[${timestamp}] ${message}`);
     };
 
-    // Always register sidebar (shows welcome message when no project found)
+    // Register sidebar and no-project placeholder
     const sidebarProvider = new SidebarProvider(context.workspaceState);
     const treeView = vscode.window.createTreeView('vsxcode.sidebar', {
         treeDataProvider: sidebarProvider,
     });
+    let noProjectConfirmed = false;
+    const noProjectEmitter = new vscode.EventEmitter<void>();
+    vscode.window.registerTreeDataProvider('vsxcode.noProject', {
+        onDidChangeTreeData: noProjectEmitter.event,
+        getTreeItem: (e: vscode.TreeItem) => e,
+        getChildren: () => {
+            if (!noProjectConfirmed) { return []; }
+            const item = new vscode.TreeItem('No Xcode project found in this workspace.');
+            item.iconPath = new vscode.ThemeIcon('info');
+            return [item];
+        },
+    });
 
-    // swift-format provider (independent of build config)
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        context.subscriptions.push(treeView, outputChannel);
+        return;
+    }
+    const projectRoot = workspaceFolders[0].uri.fsPath;
+
+    function hasXcodeProject(): boolean {
+        try {
+            const entries = fs.readdirSync(projectRoot, { withFileTypes: true });
+            return entries.some(
+                (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    if (!hasXcodeProject()) {
+        noProjectConfirmed = true;
+        noProjectEmitter.fire();
+        // Watch for .xcodeproj creation, then fully activate
+        const xcodeprojWatcher = vscode.workspace.createFileSystemWatcher('**/*.xcodeproj');
+        const onXcodeprojCreated = xcodeprojWatcher.onDidCreate(() => {
+            xcodeprojWatcher.dispose();
+            onXcodeprojCreated.dispose();
+
+            vscode.commands.executeCommand('setContext', 'vsxcode.hasXcodeProject', true);
+            setupFullExtension();
+        });
+        context.subscriptions.push(treeView, outputChannel, xcodeprojWatcher, onXcodeprojCreated);
+        return;
+    }
+
+    vscode.commands.executeCommand('setContext', 'vsxcode.hasXcodeProject', true);
+    setupFullExtension();
+
+    function setupFullExtension(): void {
+
+    // swift-format and Code Quality
     const swiftFormatProvider = new SwiftFormatProvider(context.workspaceState, context.globalState, log);
     const formatterEditProvider = vscode.languages.registerDocumentFormattingEditProvider(
         { language: 'swift', scheme: 'file' },
         swiftFormatProvider,
     );
 
-    // Code Quality sidebar
     const codeQualityProvider = new CodeQualityWebviewProvider(
         context.extensionUri, swiftFormatProvider, context.workspaceState, log,
     );
     const codeQualityViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.codeQuality', codeQualityProvider);
-    context.subscriptions.push(codeQualityViewDisposable);
+    context.subscriptions.push(codeQualityViewDisposable, swiftFormatProvider, formatterEditProvider);
 
-    // Initialize swift-format (async, non-blocking)
     swiftFormatProvider.resolvePathAndVersion().then(async () => {
         await swiftFormatProvider.syncFromConfigFile();
         if (!swiftFormatProvider.isProfileModeExplicit()) {
@@ -659,41 +708,6 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     swiftFormatProvider.onDidSyncConfig(() => codeQualityProvider.refresh());
-    context.subscriptions.push(swiftFormatProvider, formatterEditProvider);
-
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-        context.subscriptions.push(treeView, outputChannel);
-        return;
-    }
-    const rootPath = workspaceFolders[0].uri.fsPath;
-
-    function hasXcodeProject(): boolean {
-        try {
-            const entries = fs.readdirSync(rootPath, { withFileTypes: true });
-            return entries.some(
-                (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
-            );
-        } catch {
-            return false;
-        }
-    }
-
-    if (!hasXcodeProject()) {
-        // Watch for .xcodeproj creation, then fully activate
-        const xcodeprojWatcher = vscode.workspace.createFileSystemWatcher('**/*.xcodeproj');
-        const onXcodeprojCreated = xcodeprojWatcher.onDidCreate(() => {
-            xcodeprojWatcher.dispose();
-            onXcodeprojCreated.dispose();
-            setupFullExtension();
-        });
-        context.subscriptions.push(treeView, outputChannel, xcodeprojWatcher, onXcodeprojCreated);
-        return;
-    }
-
-    setupFullExtension();
-
-    function setupFullExtension(): void {
 
     // Enable Cmd+R keybinding if build tasks were previously configured
     const existingConfig = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
@@ -711,7 +725,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Auto-configure on activation (non-blocking)
     autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
-    generatePackageSwift(rootPath, 'Debug', true).catch(() => {});
+    generatePackageSwift(projectRoot, 'Debug', true).catch(() => {});
 
     // Helper to patch config and refresh sidebar
     async function updateConfig(patch: Partial<BuildTaskConfig>): Promise<void> {
@@ -1242,7 +1256,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Swift file watcher (auto-sync to pbxproj) ─────────────
 
-    const swiftWatcherDisposables = createSwiftFileWatcher(rootPath, log);
+    const swiftWatcherDisposables = createSwiftFileWatcher(projectRoot, log);
     context.subscriptions.push(...swiftWatcherDisposables);
 
     // ── Debug cleanup ──────────────────────────────────────────
@@ -1293,7 +1307,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     // One-time migration notice for users with old file-based build tasks
-    const oldScriptsExist = fs.existsSync(path.join(rootPath, '.vscode', 'scripts', 'build.sh'));
+    const oldScriptsExist = fs.existsSync(path.join(projectRoot, '.vscode', 'scripts', 'build.sh'));
     const noticeShown = context.workspaceState.get<boolean>('migrationNoticeShown');
     if (oldScriptsExist && !noticeShown) {
         vscode.window.showInformationMessage(

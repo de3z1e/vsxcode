@@ -46,23 +46,28 @@
         "views": {
             "vsxcode": [
                 {
+                    "id": "vsxcode.noProject",
+                    "name": "VSXcode",
+                    "when": "workspaceFolderCount > 0 && !vsxcode.hasXcodeProject"
+                },
+                {
                     "id": "vsxcode.sidebar",
                     "name": "Xcode Build",
                     "icon": "images/sidebar.svg",
-                    "when": "workspaceFolderCount > 0"
+                    "when": "vsxcode.hasXcodeProject"
                 },
                 {
                     "id": "vsxcode.codeQuality",
                     "name": "Code Quality",
                     "type": "webview",
-                    "when": "workspaceFolderCount > 0"
+                    "when": "vsxcode.hasXcodeProject"
                 }
             ]
         },
         "viewsWelcome": [
             {
-                "view": "vsxcode.sidebar",
-                "contents": "No Xcode project found in this workspace."
+                "view": "vsxcode.noProject",
+                "contents": "Searching for Xcode project..."
             }
         ],
         "commands": [
