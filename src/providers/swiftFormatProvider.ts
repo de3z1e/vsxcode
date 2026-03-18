@@ -246,6 +246,10 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         } catch {
             this.log('[swift-format] failed to write config file');
         }
+
+        if (this.getConfig().lintMode) {
+            this.lintOpenDocuments();
+        }
     }
 
     /** Save current local settings to the global profile */
