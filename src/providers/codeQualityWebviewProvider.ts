@@ -454,8 +454,8 @@ body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);col
 .gh-link{display:inline-flex;align-items:center;opacity:.35;cursor:pointer;margin-left:6px;vertical-align:middle}
 .gh-link:hover{opacity:.8}
 .gh-link svg{width:14px;height:14px;fill:var(--vscode-foreground)}
-select{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border);border-radius:3px;padding:2px 6px;font-size:12px;outline:none;cursor:pointer}
-input[type="number"]{background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,rgba(128,128,128,.4));border-radius:3px;padding:2px 6px;font-size:12px;outline:none;width:50px;text-align:right;-moz-appearance:textfield}
+select,input[type="number"]{background:var(--vscode-dropdown-background);color:var(--vscode-dropdown-foreground);border:1px solid var(--vscode-dropdown-border);border-radius:3px;padding:2px 6px;font-size:12px;outline:none;cursor:pointer;min-width:90px;text-align:right;box-sizing:border-box}
+input[type="number"]{background:var(--vscode-input-background);color:var(--vscode-input-foreground);border-color:var(--vscode-input-border,rgba(128,128,128,.4));-moz-appearance:textfield}
 input[type="number"]::-webkit-outer-spin-button,input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .switch{position:relative;width:34px;height:18px;flex-shrink:0}
