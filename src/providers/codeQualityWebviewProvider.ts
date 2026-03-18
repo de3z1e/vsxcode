@@ -352,6 +352,16 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
             // ── Rule toggles ─────────────────────────────────
 
+            case 'resetSfRule': {
+                const ruleId = msg.ruleId as string;
+                const config = this.swiftFormatProvider.getConfig();
+                const disabledRules = config.disabledRules.filter((r) => r !== ruleId);
+                const enabledRules = config.enabledRules.filter((r) => r !== ruleId);
+                await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
+                this.postState();
+                break;
+            }
+
             case 'toggleSfRule': {
                 const ruleId = msg.ruleId as string;
                 const enabled = msg.enabled as boolean;
@@ -401,10 +411,26 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 break;
             }
 
-            // ── Rule config (SwiftLint per-rule) ─────────────
+            // ── Rule config ──────────────────────────────────
 
             case 'fetchRuleConfig': {
                 const ruleId = msg.ruleId as string;
+                const isSfRule = msg.tool === 'swift-format';
+
+                if (isSfRule) {
+                    // SF rules: description only, no configurable parameters
+                    this._view?.webview.postMessage({
+                        type: 'ruleConfigData',
+                        ruleId,
+                        defaults: {},
+                        current: null,
+                        description: msg.description as string || '',
+                        sfRule: true,
+                    });
+                    break;
+                }
+
+                // SL rules: fetch config from binary
                 const resolvedPath = this.swiftLintProvider.getResolvedPath();
                 if (!resolvedPath) { break; }
 
@@ -784,9 +810,6 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .add-btns{display:flex;gap:6px;padding:6px 14px}
 .add-btns button{padding:2px 8px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
 .add-btns button:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.1))}
-.tool-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.3px;padding:0 4px;border-radius:3px;line-height:16px;vertical-align:middle;opacity:.6;border:1px solid rgba(128,128,128,.3);white-space:nowrap;flex-shrink:0}
-.tool-badge.sf{color:var(--vscode-charts-blue,#4fc1ff);border-color:var(--vscode-charts-blue,#4fc1ff40)}
-.tool-badge.sl{color:var(--vscode-charts-orange,#cca700);border-color:var(--vscode-charts-orange,#cca70040)}
 .analyzer-note{padding:2px 14px 6px;font-size:11px;opacity:.45;font-style:italic}
 .hidden{display:none!important}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
@@ -816,7 +839,7 @@ let openConfigRuleId = null;
 window.addEventListener('message', e => {
   const msg = e.data;
   if (msg.type === 'setState') { state = msg.state; render(); }
-  if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.defaults, msg.current, msg.description); }
+  if (msg.type === 'ruleConfigData') { showRuleConfig(msg.ruleId, msg.defaults, msg.current, msg.description, msg.sfRule); }
   if (msg.type === 'ruleConfigUpdated') { updateRuleIndicators(msg.ruleId, msg.hasCustomConfig); }
 });
 
@@ -1069,7 +1092,6 @@ function render() {
         h += '<label class="switch"><input type="checkbox" data-analyzer-rule="' + r.identifier + '"' + (r.enabled ? ' checked' : '') + '><span class="slider"></span></label>';
         h += '<span class="rule-name">' + esc(r.identifier) + '</span>';
         if (modified) h += '<span class="rule-modified" title="Modified from default"></span>';
-        h += '<span class="tool-badge sl">SL</span>';
         h += '<button class="gear-btn' + gearClass + '" data-gear="' + r.identifier + '" title="Configure">\\u2699</button>';
         h += '</div>';
         h += '<div class="rule-config hidden" data-config="' + r.identifier + '"></div>';
@@ -1104,7 +1126,13 @@ function render() {
     if (panel && btn) {
       panel.classList.remove('hidden');
       btn.classList.add('active');
-      vscode.postMessage({ type: 'fetchRuleConfig', ruleId: openConfigRuleId });
+      const row = btn.closest('.rule-row');
+      const sfInput = row?.querySelector('input[data-sf-rule]');
+      if (sfInput) {
+        vscode.postMessage({ type: 'fetchRuleConfig', ruleId: openConfigRuleId, tool: 'swift-format', description: ruleDescs[openConfigRuleId] || '' });
+      } else {
+        vscode.postMessage({ type: 'fetchRuleConfig', ruleId: openConfigRuleId });
+      }
     }
   }
 }
@@ -1127,12 +1155,13 @@ function unifiedRuleRow(r) {
     enabled = r.sfRule.effectiveEnabled;
     ruleId = r.sfRule.identifier;
     modified = r.sfRule.isDefault ? !enabled : enabled;
+    showGear = true;
+    gearRuleId = r.sfRule.identifier;
   } else if (isSl && r.slRule) {
     enabled = r.slRule.enabled;
     ruleId = r.slRule.identifier;
     const toggleChanged = r.slRule.optIn ? enabled : !enabled;
     modified = toggleChanged || r.slRule.hasConfig;
-    if (r.slRule.optIn) tags.push('opt-in');
     if (r.slRule.correctable) tags.push('fixable');
     showGear = true;
     gearRuleId = r.slRule.identifier;
@@ -1142,29 +1171,18 @@ function unifiedRuleRow(r) {
   // Tool type data attribute for toggle routing
   const toolAttr = isSf ? 'data-sf-rule="' + esc(ruleId) + '"' : 'data-sl-rule="' + esc(ruleId) + '"';
 
-  const desc = r.sfRule ? ruleDescs[r.sfRule.identifier] : '';
-  const defaultLabel = isSf ? (r.sfRule && r.sfRule.isDefault ? 'Enabled' : 'Disabled') : (isSl ? (r.slRule && !r.slRule.optIn ? 'Enabled' : 'Disabled') : '');
-  const tip = desc ? desc + (defaultLabel ? '\\nDefault: ' + defaultLabel : '') : (defaultLabel ? 'Default: ' + defaultLabel : '');
-
   let row = '<div class="rule-row" data-id="' + esc(ruleId) + '" data-display="' + esc(r.displayName) + '" data-group="' + r.category + '">';
   row += '<label class="switch"><input type="checkbox" ' + toolAttr + (enabled ? ' checked' : '') + '><span class="slider"></span></label>';
-  row += '<span class="rule-name" title="' + esc(tip) + '">' + esc(r.displayName) + '</span>';
+  row += '<span class="rule-name">' + esc(r.displayName) + '</span>';
   if (modified) row += '<span class="rule-modified" title="Modified from default"></span>';
   if (tags.length) row += '<span class="rule-tags">' + tags.join(', ') + '</span>';
-
-  // Tool badges
-  if (isSf) {
-    row += '<span class="tool-badge sf">SF</span>';
-  } else if (isSl) {
-    row += '<span class="tool-badge sl">SL</span>';
-  }
 
   if (showGear) {
     row += '<button class="gear-btn' + gearClass + '" data-gear="' + esc(gearRuleId) + '" title="Configure">\\u2699</button>';
   }
   row += '</div>';
 
-  // SL rule config panel (hidden)
+  // Rule config panel (hidden)
   if (showGear) {
     row += '<div class="rule-config hidden" data-config="' + esc(gearRuleId) + '"></div>';
   }
@@ -1362,7 +1380,7 @@ function bind() {
     si?.focus();
   });
 
-  // Gear buttons (SL rule config)
+  // Gear buttons (rule config)
   function toggleRuleConfig(ruleId) {
     const panel = document.querySelector('[data-config="' + ruleId + '"]');
     const btn = document.querySelector('[data-gear="' + ruleId + '"]');
@@ -1382,7 +1400,15 @@ function bind() {
     panel.classList.remove('hidden');
     openConfigRuleId = ruleId;
     panel.innerHTML = '<div class="not-found">Loading...</div>';
-    vscode.postMessage({ type: 'fetchRuleConfig', ruleId });
+    // Detect if this is an SF rule (has data-sf-rule on its row's checkbox)
+    const row = btn?.closest('.rule-row') || panel.previousElementSibling;
+    const sfInput = row?.querySelector('input[data-sf-rule]');
+    if (sfInput) {
+      const desc = ruleDescs[ruleId] || '';
+      vscode.postMessage({ type: 'fetchRuleConfig', ruleId, tool: 'swift-format', description: desc });
+    } else {
+      vscode.postMessage({ type: 'fetchRuleConfig', ruleId });
+    }
   }
 
   document.querySelectorAll('.gear-btn').forEach(btn => {
@@ -1417,17 +1443,42 @@ function humanize(key) {
   return key.replace(/_/g, ' ').replace(/^\\w/, c => c.toUpperCase());
 }
 
-function showRuleConfig(ruleId, defaults, current, description) {
+function showRuleConfig(ruleId, defaults, current, description, isSfRule) {
   const panel = document.querySelector('[data-config="' + ruleId + '"]');
   if (!panel) return;
+
+  // SF rules: show description + reset button
+  if (isSfRule) {
+    const sfRule = state?.unifiedRules?.find(r => r.sfRule && r.sfRule.identifier === ruleId);
+    const defaultLabel = sfRule && sfRule.sfRule.isDefault ? 'Enabled' : 'Disabled';
+    // Always show description from ruleDescs (doesn't depend on enabled state)
+    const descFromMap = ruleDescs[ruleId] || description || '';
+    let descText = descFromMap;
+    if (descText) { descText += ' Default: ' + defaultLabel + '.'; }
+    else { descText = 'Default: ' + defaultLabel + '.'; }
+    let h = '<div class="config-desc">' + esc(descText) + '</div>';
+    h += '<div class="config-actions"><button class="btn-reset" data-reset-sf="' + esc(ruleId) + '">Reset to Default</button></div>';
+    panel.innerHTML = h;
+    panel.querySelectorAll('[data-reset-sf]').forEach(btn => {
+      btn.addEventListener('click', () => { vscode.postMessage({ type: 'resetSfRule', ruleId: btn.dataset.resetSf }); });
+    });
+    return;
+  }
+
   const defs = defaults || {};
   configDefaults[ruleId] = defs;
   const vals = current || defs;
   const entries = Object.entries(defs);
-  if (!entries.length) { panel.innerHTML = '<div class="not-found">No configurable parameters</div>'; return; }
+  // Find the SL rule to determine default state
+  const slRule = state?.unifiedRules?.find(r => r.slRule && r.slRule.identifier === ruleId)
+    || (state?.analyzerRules || []).find(r => r.identifier === ruleId);
+  const slDefaultLabel = slRule ? (slRule.optIn === false || (slRule.slRule && !slRule.slRule.optIn) ? 'Enabled' : 'Disabled') : '';
+  let descText = description || '';
+  if (slDefaultLabel) { descText += (descText ? ' ' : '') + 'Default: ' + slDefaultLabel + '.'; }
+  if (!entries.length) { panel.innerHTML = '<div class="config-desc">' + esc(descText || 'No configurable parameters') + '</div>'; return; }
   let h = '';
-  if (description) {
-    h += '<div class="config-desc">' + esc(description) + '</div>';
+  if (descText) {
+    h += '<div class="config-desc">' + esc(descText) + '</div>';
   }
   // Known enum options for specific rule config fields (rule_id.key → choices)
   const enumChoices = {
