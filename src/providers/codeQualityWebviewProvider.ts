@@ -454,6 +454,10 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .rule-config{padding:6px 14px 8px 50px;border-bottom:1px solid var(--vscode-widget-border,rgba(128,128,128,.1))}
 .config-desc{font-size:11px;opacity:.5;padding:0 0 6px;line-height:1.4}
 .hidden{display:none!important}
+.add-btns{display:flex;gap:6px;padding:6px 14px}
+.add-btns button,.btn-reset{padding:3px 10px;font-size:11px;border-radius:3px;border:1px solid var(--vscode-button-border,var(--vscode-input-border,rgba(128,128,128,.4)));background:transparent;color:var(--vscode-foreground);cursor:pointer;opacity:.7}
+.add-btns button:hover,.btn-reset:hover{opacity:1;background:var(--vscode-button-secondaryBackground,rgba(128,128,128,.15))}
+.config-actions{padding:4px 0 0}
 .not-found{padding:10px 14px;opacity:.6;font-size:12px}
 </style>
 </head>
