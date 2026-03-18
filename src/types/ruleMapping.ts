@@ -220,7 +220,8 @@ export function buildUnifiedRules(
     const consumedSf = new Set<string>();
     const consumedSl = new Set<string>();
 
-    // 0. Hide SL rules where SF formatting option handles and SL is not fixable
+    // Hide SL rules where SF formatting option handles and SL is not fixable
+    // (SF always available via Xcode)
     for (const slId of SETTINGS_OVERLAP_HIDDEN_SL_RULES) { consumedSl.add(slId); }
 
     // 1. Process overlaps — each pair is hard-resolved to one tool
@@ -234,8 +235,8 @@ export function buildUnifiedRules(
         consumedSf.add(pair.sfRule);
         for (const id of slRuleIds) { consumedSl.add(id); }
 
-        if (pair.slCorrectable) {
-            // SL is fixable → show as SL-only
+        if (pair.slCorrectable && slRuleObjs.length > 0) {
+            // SL is fixable and available → show as SL-only
             for (const slRule of slRuleObjs) {
                 result.push({
                     displayName: humanReadableName(slRule.identifier),
@@ -251,6 +252,19 @@ export function buildUnifiedRules(
                     },
                 });
             }
+        } else if (pair.slCorrectable && slRuleObjs.length === 0 && sfRule) {
+            // SL is fixable but NOT installed → fall back to SF rule
+            result.push({
+                displayName: humanReadableName(sfRule.identifier),
+                category: SF_RULE_CATEGORIES[sfRule.identifier] || 'formatting',
+                tool: 'swift-format',
+                sfRule: {
+                    identifier: sfRule.identifier,
+                    isDefault: sfRule.isDefault,
+                    effectiveEnabled: computeSfEnabled(sfRule, sfConfig),
+                    isFormatRule: SF_FORMAT_RULES.has(sfRule.identifier),
+                },
+            });
         } else {
             // SL is NOT fixable → show as SF-only
             if (sfRule) {

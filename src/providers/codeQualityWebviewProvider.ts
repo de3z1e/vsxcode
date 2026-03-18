@@ -73,12 +73,14 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
     // ── State ────────────────────────────────────────────────
 
     private async postState(): Promise<void> {
+        // Keep SF provider aware of SL install status for config file generation
+        this.swiftFormatProvider.setSlInstalled(this.swiftLintProvider.getResolvedPath() !== null);
         await this.ensureOverlapRulesResolved();
         // Ensure config files exist after overlap resolution
         if (this.swiftFormatProvider.isPathResolved() && !this.swiftFormatProvider.hasConfigFile()) {
             await this.swiftFormatProvider.writeConfigFile();
         }
-        if (this.swiftLintProvider.isPathResolved() && this.swiftLintProvider.hasConfigOverrides() && !this.swiftLintProvider.hasConfigFile()) {
+        if (this.swiftLintProvider.getResolvedPath() && this.swiftLintProvider.hasConfigOverrides() && !this.swiftLintProvider.hasConfigFile()) {
             await this.swiftLintProvider.writeConfigFile();
         }
         this._view?.webview.postMessage({ type: 'setState', state: this.getState() });
@@ -359,9 +361,10 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
             case 'resetSfRule': {
                 const ruleId = msg.ruleId as string;
-                // Keep auto-disabled overlap rules in disabledRules
+                // Keep auto-disabled overlap rules in disabledRules (only when SL installed)
+                const slInstalled = this.swiftLintProvider.getResolvedPath() !== null;
                 const config = this.swiftFormatProvider.getConfig();
-                const disabledRules = config.disabledRules.filter((r) => r !== ruleId || AUTO_DISABLE_SF_RULES.has(r));
+                const disabledRules = config.disabledRules.filter((r) => r !== ruleId || (slInstalled && AUTO_DISABLE_SF_RULES.has(r)));
                 const enabledRules = config.enabledRules.filter((r) => r !== ruleId);
                 await this.swiftFormatProvider.updateConfig({ disabledRules, enabledRules });
                 this.postState();
@@ -371,8 +374,8 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
             case 'toggleSfRule': {
                 const ruleId = msg.ruleId as string;
                 const enabled = msg.enabled as boolean;
-                // Reject enabling auto-disabled SF rules
-                if (enabled && AUTO_DISABLE_SF_RULES.has(ruleId)) { this.postState(); break; }
+                // Reject enabling auto-disabled SF rules (only when SL installed)
+                if (enabled && AUTO_DISABLE_SF_RULES.has(ruleId) && this.swiftLintProvider.getResolvedPath()) { this.postState(); break; }
                 const config = this.swiftFormatProvider.getConfig();
                 const rules = this.swiftFormatProvider.getRules() || [];
                 const rule = rules.find((r) => r.identifier === ruleId);
@@ -499,8 +502,9 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                     'Reset',
                 );
                 if (answer === 'Reset') {
-                    // Preserve auto-disabled overlap rules
-                    const sfDisabled = [...AUTO_DISABLE_SF_RULES];
+                    // Preserve auto-disabled overlap rules (only when the other tool is installed)
+                    const slInstalled = this.swiftLintProvider.getResolvedPath() !== null;
+                    const sfDisabled = slInstalled ? [...AUTO_DISABLE_SF_RULES] : [];
                     const slDisabled = [...AUTO_DISABLE_SL_RULES, ...SETTINGS_OVERLAP_HIDDEN_SL_RULES];
                     await this.swiftFormatProvider.updateConfig({ disabledRules: sfDisabled, enabledRules: [] });
                     await this.swiftLintProvider.updateConfig({
@@ -658,10 +662,12 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
 
     // ── Overlap auto-resolution ─────────────────────────────
 
-    /** Disable the losing side of each overlap pair so only the best tool handles each rule */
+    /** Disable the losing side of each overlap pair so only the best tool handles each rule.
+     *  If a tool is not installed, the other tool's overlap rules are re-enabled. */
     private async ensureOverlapRulesResolved(): Promise<void> {
-        // Disable SF rules that SL should handle
         const sfRules = this.swiftFormatProvider.getRules();
+        const slResolved = this.swiftLintProvider.getResolvedPath() !== null;
+
         if (sfRules) {
             const sfConfig = this.swiftFormatProvider.getConfig();
             let sfChanged = false;
@@ -674,18 +680,28 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 const isDisabled = sfDisabled.includes(sfRuleId);
                 const isEnabled = sfEnabled.includes(sfRuleId);
                 const on = (rule.isDefault && !isDisabled) || isEnabled;
-                if (!on) { continue; }
-                if (rule.isDefault && !isDisabled) { sfDisabled.push(sfRuleId); sfChanged = true; }
-                if (isEnabled) { const idx = sfEnabled.indexOf(sfRuleId); if (idx >= 0) { sfEnabled.splice(idx, 1); sfChanged = true; } }
+
+                if (slResolved) {
+                    // SL installed — disable SF overlap rules
+                    if (!on) { continue; }
+                    if (rule.isDefault && !isDisabled) { sfDisabled.push(sfRuleId); sfChanged = true; }
+                    if (isEnabled) { const idx = sfEnabled.indexOf(sfRuleId); if (idx >= 0) { sfEnabled.splice(idx, 1); sfChanged = true; } }
+                } else {
+                    // SL NOT installed — re-enable SF overlap rules (restore to default state)
+                    if (isDisabled) {
+                        const idx = sfDisabled.indexOf(sfRuleId);
+                        if (idx >= 0) { sfDisabled.splice(idx, 1); sfChanged = true; }
+                    }
+                }
             }
 
             if (sfChanged) {
                 await this.swiftFormatProvider.updateConfig({ disabledRules: sfDisabled, enabledRules: sfEnabled });
-                this.log('[code-quality] auto-disabled SF overlap rules');
+                this.log(`[code-quality] ${slResolved ? 'auto-disabled' : 're-enabled'} SF overlap rules`);
             }
         }
 
-        // Disable SL rules that SF should handle (rule overlaps + settings overlaps)
+        // Disable SL rules that SF should handle (SF always installed via Xcode)
         const slRules = this.swiftLintProvider.getRules();
         if (slRules) {
             const slConfig = this.swiftLintProvider.getConfig();
@@ -700,6 +716,7 @@ export class CodeQualityWebviewProvider implements vscode.WebviewViewProvider {
                 const isDisabled = slDisabled.includes(slRuleId);
                 const isOptedIn = slOptIn.includes(slRuleId);
                 const on = (!rule.optIn && !isDisabled) || isOptedIn;
+
                 if (!on) { continue; }
                 if (!rule.optIn && !isDisabled) { slDisabled.push(slRuleId); slChanged = true; }
                 if (isOptedIn) { const idx = slOptIn.indexOf(slRuleId); if (idx >= 0) { slOptIn.splice(idx, 1); slChanged = true; } }
@@ -1034,7 +1051,14 @@ function render() {
 
     h += '<div class="row"><span title="' + esc('Maximum number of characters per line before wrapping.\\nDefault: 100') + '">Line Length' + modDot(sfC.lineLength !== df.lineLength) + '</span><input type="number" id="lineLength" value="' + sfC.lineLength + '" min="1" max="999"></div>';
 
+    if (!slFound) {
+      h += '<div class="row"><span title="' + esc('Maximum number of consecutive blank lines allowed.\\nDefault: 1') + '">Max Blank Lines' + modDot(sfC.maximumBlankLines !== df.maximumBlankLines) + '</span><input type="number" id="maximumBlankLines" value="' + sfC.maximumBlankLines + '" min="0" max="10"></div>';
+    }
+
     h += toggleRow('Respects Existing Line Breaks', 'opt-respectsExistingLineBreaks', sfC.respectsExistingLineBreaks, 'Preserves existing line breaks in source code.', sfC.respectsExistingLineBreaks !== df.respectsExistingLineBreaks, 'On');
+    if (!slFound) {
+      h += toggleRow('Break Before Control Flow Keywords', 'opt-lineBreakBeforeControlFlowKeywords', sfC.lineBreakBeforeControlFlowKeywords, 'Places else, catch on a new line.', sfC.lineBreakBeforeControlFlowKeywords !== df.lineBreakBeforeControlFlowKeywords, 'Off');
+    }
     h += toggleRow('Break Before Each Argument', 'opt-lineBreakBeforeEachArgument', sfC.lineBreakBeforeEachArgument, 'Each argument on its own line when wrapping.', sfC.lineBreakBeforeEachArgument !== df.lineBreakBeforeEachArgument, 'Off');
     h += toggleRow('Break Before Generic Requirements', 'opt-lineBreakBeforeEachGenericRequirement', sfC.lineBreakBeforeEachGenericRequirement, 'Each generic requirement on its own line.', sfC.lineBreakBeforeEachGenericRequirement !== df.lineBreakBeforeEachGenericRequirement, 'Off');
     h += toggleRow('Break Around Multiline Chains', 'opt-lineBreakAroundMultilineExpressionChainComponents', sfC.lineBreakAroundMultilineExpressionChainComponents, 'Adds line breaks around multiline chain components.', sfC.lineBreakAroundMultilineExpressionChainComponents !== df.lineBreakAroundMultilineExpressionChainComponents, 'Off');
@@ -1042,6 +1066,13 @@ function render() {
     h += toggleRow('Break Between Declaration Attributes', 'opt-lineBreakBetweenDeclarationAttributes', sfC.lineBreakBetweenDeclarationAttributes, 'Places each declaration attribute on its own line.', sfC.lineBreakBetweenDeclarationAttributes !== df.lineBreakBetweenDeclarationAttributes, 'Off');
     h += toggleRow('Indent #if/#else Blocks', 'opt-indentConditionalCompilationBlocks', sfC.indentConditionalCompilationBlocks, 'Indents code inside conditional compilation blocks.', sfC.indentConditionalCompilationBlocks !== df.indentConditionalCompilationBlocks, 'On');
     h += toggleRow('Indent Switch Case Labels', 'opt-indentSwitchCaseLabels', sfC.indentSwitchCaseLabels, 'Indents case labels relative to switch.', sfC.indentSwitchCaseLabels !== df.indentSwitchCaseLabels, 'Off');
+    if (!slFound) {
+      h += '<div class="row"><span title="' + esc('File-scoped declarations use private or fileprivate.\\nDefault: private') + '">File-Scoped Privacy' + modDot(sfC.fileScopedDeclarationPrivacy !== df.fileScopedDeclarationPrivacy) + '</span><select id="fileScopedDeclarationPrivacy">';
+      h += '<option value="private"' + (sfC.fileScopedDeclarationPrivacy === 'private' ? ' selected' : '') + '>private</option>';
+      h += '<option value="fileprivate"' + (sfC.fileScopedDeclarationPrivacy === 'fileprivate' ? ' selected' : '') + '>fileprivate</option>';
+      h += '</select></div>';
+      h += toggleRow('Trailing Commas', 'opt-multiElementCollectionTrailingCommas', sfC.multiElementCollectionTrailingCommas, 'Adds trailing comma after last element in multi-line collections.', sfC.multiElementCollectionTrailingCommas !== df.multiElementCollectionTrailingCommas, 'On');
+    }
     h += toggleRow('Prioritize Function Output Together', 'opt-prioritizeKeepingFunctionOutputTogether', sfC.prioritizeKeepingFunctionOutputTogether, 'Keeps the return type on the same line as the closing parenthesis when wrapping.', sfC.prioritizeKeepingFunctionOutputTogether !== df.prioritizeKeepingFunctionOutputTogether, 'Off');
     h += toggleRow('Spaces Around Range Operators', 'opt-spacesAroundRangeFormationOperators', sfC.spacesAroundRangeFormationOperators, 'Adds spaces around range operators (... and ..<).', sfC.spacesAroundRangeFormationOperators !== df.spacesAroundRangeFormationOperators, 'Off');
 

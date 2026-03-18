@@ -139,6 +139,7 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
     private resolvedPath: string | null = null;
     private resolvedVersion: string | null = null;
     private _pathResolved = false;
+    private _slInstalled = false;
     private cachedRules: SwiftFormatRule[] | null = null;
     private defaultDumpConfig: DumpConfig | null = null;
     private _writingConfigFile = false;
@@ -326,6 +327,9 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
     getLatestVersion(): string | null { return this.latestVersion; }
     isPathResolved(): boolean { return this._pathResolved; }
 
+    setSlInstalled(installed: boolean): void { this._slInstalled = installed; }
+    isSlInstalled(): boolean { return this._slInstalled; }
+
     private static readonly UPDATE_CHECK_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
     async checkForUpdate(force = false): Promise<void> {
@@ -428,11 +432,8 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
         const config = this.getConfig();
 
         // Build swift-format JSON config
-        // Options with fixable SL equivalents are omitted — SL --fix handles them:
-        //   maximumBlankLines (SL vertical_whitespace), lineBreakBeforeControlFlowKeywords (SL statement_position),
-        //   fileScopedDeclarationPrivacy (SL private_over_fileprivate), multiElementCollectionTrailingCommas (SL trailing_comma)
-        // Options with non-fixable SL equivalents are kept — SF is the only enforcer:
-        //   lineLength (SL line_length not fixable), indentSwitchCaseLabels (SL switch_case_alignment not fixable)
+        // When SL is installed, options with fixable SL equivalents are omitted (SL --fix handles them).
+        // When SL is NOT installed, all options are included so SF handles everything.
         const formatConfig: Record<string, unknown> = {
             version: 1,
             lineLength: config.lineLength,
@@ -451,6 +452,14 @@ export class SwiftFormatProvider implements vscode.Disposable, vscode.DocumentFo
             spacesBeforeEndOfLineComments: config.spacesBeforeEndOfLineComments,
             reflowMultilineStringLiterals: config.reflowMultilineStringLiterals,
         };
+
+        // Include options that have fixable SL equivalents only when SL is NOT installed
+        if (!this._slInstalled) {
+            formatConfig.maximumBlankLines = config.maximumBlankLines;
+            formatConfig.lineBreakBeforeControlFlowKeywords = config.lineBreakBeforeControlFlowKeywords;
+            formatConfig.fileScopedDeclarationPrivacy = { accessLevel: config.fileScopedDeclarationPrivacy };
+            formatConfig.multiElementCollectionTrailingCommas = config.multiElementCollectionTrailingCommas;
+        }
 
         // Build rules from defaults + overrides
         const rules: Record<string, boolean> = {};

@@ -447,6 +447,7 @@ export class SwiftLintProvider implements vscode.Disposable {
     }
 
     async writeConfigFile(): Promise<void> {
+        if (!this.resolvedPath) { return; }
         if (!this.hasConfigOverrides()) {
             // Remove stale config file when all overrides are cleared
             try { await fs.promises.unlink(this.getConfigFilePath()); } catch { /* already gone */ }
