@@ -1021,6 +1021,9 @@ function bind() {
       gh.classList.toggle('collapsed', isCollapsed);
       body.classList.toggle('collapsed', isCollapsed);
       groupCollapsed[group] = isCollapsed;
+      if (!isCollapsed) {
+        gh.scrollIntoView({ block: 'start' });
+      }
     });
   });
 
