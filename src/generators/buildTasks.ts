@@ -69,6 +69,13 @@ export function runAndDebugCommandLine(config: BuildTaskConfig): string {
     return `xcrun simctl launch --console-pty --wait-for-debugger "${udid}" "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;
 }
 
+export function testCommandLine(config: BuildTaskConfig): string {
+    return [
+        ...xcodebuildArgs(config),
+        `test -only-testing:"${config.targetName}" 2>&1`,
+    ].join(' ');
+}
+
 export function debugConsoleCommandLine(config: BuildTaskConfig): string {
     const devId = devicectlId(config);
     return `xcrun devicectl device process launch --device "${devId}" --console --start-stopped --terminate-existing "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;

@@ -1082,15 +1082,24 @@ export function activate(context: vscode.ExtensionContext): void {
         'vsxcode.sidebar.build',
         async () => {
             await cancelActiveRun();
-            const tasks = await vscode.tasks.fetchTasks({ type: 'xcode-build' });
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            const data = sidebarProvider.getProjectData();
+            const target = data?.targets.find(t => t.name === config?.targetName);
+            // Test target: run tests instead of build
+            if (target && isTestTarget(target.productType)) {
+                const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
+                const testTask = tasks.find((t) => t.name === 'Test');
+                if (testTask) {
+                    await executeTaskAndWait(testTask, (exec) => { buildExecution = exec; });
+                } else {
+                    vscode.window.showErrorMessage('Test task not available. Check configuration.');
+                }
+                return;
+            }
+            const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
             const buildTask = tasks.find((t) => t.name === 'Build');
             if (buildTask) {
-                const exitCode = await executeTaskAndWait(buildTask, (exec) => { buildExecution = exec; });
-                if (exitCode === 0) {
-                    const btConfig = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-                    if (btConfig) {
-                    }
-                }
+                await executeTaskAndWait(buildTask, (exec) => { buildExecution = exec; });
             } else {
                 vscode.window.showErrorMessage('Build task not available. Check configuration.');
             }
@@ -1347,6 +1356,20 @@ export function activate(context: vscode.ExtensionContext): void {
                         vscode.commands.executeCommand('vsxcode.generateBuildTasks');
                     }
                 });
+                return;
+            }
+            // Test target: run tests instead of build-install-run
+            const data = sidebarProvider.getProjectData();
+            const target = data?.targets.find(t => t.name === config.targetName);
+            if (target && isTestTarget(target.productType)) {
+                await cancelActiveRun();
+                const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
+                const testTask = tasks.find((t) => t.name === 'Test');
+                if (testTask) {
+                    await executeTaskAndWait(testTask, (exec) => { buildExecution = exec; });
+                } else {
+                    vscode.window.showErrorMessage('Test task not available. Check configuration.');
+                }
                 return;
             }
             if (config.isPhysicalDevice) {

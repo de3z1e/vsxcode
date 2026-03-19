@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import type { BuildTaskConfig } from '../types/interfaces';
-import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine } from '../generators/buildTasks';
+import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine, testCommandLine } from '../generators/buildTasks';
 
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
@@ -14,6 +14,10 @@ const BUILD_COLORS: [RegExp, string][] = [
     [/^(.*WARNING:.*)$/gm, '\x1b[33m$1\x1b[0m'],
     [/^(.*BUILD FAILED.*)$/gm, '\x1b[31m$1\x1b[0m'],
     [/^(.*BUILD SUCCEEDED.*)$/gm, '\x1b[32m$1\x1b[0m'],
+    [/^(.*TEST EXECUTE FAILED.*)$/gm, '\x1b[31m$1\x1b[0m'],
+    [/^(.*TEST EXECUTE SUCCEEDED.*)$/gm, '\x1b[32m$1\x1b[0m'],
+    [/^(.*Test Suite .* passed.*)$/gm, '\x1b[32m$1\x1b[0m'],
+    [/^(.*Test Suite .* failed.*)$/gm, '\x1b[31m$1\x1b[0m'],
     [/^(.*failures\).*)$/gm, '\x1b[31m$1\x1b[0m'],
 ];
 
@@ -115,6 +119,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             this.createBuildTask(config, folder),
             this.createBuildInstallTask(config, folder),
             this.createRunAndDebugTask(config, folder),
+            this.createTestTask(config, folder),
         ];
     }
 
@@ -135,6 +140,8 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
                 return this.createBuildInstallTask(config, folder);
             case 'run-and-debug':
                 return this.createRunAndDebugTask(config, folder);
+            case 'test':
+                return this.createTestTask(config, folder);
             default:
                 return undefined;
         }
@@ -210,6 +217,24 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             reveal: vscode.TaskRevealKind.Always,
             panel: vscode.TaskPanelKind.Shared,
             showReuseMessage: false,
+        };
+        return task;
+    }
+
+    private createTestTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
+        const cwd = folder.uri.fsPath;
+        const task = new vscode.Task(
+            { type: TASK_TYPE, task: 'test' },
+            folder, 'Test', TASK_SOURCE,
+            new vscode.CustomExecution(async () => new TaskTerminal(testCommandLine(config), cwd, { colorize: true })),
+            '$swiftc'
+        );
+        task.group = vscode.TaskGroup.Test;
+        task.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
+            clear: true,
         };
         return task;
     }
