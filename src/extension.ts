@@ -275,8 +275,9 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         }
 
         const strictConcurrency = targetSettings?.strictConcurrency || projectBuildSettings?.strictConcurrency;
-        const majorVersion = swiftLangVersion ? parseInt(swiftLangVersion.split('.')[0], 10) : undefined;
-        if (strictConcurrency && (!majorVersion || majorVersion < 6)) {
+        const effectiveVersion = swiftLangVersion || swiftVersion;
+        const majorVersion = parseInt(effectiveVersion.split('.')[0], 10);
+        if (strictConcurrency && majorVersion < 6) {
             if (strictConcurrency === 'complete') {
                 swiftSettings.push(`.enableUpcomingFeature("StrictConcurrency")`);
             } else if (strictConcurrency === 'targeted') {

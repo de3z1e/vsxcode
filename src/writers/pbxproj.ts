@@ -307,10 +307,17 @@ export function updateBuildSetting(
     if (existingMatch) {
         newSettings = settingsBlock.replace(settingRegex, `${existingMatch[1]}${key} = ${value};`);
     } else {
-        // Detect indent from existing settings lines
+        // Insert new setting before the closing of buildSettings block
         const indentMatch = /^([ \t]+)\w/.exec(settingsBlock.split('\n').find(l => /^\s+\w/.test(l)) || '');
         const indent = indentMatch ? indentMatch[1] : '\t\t\t\t';
-        newSettings = settingsBlock.replace(/(\n)([ \t]*$)/, `\n${indent}${key} = ${value};\n$2`);
+        const newLine = `\n${indent}${key} = ${value};`;
+        // Try inserting before trailing whitespace, or append before end
+        const trailingMatch = /(\n)([ \t]*$)/.exec(settingsBlock);
+        if (trailingMatch) {
+            newSettings = settingsBlock.replace(/(\n)([ \t]*$)/, `${newLine}\n$2`);
+        } else {
+            newSettings = settingsBlock + newLine + '\n';
+        }
     }
 
     return pbxContents.slice(0, blockMatch.index) +
