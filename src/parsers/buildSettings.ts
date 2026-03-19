@@ -31,6 +31,11 @@ export function parseBuildConfigurations(pbxContents: string): Map<string, Build
             settings.swiftVersion = cleanup(swiftVersionMatch[1]);
         }
 
+        const strictConcurrencyMatch = /SWIFT_STRICT_CONCURRENCY = ([^;]+);/.exec(settingsBlock);
+        if (strictConcurrencyMatch) {
+            settings.strictConcurrency = cleanup(strictConcurrencyMatch[1]);
+        }
+
         const compilationConditionsMatch = /SWIFT_ACTIVE_COMPILATION_CONDITIONS = ([^;]+);/.exec(settingsBlock);
         if (compilationConditionsMatch) {
             settings.swiftActiveCompilationConditions = parseListValue(compilationConditionsMatch[1]);

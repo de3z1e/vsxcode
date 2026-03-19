@@ -9,7 +9,7 @@ import type {
     ProductDefinition,
     SwiftPackageProductDependency
 } from './types/interfaces';
-import { DEFAULT_SWIFT_VERSION, SWIFT_VERSION_MAP } from './types/constants';
+import { DEFAULT_SWIFT_VERSION } from './types/constants';
 import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, cleanup, compareVersions } from './utils/version';
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
@@ -90,12 +90,8 @@ function resolveSwiftLanguageMode(swiftVersion: string | undefined): string | un
     if (!swiftVersion) {
         return undefined;
     }
-    const mapped = SWIFT_VERSION_MAP[swiftVersion];
-    if (mapped) {
-        return mapped;
-    }
-    const majorMinor = swiftVersion.split('.').slice(0, 2).join('.');
-    return SWIFT_VERSION_MAP[majorMinor] || undefined;
+    const major = parseInt(swiftVersion.split('.')[0], 10);
+    return isNaN(major) ? undefined : `.v${major}`;
 }
 
 function parseExcludedFiles(pbxContents: string, targetName: string): string[] {
@@ -276,6 +272,16 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         const swiftLanguageMode = resolveSwiftLanguageMode(swiftLangVersion);
         if (swiftLanguageMode) {
             swiftSettings.unshift(`.swiftLanguageMode(${swiftLanguageMode})`);
+        }
+
+        const strictConcurrency = targetSettings?.strictConcurrency || projectBuildSettings?.strictConcurrency;
+        const majorVersion = swiftLangVersion ? parseInt(swiftLangVersion.split('.')[0], 10) : undefined;
+        if (strictConcurrency && (!majorVersion || majorVersion < 6)) {
+            if (strictConcurrency === 'complete') {
+                swiftSettings.push(`.enableUpcomingFeature("StrictConcurrency")`);
+            } else if (strictConcurrency === 'targeted') {
+                swiftSettings.push(`.unsafeFlags(["-strict-concurrency=targeted"])`);
+            }
         }
 
         const packageDependencyNames = new Set(
@@ -959,11 +965,12 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!config) { return; }
             const data = sidebarProvider.getProjectData();
             const currentVersion = data?.swiftVersionByTarget[config.targetName] || '';
+            const normalizedCurrent = currentVersion.replace(/\.0$/, '');
 
             const versions = data?.supportedSwiftVersions || [];
             if (versions.length === 0) { return; }
             const picks = versions.map(v => ({ label: `Swift ${v}`, version: v }));
-            const active = picks.find(p => p.version === currentVersion);
+            const active = picks.find(p => p.version === normalizedCurrent);
             const pick = await new Promise<typeof picks[0] | undefined>((resolve) => {
                 const qp = vscode.window.createQuickPick<typeof picks[0]>();
                 qp.items = picks;
@@ -973,7 +980,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
                 qp.show();
             });
-            if (!pick || pick.version === currentVersion) { return; }
+            if (!pick || pick.version === normalizedCurrent) { return; }
 
             const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             if (!rootPath) { return; }
@@ -984,11 +991,55 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!target?.buildConfigurationListId) { return; }
                 const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
                 for (const configId of configIds) {
-                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_VERSION', pick.version);
+                    const pbxValue = pick.version.includes('.') ? pick.version : `${pick.version}.0`;
+                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_VERSION', pbxValue);
                 }
                 await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
             } catch (e) {
                 vscode.window.showErrorMessage(`Failed to update SWIFT_VERSION: ${(e as Error).message}`);
+            }
+        }
+    );
+
+    const changeStrictConcurrencyCmd = vscode.commands.registerCommand(
+        'vsxcode.sidebar.changeStrictConcurrency',
+        async () => {
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            if (!config) { return; }
+            const data = sidebarProvider.getProjectData();
+            const currentValue = data?.strictConcurrencyByTarget[config.targetName] || '';
+
+            const options = [
+                { label: 'Minimal', value: 'minimal' },
+                { label: 'Targeted', value: 'targeted' },
+                { label: 'Complete', value: 'complete' },
+            ];
+            const active = options.find(o => o.value === currentValue);
+            const pick = await new Promise<typeof options[0] | undefined>((resolve) => {
+                const qp = vscode.window.createQuickPick<typeof options[0]>();
+                qp.items = options;
+                qp.placeholder = 'Strict Concurrency Checking';
+                if (active) { qp.activeItems = [active]; }
+                qp.onDidAccept(() => { resolve(qp.selectedItems[0]); qp.dispose(); });
+                qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+                qp.show();
+            });
+            if (!pick || pick.value === currentValue) { return; }
+
+            const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!rootPath) { return; }
+            const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
+            try {
+                let pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+                const target = data?.targets.find(t => t.name === config.targetName);
+                if (!target?.buildConfigurationListId) { return; }
+                const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
+                for (const configId of configIds) {
+                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_STRICT_CONCURRENCY', pick.value);
+                }
+                await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
+            } catch (e) {
+                vscode.window.showErrorMessage(`Failed to update SWIFT_STRICT_CONCURRENCY: ${(e as Error).message}`);
             }
         }
     );
@@ -1342,7 +1393,7 @@ export function activate(context: vscode.ExtensionContext): void {
         generateCommand, generateWithOptionsCommand, generateBuildTasksCommand,
         taskProvider, debugProvider, treeView,
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
-        selectSimulatorCmd, changeSwiftVersionCmd, buildCmd, buildAndRunCmd, refreshCmd,
+        selectSimulatorCmd, changeSwiftVersionCmd, changeStrictConcurrencyCmd, buildCmd, buildAndRunCmd, refreshCmd,
         watcher, onProjectChange, onDebugStart, onDebugEnd,
         outputChannel
     );

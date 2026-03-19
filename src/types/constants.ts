@@ -67,11 +67,3 @@ export const SPM_RESOURCE_DIR_EXTENSIONS = new Set([
     '.lproj', '.mlmodel', '.mlpackage', '.bundle'
 ]);
 
-export const SWIFT_VERSION_MAP: Record<string, string> = {
-    '6.0': '.v6',
-    '6': '.v6',
-    '5.10': '.v5',
-    '5.9': '.v5',
-    '5': '.v5'
-};
-

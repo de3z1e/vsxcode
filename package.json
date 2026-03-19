@@ -114,6 +114,10 @@
                 "title": "Change Swift Compiler Version"
             },
             {
+                "command": "vsxcode.sidebar.changeStrictConcurrency",
+                "title": "Change Strict Concurrency Checking"
+            },
+            {
                 "command": "vsxcode.sidebar.build",
                 "title": "Build",
                 "icon": "$(tools)"

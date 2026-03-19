@@ -16,7 +16,8 @@ type SidebarItemType =
     | 'config-scheme'
     | 'config-bundleId'
     | 'config-simulator'
-    | 'config-swiftVersion';
+    | 'config-swiftVersion'
+    | 'config-strictConcurrency';
 
 export class SidebarItem extends vscode.TreeItem {
     constructor(
@@ -38,6 +39,7 @@ export interface ProjectData {
     simulators: SimulatorDevice[];
     physicalDevices: PhysicalDevice[];
     swiftVersionByTarget: Record<string, string>;
+    strictConcurrencyByTarget: Record<string, string>;
     supportedSwiftVersions: string[];
 }
 
@@ -113,8 +115,11 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             this.createConfigItem('config-bundleId', 'Bundle ID', config.bundleIdentifier,
                 'vsxcode.sidebar.changeBundleId', 'tag'),
             this.createConfigItem('config-swiftVersion', 'Swift Language Version',
-                this.projectData?.swiftVersionByTarget[config.targetName] ? `Swift ${this.projectData.swiftVersionByTarget[config.targetName]}` : '',
+                this.projectData?.swiftVersionByTarget[config.targetName] ? `Swift ${this.projectData.swiftVersionByTarget[config.targetName].replace(/\.0$/, '')}` : '',
                 'vsxcode.sidebar.changeSwiftVersion', 'swift'),
+            this.createConfigItem('config-strictConcurrency', 'Strict Concurrency Checking',
+                this.formatStrictConcurrency(config.targetName),
+                'vsxcode.sidebar.changeStrictConcurrency', 'shield'),
             this.createConfigItem('config-simulator', 'Device', config.simulatorDevice,
                 'vsxcode.sidebar.selectSimulator', 'device-mobile'),
         ];
@@ -141,6 +146,12 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         return item;
     }
 
+    private formatStrictConcurrency(targetName: string): string {
+        const value = this.projectData?.strictConcurrencyByTarget[targetName];
+        if (!value) { return ''; }
+        return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
     // ── Data loading ──────────────────────────────────────────
 
     async loadProjectData(config?: BuildTaskConfig | null): Promise<void> {
@@ -155,6 +166,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         let targets: NativeTarget[] = [];
         let schemes: string[] = [];
         const swiftVersionByTarget: Record<string, string> = {};
+        const strictConcurrencyByTarget: Record<string, string> = {};
 
         const projectFile = config?.projectFile || xcodeProjects[0];
         if (projectFile) {
@@ -170,15 +182,21 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                         if (settings?.swiftVersion) {
                             swiftVersionByTarget[t.name] = settings.swiftVersion;
                         }
+                        if (settings?.strictConcurrency) {
+                            strictConcurrencyByTarget[t.name] = settings.strictConcurrency;
+                        }
                     }
                 }
-                // Fall back to project-level SWIFT_VERSION
-                if (Object.keys(swiftVersionByTarget).length === 0) {
-                    const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
-                    if (projectSettings?.swiftVersion) {
-                        for (const t of targets) {
-                            swiftVersionByTarget[t.name] = projectSettings.swiftVersion;
-                        }
+                // Fall back to project-level settings
+                const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
+                if (Object.keys(swiftVersionByTarget).length === 0 && projectSettings?.swiftVersion) {
+                    for (const t of targets) {
+                        swiftVersionByTarget[t.name] = projectSettings.swiftVersion;
+                    }
+                }
+                if (Object.keys(strictConcurrencyByTarget).length === 0 && projectSettings?.strictConcurrency) {
+                    for (const t of targets) {
+                        strictConcurrencyByTarget[t.name] = projectSettings.strictConcurrency;
                     }
                 }
             } catch { /* no pbxproj */ }
@@ -198,7 +216,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             detectSupportedSwiftVersions(),
         ]);
 
-        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, supportedSwiftVersions };
+        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, supportedSwiftVersions };
     }
 
     getProjectData(): ProjectData | null {

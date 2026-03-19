@@ -90,6 +90,7 @@ export interface BuildSettings {
     configurationName: string;
     targetId: string | null;
     swiftVersion?: string;
+    strictConcurrency?: string;
     swiftActiveCompilationConditions?: string[];
     otherSwiftFlags?: string[];
     gccPreprocessorDefinitions?: string[];
