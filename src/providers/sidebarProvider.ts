@@ -5,6 +5,7 @@ import type { BuildTaskConfig, NativeTarget } from '../types/interfaces';
 import { listAvailableSimulators, listPhysicalDevices, type SimulatorDevice, type PhysicalDevice } from '../utils/simulator';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { getBuildSettingsForTarget, getProjectBuildSettings } from '../parsers/buildSettings';
+import { detectSupportedSwiftVersions } from '../utils/version';
 
 // ── Tree item types ──────────────────────────────────────────────
 
@@ -14,7 +15,8 @@ type SidebarItemType =
     | 'config-target'
     | 'config-scheme'
     | 'config-bundleId'
-    | 'config-simulator';
+    | 'config-simulator'
+    | 'config-swiftVersion';
 
 export class SidebarItem extends vscode.TreeItem {
     constructor(
@@ -35,6 +37,8 @@ export interface ProjectData {
     schemes: string[];
     simulators: SimulatorDevice[];
     physicalDevices: PhysicalDevice[];
+    swiftVersionByTarget: Record<string, string>;
+    supportedSwiftVersions: string[];
 }
 
 // ── TreeDataProvider ─────────────────────────────────────────────
@@ -45,7 +49,10 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
     private projectData: ProjectData | null = null;
 
-    constructor(private workspaceState: vscode.Memento) {}
+    constructor(
+        private workspaceState: vscode.Memento,
+        private readonly extensionUri: vscode.Uri
+    ) {}
 
     refresh(): void {
         this.projectData = null;
@@ -105,6 +112,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 'vsxcode.sidebar.changeScheme', 'play-circle'),
             this.createConfigItem('config-bundleId', 'Bundle ID', config.bundleIdentifier,
                 'vsxcode.sidebar.changeBundleId', 'tag'),
+            this.createConfigItem('config-swiftVersion', 'Swift Language Version',
+                this.projectData?.swiftVersionByTarget[config.targetName] ? `Swift ${this.projectData.swiftVersionByTarget[config.targetName]}` : '',
+                'vsxcode.sidebar.changeSwiftVersion', 'swift'),
             this.createConfigItem('config-simulator', 'Device', config.simulatorDevice,
                 'vsxcode.sidebar.selectSimulator', 'device-mobile'),
         ];
@@ -119,7 +129,14 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     ): SidebarItem {
         const item = new SidebarItem(type, label, vscode.TreeItemCollapsibleState.None, value);
         item.description = value;
-        item.iconPath = new vscode.ThemeIcon(iconId);
+        if (iconId === 'swift') {
+            item.iconPath = {
+                light: vscode.Uri.joinPath(this.extensionUri, 'images', 'swift-light.svg'),
+                dark: vscode.Uri.joinPath(this.extensionUri, 'images', 'swift-dark.svg'),
+            };
+        } else {
+            item.iconPath = new vscode.ThemeIcon(iconId);
+        }
         item.command = { command: commandId, title: label };
         return item;
     }
@@ -137,6 +154,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
         let targets: NativeTarget[] = [];
         let schemes: string[] = [];
+        const swiftVersionByTarget: Record<string, string> = {};
 
         const projectFile = config?.projectFile || xcodeProjects[0];
         if (projectFile) {
@@ -146,6 +164,23 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 targets = parseNativeTargets(pbxContents).filter(
                     (t) => !isTestTarget(t.productType)
                 );
+                for (const t of targets) {
+                    if (t.buildConfigurationListId) {
+                        const settings = getBuildSettingsForTarget(pbxContents, t.buildConfigurationListId, 'Debug');
+                        if (settings?.swiftVersion) {
+                            swiftVersionByTarget[t.name] = settings.swiftVersion;
+                        }
+                    }
+                }
+                // Fall back to project-level SWIFT_VERSION
+                if (Object.keys(swiftVersionByTarget).length === 0) {
+                    const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
+                    if (projectSettings?.swiftVersion) {
+                        for (const t of targets) {
+                            swiftVersionByTarget[t.name] = projectSettings.swiftVersion;
+                        }
+                    }
+                }
             } catch { /* no pbxproj */ }
 
             const schemesDir = path.join(rootPath, projectFile, 'xcshareddata', 'xcschemes');
@@ -157,12 +192,13 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             } catch { /* no schemes dir */ }
         }
 
-        const [simulators, physicalDevices] = await Promise.all([
+        const [simulators, physicalDevices, supportedSwiftVersions] = await Promise.all([
             listAvailableSimulators(),
             listPhysicalDevices(),
+            detectSupportedSwiftVersions(),
         ]);
 
-        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices };
+        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, supportedSwiftVersions };
     }
 
     getProjectData(): ProjectData | null {

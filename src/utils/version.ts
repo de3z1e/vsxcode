@@ -1,6 +1,9 @@
 import { promisify } from 'util';
 import { execFile as execFileCallback } from 'child_process';
 import type { ExecFileOptionsWithStringEncoding } from 'child_process';
+import { promises as fsp } from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 const execFile = promisify(execFileCallback) as (
     file: string,
@@ -63,6 +66,24 @@ export async function detectSwiftToolsVersion(): Promise<string | null> {
         }
     }
     return null;
+}
+
+export async function detectSupportedSwiftVersions(): Promise<string[]> {
+    const tmpFile = path.join(os.tmpdir(), 'vsxcode-probe.swift');
+    try {
+        await fsp.writeFile(tmpFile, '', 'utf8');
+        await execFile('xcrun', ['swiftc', '-swift-version', 'invalid', '-typecheck', tmpFile], { encoding: 'utf8' });
+        return [];
+    } catch (e: unknown) {
+        const stderr = (e as { stderr?: string }).stderr || '';
+        const match = stderr.match(/valid arguments to '-swift-version' are ([^\n]+)/);
+        if (!match) { return []; }
+        const versions = [...match[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+        versions.sort((a, b) => compareVersions(b, a));
+        return versions;
+    } finally {
+        fsp.unlink(tmpFile).catch(() => {});
+    }
 }
 
 export async function detectMacOSVersion(): Promise<string | null> {

@@ -286,6 +286,38 @@ export function removeFromSourcesBuildPhase(
     return pbxContents.replace(pattern, '');
 }
 
+export function updateBuildSetting(
+    pbxContents: string,
+    configId: string,
+    key: string,
+    value: string
+): string {
+    // Match the XCBuildConfiguration block by its ID
+    const blockRegex = new RegExp(
+        `(${configId}\\s*/\\*[^*]*\\*/\\s*=\\s*\\{[^}]*buildSettings\\s*=\\s*\\{)((?:[^}]|\\}(?!;))*)(\\};\\s*name)`,
+    );
+    const blockMatch = blockRegex.exec(pbxContents);
+    if (!blockMatch) { return pbxContents; }
+
+    const settingsBlock = blockMatch[2];
+    const settingRegex = new RegExp(`([ \\t]*)${key} = [^;]*;`);
+    const existingMatch = settingRegex.exec(settingsBlock);
+
+    let newSettings: string;
+    if (existingMatch) {
+        newSettings = settingsBlock.replace(settingRegex, `${existingMatch[1]}${key} = ${value};`);
+    } else {
+        // Detect indent from existing settings lines
+        const indentMatch = /^([ \t]+)\w/.exec(settingsBlock.split('\n').find(l => /^\s+\w/.test(l)) || '');
+        const indent = indentMatch ? indentMatch[1] : '\t\t\t\t';
+        newSettings = settingsBlock.replace(/(\n)([ \t]*$)/, `\n${indent}${key} = ${value};\n$2`);
+    }
+
+    return pbxContents.slice(0, blockMatch.index) +
+        blockMatch[1] + newSettings + blockMatch[3] +
+        pbxContents.slice(blockMatch.index + blockMatch[0].length);
+}
+
 export function removeSwiftFileFromPbxproj(
     pbxContents: string,
     fileName: string

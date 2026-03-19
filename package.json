@@ -110,6 +110,10 @@
                 "title": "Select Device"
             },
             {
+                "command": "vsxcode.sidebar.changeSwiftVersion",
+                "title": "Change Swift Compiler Version"
+            },
+            {
                 "command": "vsxcode.sidebar.build",
                 "title": "Build",
                 "icon": "$(tools)"
@@ -186,6 +190,8 @@
         "out",
         "images/icon.png",
         "images/sidebar.svg",
+        "images/swift-light.svg",
+        "images/swift-dark.svg",
         "README.md",
         "LICENSE"
     ],

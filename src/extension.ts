@@ -14,7 +14,7 @@ import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, cleanup
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
-import { getBuildSettingsForTarget, getProjectBuildSettings } from './parsers/buildSettings';
+import { getBuildSettingsForTarget, getProjectBuildSettings, resolveConfigurationListId } from './parsers/buildSettings';
 import { parseLinkedFrameworksForTarget } from './parsers/frameworks';
 import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
@@ -24,6 +24,7 @@ import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDe
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
+import { updateBuildSetting } from './writers/pbxproj';
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
 import { CodeQualityWebviewProvider } from './providers/codeQualityWebviewProvider';
@@ -622,7 +623,7 @@ export function activate(context: vscode.ExtensionContext): void {
     };
 
     // Register sidebar and no-project placeholder
-    const sidebarProvider = new SidebarProvider(context.workspaceState);
+    const sidebarProvider = new SidebarProvider(context.workspaceState, context.extensionUri);
     const treeView = vscode.window.createTreeView('vsxcode.sidebar', {
         treeDataProvider: sidebarProvider,
     });
@@ -947,6 +948,47 @@ export function activate(context: vscode.ExtensionContext): void {
             });
             if (pick) {
                 await updateConfig({ simulatorDevice: pick.label, simulatorUdid: pick.udid, deviceIdentifier: pick.deviceIdentifier, isPhysicalDevice: pick.isPhysical });
+            }
+        }
+    );
+
+    const changeSwiftVersionCmd = vscode.commands.registerCommand(
+        'vsxcode.sidebar.changeSwiftVersion',
+        async () => {
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            if (!config) { return; }
+            const data = sidebarProvider.getProjectData();
+            const currentVersion = data?.swiftVersionByTarget[config.targetName] || '';
+
+            const versions = data?.supportedSwiftVersions || [];
+            if (versions.length === 0) { return; }
+            const picks = versions.map(v => ({ label: `Swift ${v}`, version: v }));
+            const active = picks.find(p => p.version === currentVersion);
+            const pick = await new Promise<typeof picks[0] | undefined>((resolve) => {
+                const qp = vscode.window.createQuickPick<typeof picks[0]>();
+                qp.items = picks;
+                qp.placeholder = 'Swift Language Version';
+                if (active) { qp.activeItems = [active]; }
+                qp.onDidAccept(() => { resolve(qp.selectedItems[0]); qp.dispose(); });
+                qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+                qp.show();
+            });
+            if (!pick || pick.version === currentVersion) { return; }
+
+            const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!rootPath) { return; }
+            const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
+            try {
+                let pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+                const target = data?.targets.find(t => t.name === config.targetName);
+                if (!target?.buildConfigurationListId) { return; }
+                const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
+                for (const configId of configIds) {
+                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_VERSION', pick.version);
+                }
+                await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
+            } catch (e) {
+                vscode.window.showErrorMessage(`Failed to update SWIFT_VERSION: ${(e as Error).message}`);
             }
         }
     );
@@ -1300,7 +1342,7 @@ export function activate(context: vscode.ExtensionContext): void {
         generateCommand, generateWithOptionsCommand, generateBuildTasksCommand,
         taskProvider, debugProvider, treeView,
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
-        selectSimulatorCmd, buildCmd, buildAndRunCmd, refreshCmd,
+        selectSimulatorCmd, changeSwiftVersionCmd, buildCmd, buildAndRunCmd, refreshCmd,
         watcher, onProjectChange, onDebugStart, onDebugEnd,
         outputChannel
     );
