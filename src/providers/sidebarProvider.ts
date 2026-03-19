@@ -1,11 +1,15 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { promises as fsp } from 'fs';
+import { promisify } from 'util';
+import { execFile as execFileCallback } from 'child_process';
 import type { BuildTaskConfig, NativeTarget } from '../types/interfaces';
 import { listAvailableSimulators, listPhysicalDevices, type SimulatorDevice, type PhysicalDevice } from '../utils/simulator';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { getBuildSettingsForTarget, getProjectBuildSettings } from '../parsers/buildSettings';
 import { detectSupportedSwiftVersions } from '../utils/version';
+
+const execFile = promisify(execFileCallback);
 
 // ── Tree item types ──────────────────────────────────────────────
 
@@ -173,9 +177,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             const pbxprojPath = path.join(rootPath, projectFile, 'project.pbxproj');
             try {
                 const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-                targets = parseNativeTargets(pbxContents).filter(
-                    (t) => !isTestTarget(t.productType)
-                );
+                targets = parseNativeTargets(pbxContents);
                 for (const t of targets) {
                     if (t.buildConfigurationListId) {
                         const settings = getBuildSettingsForTarget(pbxContents, t.buildConfigurationListId, 'Debug');
@@ -201,13 +203,13 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 }
             } catch { /* no pbxproj */ }
 
-            const schemesDir = path.join(rootPath, projectFile, 'xcshareddata', 'xcschemes');
             try {
-                const schemeFiles = await fsp.readdir(schemesDir);
-                schemes = schemeFiles
-                    .filter((f) => f.endsWith('.xcscheme'))
-                    .map((f) => path.basename(f, '.xcscheme'));
-            } catch { /* no schemes dir */ }
+                const { stdout } = await execFile('xcodebuild', ['-list', '-project', path.join(rootPath, projectFile)], { encoding: 'utf8', timeout: 10000 });
+                const schemesMatch = /Schemes:\n([\s\S]*?)(?:\n\n|$)/.exec(stdout);
+                if (schemesMatch) {
+                    schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                }
+            } catch { /* xcodebuild -list failed */ }
         }
 
         const [simulators, physicalDevices, supportedSwiftVersions] = await Promise.all([
@@ -290,18 +292,17 @@ export async function autoConfigureBuildTasks(
             bundleIdentifier = `com.example.${target.name}`;
         }
 
-        const projectName = path.basename(projectFile, '.xcodeproj');
-        const schemesDir = path.join(rootPath, projectFile, 'xcshareddata', 'xcschemes');
-        let schemeName = projectName;
+        let schemeName = path.basename(projectFile, '.xcodeproj');
         try {
-            const schemeFiles = await fsp.readdir(schemesDir);
-            const schemes = schemeFiles
-                .filter((f) => f.endsWith('.xcscheme'))
-                .map((f) => path.basename(f, '.xcscheme'));
-            if (schemes.length >= 1) {
-                schemeName = schemes.find((s) => s === target.name) || schemes[0];
+            const { stdout } = await execFile('xcodebuild', ['-list', '-project', path.join(rootPath, projectFile)], { encoding: 'utf8', timeout: 10000 });
+            const schemesMatch = /Schemes:\n([\s\S]*?)(?:\n\n|$)/.exec(stdout);
+            if (schemesMatch) {
+                const schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                if (schemes.length >= 1) {
+                    schemeName = schemes.find((s) => s === target.name) || schemes[0];
+                }
             }
-        } catch { /* no schemes dir */ }
+        } catch { /* xcodebuild -list failed */ }
 
         const simulators = await listAvailableSimulators();
         if (simulators.length === 0) {

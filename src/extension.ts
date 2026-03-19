@@ -2,6 +2,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { promises as fsp } from 'fs';
+import { promisify } from 'util';
+import { execFile as execFileCallback } from 'child_process';
+
+const execFile = promisify(execFileCallback);
 
 import type {
     TargetDefinition,
@@ -92,6 +96,18 @@ function resolveSwiftLanguageMode(swiftVersion: string | undefined): string | un
     }
     const major = parseInt(swiftVersion.split('.')[0], 10);
     return isNaN(major) ? undefined : `.v${major}`;
+}
+
+function formatProductType(productType: string): string {
+    if (productType.includes('unit-test')) { return 'Unit Tests'; }
+    if (productType.includes('ui-testing')) { return 'UI Tests'; }
+    if (productType.includes('.test')) { return 'Tests'; }
+    if (productType.includes('.application')) { return 'Application'; }
+    if (productType.includes('.framework')) { return 'Framework'; }
+    if (productType.includes('.library')) { return 'Library'; }
+    if (productType.includes('.app-extension')) { return 'App Extension'; }
+    if (productType.includes('.widget-extension')) { return 'Widget Extension'; }
+    return '';
 }
 
 function parseExcludedFiles(pbxContents: string, targetName: string): string[] {
@@ -417,21 +433,33 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
     }
 
     const nativeTargets = parseNativeTargets(pbxContents);
-    const nonTestTargets = nativeTargets.filter((t) => !isTestTarget(t.productType));
-    if (nonTestTargets.length === 0) {
-        throw new Error('No non-test targets found in the Xcode project.');
+    if (nativeTargets.length === 0) {
+        throw new Error('No targets found in the Xcode project.');
     }
 
-    let selectedTarget = nonTestTargets[0];
-    if (nonTestTargets.length > 1) {
-        const pick = await vscode.window.showQuickPick(
-            nonTestTargets.map((t) => t.name),
-            { placeHolder: 'Select the target to build' }
-        );
+    const nonTestTargets = nativeTargets.filter((t) => !isTestTarget(t.productType));
+    let selectedTarget = nonTestTargets[0] || nativeTargets[0];
+    if (nativeTargets.length > 1) {
+        type TargetPick = vscode.QuickPickItem & { targetName: string };
+        const picks: TargetPick[] = nativeTargets.map((t) => ({
+            label: t.name,
+            description: formatProductType(t.productType),
+            targetName: t.name,
+        }));
+        const activePick = picks.find(p => p.targetName === selectedTarget.name);
+        const pick = await new Promise<TargetPick | undefined>((resolve) => {
+            const qp = vscode.window.createQuickPick<TargetPick>();
+            qp.items = picks;
+            qp.placeholder = 'Select the target to build';
+            if (activePick) { qp.activeItems = [activePick]; }
+            qp.onDidAccept(() => { resolve(qp.selectedItems[0]); qp.dispose(); });
+            qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+            qp.show();
+        });
         if (!pick) {
             return;
         }
-        selectedTarget = nonTestTargets.find((t) => t.name === pick)!;
+        selectedTarget = nativeTargets.find((t) => t.name === pick.targetName)!;
     }
 
     let bundleIdentifier = '';
@@ -488,23 +516,25 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         return;
     }
 
-    const projectName = path.basename(selectedProject, '.xcodeproj');
-
-    const schemesDir = path.join(rootPath, selectedProject, 'xcshareddata', 'xcschemes');
     let schemes: string[] = [];
     try {
-        const schemeFiles = await fsp.readdir(schemesDir);
-        schemes = schemeFiles
-            .filter((f) => f.endsWith('.xcscheme'))
-            .map((f) => path.basename(f, '.xcscheme'));
-    } catch {
-        // No shared schemes directory
+        const { stdout } = await execFile('xcodebuild', ['-list', '-project', path.join(rootPath, selectedProject)], { encoding: 'utf8', timeout: 10000 });
+        const schemesMatch = /Schemes:\n([\s\S]*?)(?:\n\n|$)/.exec(stdout);
+        if (schemesMatch) {
+            schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        }
+    } catch { /* xcodebuild -list failed */ }
+
+    if (schemes.length === 0) {
+        // Fallback: use target names as scheme names (Xcode auto-creates schemes per target)
+        schemes = nativeTargets.map(t => t.name);
+    }
+    if (schemes.length === 0) {
+        throw new Error('No schemes found in the Xcode project.');
     }
 
-    let schemeName = projectName;
-    if (schemes.length === 1) {
-        schemeName = schemes[0];
-    } else if (schemes.length > 1) {
+    let schemeName = schemes[0];
+    if (schemes.length > 1) {
         const pick = await vscode.window.showQuickPick(schemes, {
             placeHolder: 'Select the scheme to build'
         });
@@ -512,19 +542,6 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
             return;
         }
         schemeName = pick;
-    } else {
-        const targetNames = nonTestTargets.map((t) => t.name);
-        if (targetNames.length === 1) {
-            schemeName = targetNames[0];
-        } else {
-            const pick = await vscode.window.showQuickPick([projectName, ...targetNames], {
-                placeHolder: 'No shared schemes found. Select scheme name'
-            });
-            if (!pick) {
-                return;
-            }
-            schemeName = pick;
-        }
     }
 
     const buildTaskConfig: BuildTaskConfig = {
@@ -822,12 +839,24 @@ export function activate(context: vscode.ExtensionContext): void {
             const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!data || !config) { return; }
-            const picks = data.targets.map((t) => t.name);
-            const pick = await vscode.window.showQuickPick(picks, {
-                placeHolder: 'Select target'
+            type TargetPick = vscode.QuickPickItem & { targetName: string };
+            const picks: TargetPick[] = data.targets.map((t) => ({
+                label: t.name,
+                description: formatProductType(t.productType),
+                targetName: t.name,
+            }));
+            const activePick = picks.find(p => p.targetName === config.targetName);
+            const pick = await new Promise<TargetPick | undefined>((resolve) => {
+                const qp = vscode.window.createQuickPick<TargetPick>();
+                qp.items = picks;
+                qp.placeholder = 'Select target';
+                if (activePick) { qp.activeItems = [activePick]; }
+                qp.onDidAccept(() => { resolve(qp.selectedItems[0]); qp.dispose(); });
+                qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+                qp.show();
             });
             if (pick) {
-                const target = data.targets.find((t) => t.name === pick)!;
+                const target = data.targets.find((t) => t.name === pick.targetName)!;
                 const rootPath = vscode.workspace.workspaceFolders![0].uri.fsPath;
                 const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
                 let bundleIdentifier = config.bundleIdentifier;
@@ -846,7 +875,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         }
                     }
                 } catch { /* use existing values */ }
-                await updateConfig({ targetName: pick, productName, bundleIdentifier });
+                await updateConfig({ targetName: pick.targetName, productName, bundleIdentifier });
             }
         }
     );
@@ -856,12 +885,16 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-            if (!data || !config) { return; }
-            const projectName = path.basename(config.projectFile, '.xcodeproj');
-            const targetNames = data.targets.map((t) => t.name);
-            const options = [...new Set([...data.schemes, projectName, ...targetNames])];
-            const pick = await vscode.window.showQuickPick(options, {
-                placeHolder: 'Select scheme'
+            if (!data || !config || data.schemes.length === 0) { return; }
+            const active = data.schemes.find(s => s === config.schemeName);
+            const pick = await new Promise<string | undefined>((resolve) => {
+                const qp = vscode.window.createQuickPick();
+                qp.items = data.schemes.map(s => ({ label: s }));
+                qp.placeholder = 'Select scheme';
+                if (active) { qp.activeItems = qp.items.filter(i => i.label === active); }
+                qp.onDidAccept(() => { resolve(qp.selectedItems[0]?.label); qp.dispose(); });
+                qp.onDidHide(() => { resolve(undefined); qp.dispose(); });
+                qp.show();
             });
             if (pick) {
                 await updateConfig({ schemeName: pick });
