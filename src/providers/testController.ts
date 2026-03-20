@@ -66,7 +66,7 @@ export class XCTestController implements vscode.Disposable {
             true
         );
         coverageProfile.loadDetailedCoverage = (_run, fileCoverage, _token) => {
-            return Promise.resolve(this.getDetailedCoverage(fileCoverage));
+            return this.getDetailedCoverage(fileCoverage);
         };
 
         this.controller.resolveHandler = async (item) => {
@@ -460,22 +460,51 @@ export class XCTestController implements vscode.Disposable {
         }
     }
 
-    private getDetailedCoverage(fileCoverage: vscode.FileCoverage): vscode.FileCoverageDetail[] {
-        if (!this.coverageReport) { return []; }
-
+    private async getDetailedCoverage(fileCoverage: vscode.FileCoverage): Promise<vscode.FileCoverageDetail[]> {
+        const details: vscode.FileCoverageDetail[] = [];
         const filePath = fileCoverage.uri.fsPath;
-        for (const target of this.coverageReport.targets) {
-            const file = target.files.find(f => f.path === filePath);
-            if (!file?.functions) { continue; }
-            return file.functions.map(func =>
-                new vscode.DeclarationCoverage(
-                    func.name,
-                    func.executionCount,
-                    new vscode.Position(func.lineNumber - 1, 0)
-                )
-            );
+
+        // Line-level coverage from xccov --archive --file --json
+        // Returns: { "/path/to/file.swift": [{ line, isExecutable, executionCount? }, ...] }
+        try {
+            const { stdout } = await execFile('xcrun', [
+                'xccov', 'view', '--archive', '--file', filePath, '--json', COVERAGE_RESULT_PATH
+            ]);
+            const data = JSON.parse(stdout) as Record<string, Array<{
+                line: number;
+                isExecutable: boolean;
+                executionCount?: number;
+            }>>;
+            const lines = Object.values(data)[0];
+            if (lines) {
+                for (const entry of lines) {
+                    if (entry.isExecutable) {
+                        details.push(new vscode.StatementCoverage(
+                            entry.executionCount ?? 0,
+                            new vscode.Position(entry.line - 1, 0)
+                        ));
+                    }
+                }
+            }
+        } catch { /* line-level data unavailable */ }
+
+        // Function-level coverage from cached report
+        if (this.coverageReport) {
+            for (const target of this.coverageReport.targets) {
+                const file = target.files.find(f => f.path === filePath);
+                if (!file?.functions) { continue; }
+                for (const func of file.functions) {
+                    details.push(new vscode.DeclarationCoverage(
+                        func.name,
+                        func.executionCount,
+                        new vscode.Position(func.lineNumber - 1, 0)
+                    ));
+                }
+                break;
+            }
         }
-        return [];
+
+        return details;
     }
 
     private loadTestTargets(config: BuildTaskConfig): TestTargetInfo[] {
