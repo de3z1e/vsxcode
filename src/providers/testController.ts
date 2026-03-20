@@ -265,13 +265,18 @@ export class XCTestController implements vscode.Disposable {
             });
             proc.on('close', (code) => resolve(code ?? 1));
             proc.on('error', () => resolve(1));
-            token.onCancellationRequested(() => {
+            const buildCancel = token.onCancellationRequested(() => {
                 try { proc.kill('SIGTERM'); } catch { /* already exited */ }
             });
+            proc.on('close', () => buildCancel.dispose());
         });
 
         if (buildExitCode !== 0 || token.isCancellationRequested) {
             run.appendOutput('\r\nBuild for testing failed.\r\n');
+            const leafItems = this.collectLeafItems(itemsToRun);
+            for (const item of leafItems) {
+                run.errored(item, new vscode.TestMessage('Build for testing failed'));
+            }
             run.end();
             return;
         }
@@ -289,7 +294,8 @@ export class XCTestController implements vscode.Disposable {
         const testCmd = `${buildCmd} test-without-building ${filterArgs} 2>&1`;
         const folder = vscode.workspace.workspaceFolders?.[0];
 
-        // Start the debug session (attaches to app when it launches)
+        // Start the debug session (fire-and-forget — lldb --waitfor blocks until
+        // the test host process appears, so we must start tests concurrently)
         if (folder) {
             const debugConfig: vscode.DebugConfiguration = {
                 type: 'lldb-dap',
@@ -311,6 +317,11 @@ export class XCTestController implements vscode.Disposable {
             if (!reportedItems.has(item.id)) {
                 run.skipped(item);
             }
+        }
+
+        // Stop the debug session after tests complete
+        if (vscode.debug.activeDebugSession) {
+            vscode.debug.stopDebugging();
         }
 
         run.end();
@@ -352,37 +363,18 @@ export class XCTestController implements vscode.Disposable {
         exclude: string[],
         options?: { coverage?: boolean }
     ): string {
-        const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
-        const udid = config.simulatorUdid || config.simulatorDevice;
-        const sdk = config.isPhysicalDevice ? 'iphoneos' : 'iphonesimulator';
-        const parts = [
-            'xcodebuild',
-            `-project "${config.projectFile}"`,
-            `-scheme "${config.schemeName}"`,
-            '-configuration Debug',
-            `-sdk ${sdk}`,
-            `-destination "id=${udid}"`,
-            `-derivedDataPath "${derivedData}"`,
-        ];
-        if (config.isPhysicalDevice) {
-            parts.push('-allowProvisioningUpdates');
-        }
+        const base = this.buildXcodebuildBase(config);
+        const filters = this.buildFilterArgs(include, exclude);
+        let coverageArgs = '';
         if (options?.coverage) {
             const resultPath = path.join(DERIVED_DATA_BASE, config.schemeName, 'coverage.xcresult');
             this.coverageResultPath = resultPath;
-            parts.push('-enableCodeCoverage YES');
-            parts.push(`-resultBundlePath "${resultPath}"`);
+            coverageArgs = ` -enableCodeCoverage YES -resultBundlePath "${resultPath}"`;
         }
-        for (const filter of include) {
-            parts.push(`-only-testing:"${filter}"`);
-        }
-        for (const filter of exclude) {
-            parts.push(`-skip-testing:"${filter}"`);
-        }
-        parts.push('test 2>&1');
-        let command = parts.join(' ');
+        let command = `${base}${coverageArgs} test ${filters} 2>&1`;
         // Boot simulator and open Simulator.app before running tests
         if (!config.isPhysicalDevice) {
+            const udid = config.simulatorUdid || config.simulatorDevice;
             command = `xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator; ${command}`;
         }
         if (options?.coverage && this.coverageResultPath) {
