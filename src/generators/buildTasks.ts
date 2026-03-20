@@ -31,6 +31,13 @@ export function buildCommandLine(config: BuildTaskConfig): string {
     ].join(' ');
 }
 
+export function buildForTestingCommandLine(config: BuildTaskConfig): string {
+    return [
+        ...xcodebuildArgs(config),
+        `build-for-testing -only-testing:"${config.targetName}" 2>&1`,
+    ].join(' ');
+}
+
 export function buildInstallCommandLine(config: BuildTaskConfig): string {
     const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
 

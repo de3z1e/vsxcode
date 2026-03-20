@@ -181,6 +181,11 @@
                     ]
                 },
                 "when": "vsxcode.buildTasksConfigured && inDebugMode"
+            },
+            {
+                "key": "cmd+b",
+                "command": "vsxcode.sidebar.build",
+                "when": "vsxcode.buildTasksConfigured"
             }
         ]
     },

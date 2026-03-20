@@ -371,6 +371,11 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
 
             const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
             await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
+
+            // Disable the Swift extension's SPM integration (TestExplorer, build tasks, launch configs)
+            // to prevent duplicate test entries and debug profile buttons — we provide our own.
+            const swiftConfig = vscode.workspace.getConfiguration('swift');
+            await swiftConfig.update('disableSwiftPackageManagerIntegration', true, vscode.ConfigurationTarget.Workspace);
         } catch {
             vscode.window.showWarningMessage(
                 'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
@@ -1111,14 +1116,11 @@ export function activate(context: vscode.ExtensionContext): void {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             const data = sidebarProvider.getProjectData();
             const target = data?.targets.find(t => t.name === config?.targetName);
-            // Test target: run tests instead of build
+            // Test target: build-for-testing (compiles test target without running)
             if (target && isTestTarget(target.productType)) {
-                const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
-                const testTask = tasks.find((t) => t.name === 'Test');
-                if (testTask) {
-                    await executeTaskAndWait(testTask, (exec) => { buildExecution = exec; });
-                } else {
-                    vscode.window.showErrorMessage('Test task not available. Check configuration.');
+                const task = buildTaskProvider.createBuildForTestingTask();
+                if (task) {
+                    await executeTaskAndWait(task, (exec) => { buildExecution = exec; });
                 }
                 return;
             }

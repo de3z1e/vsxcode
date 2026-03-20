@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import type { BuildTaskConfig } from '../types/interfaces';
-import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine, testCommandLine } from '../generators/buildTasks';
+import { buildCommandLine, buildForTestingCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine, testCommandLine } from '../generators/buildTasks';
 
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
@@ -153,6 +153,27 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             { type: TASK_TYPE, task: 'build' },
             folder, 'Build', TASK_SOURCE,
             new vscode.CustomExecution(async () => new TaskTerminal(buildCommandLine(config), cwd, { colorize: true })),
+            '$swiftc'
+        );
+        task.group = vscode.TaskGroup.Build;
+        task.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Dedicated,
+            clear: true
+        };
+        return task;
+    }
+
+    createBuildForTestingTask(): vscode.Task | undefined {
+        const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+        if (!config) { return undefined; }
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) { return undefined; }
+        const cwd = folder.uri.fsPath;
+        const task = new vscode.Task(
+            { type: TASK_TYPE, task: 'build' },
+            folder, 'Build for Testing', TASK_SOURCE,
+            new vscode.CustomExecution(async () => new TaskTerminal(buildForTestingCommandLine(config), cwd, { colorize: true })),
             '$swiftc'
         );
         task.group = vscode.TaskGroup.Build;
