@@ -8,7 +8,7 @@ import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { determineTargetPath } from '../utils/path';
 
 const execFile = promisify(cp.execFile);
-const COVERAGE_RESULT_PATH = '/tmp/vsxcode-coverage.xcresult';
+const DERIVED_DATA_BASE = path.join(require('os').homedir(), 'Library', 'Developer', 'VSCode', 'DerivedData');
 
 interface TestTargetInfo {
     name: string;
@@ -45,6 +45,7 @@ export class XCTestController implements vscode.Disposable {
     private controller: vscode.TestController;
     private testTargets: TestTargetInfo[] = [];
     private coverageReport: XccovReport | undefined;
+    private coverageResultPath: string | undefined;
 
     constructor(
         private workspaceState: vscode.Memento,
@@ -79,6 +80,7 @@ export class XCTestController implements vscode.Disposable {
             this.controller.items.replace([]);
             await this.discoverTests();
         };
+
     }
 
     refresh(): void {
@@ -236,8 +238,10 @@ export class XCTestController implements vscode.Disposable {
             parts.push('-allowProvisioningUpdates');
         }
         if (options?.coverage) {
+            const resultPath = path.join(DERIVED_DATA_BASE, config.schemeName, 'coverage.xcresult');
+            this.coverageResultPath = resultPath;
             parts.push('-enableCodeCoverage YES');
-            parts.push(`-resultBundlePath "${COVERAGE_RESULT_PATH}"`);
+            parts.push(`-resultBundlePath "${resultPath}"`);
         }
         for (const filter of include) {
             parts.push(`-only-testing:"${filter}"`);
@@ -247,8 +251,8 @@ export class XCTestController implements vscode.Disposable {
         }
         parts.push('test 2>&1');
         let command = parts.join(' ');
-        if (options?.coverage) {
-            command = `rm -rf "${COVERAGE_RESULT_PATH}"; ${command}`;
+        if (options?.coverage && this.coverageResultPath) {
+            command = `rm -rf "${this.coverageResultPath}"; ${command}`;
         }
         return command;
     }
@@ -440,15 +444,21 @@ export class XCTestController implements vscode.Disposable {
     // ── Coverage ─────────────────────────────────────────────────
 
     private async loadCoverageResults(run: vscode.TestRun): Promise<void> {
+        if (!this.coverageResultPath) { return; }
         try {
             const { stdout } = await execFile('xcrun', [
-                'xccov', 'view', '--report', '--json', COVERAGE_RESULT_PATH
+                'xccov', 'view', '--report', '--json', this.coverageResultPath
             ]);
             this.coverageReport = JSON.parse(stdout) as XccovReport;
 
             for (const target of this.coverageReport.targets) {
                 for (const file of target.files) {
                     if (file.executableLines === 0) { continue; }
+                    // Exclude test target files — their coverage is always ~100% and just noise
+                    const isTestFile = this.testTargets.some(t =>
+                        file.path.startsWith(t.absolutePath + path.sep)
+                    );
+                    if (isTestFile) { continue; }
                     run.addCoverage(new vscode.FileCoverage(
                         vscode.Uri.file(file.path),
                         new vscode.TestCoverageCount(file.coveredLines, file.executableLines)
@@ -467,8 +477,9 @@ export class XCTestController implements vscode.Disposable {
         // Line-level coverage from xccov --archive --file --json
         // Returns: { "/path/to/file.swift": [{ line, isExecutable, executionCount? }, ...] }
         try {
+            if (!this.coverageResultPath) { return details; }
             const { stdout } = await execFile('xcrun', [
-                'xccov', 'view', '--archive', '--file', filePath, '--json', COVERAGE_RESULT_PATH
+                'xccov', 'view', '--archive', '--file', filePath, '--json', this.coverageResultPath
             ]);
             const data = JSON.parse(stdout) as Record<string, Array<{
                 line: number;
