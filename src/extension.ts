@@ -14,7 +14,7 @@ import type {
     SwiftPackageProductDependency
 } from './types/interfaces';
 import { DEFAULT_SWIFT_VERSION } from './types/constants';
-import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, cleanup, compareVersions } from './utils/version';
+import { detectSwiftToolsVersion, parseSwiftVersion, cleanup, compareVersions } from './utils/version';
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
@@ -75,21 +75,6 @@ function parseDeploymentTargets(pbxContents: string): DeploymentTarget[] {
     return Array.from(found.entries()).map(([platform, version]) => ({ platform, version }));
 }
 
-async function ensureMacOSPlatform(platforms: DeploymentTarget[]): Promise<DeploymentTarget[]> {
-    const detectedVersion = await detectMacOSVersion();
-    if (!detectedVersion) {
-        return platforms;
-    }
-    const next = platforms.slice();
-    const macIndex = next.findIndex(({ platform }) => platform === 'macOS');
-    const macEntry: DeploymentTarget = { platform: 'macOS', version: detectedVersion };
-    if (macIndex === -1) {
-        next.push(macEntry);
-    } else {
-        next[macIndex] = macEntry;
-    }
-    return next;
-}
 
 function resolveSwiftLanguageMode(swiftVersion: string | undefined): string | undefined {
     if (!swiftVersion) {
@@ -183,7 +168,7 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
 
     const swiftVersion =
         (await detectSwiftToolsVersion()) || parseSwiftVersion(pbxContents) || DEFAULT_SWIFT_VERSION;
-    const platforms = await ensureMacOSPlatform(parseDeploymentTargets(pbxContents));
+    const platforms = parseDeploymentTargets(pbxContents);
     const defaultLocalization = parseDefaultLocalization(pbxContents);
     const nativeTargets = parseNativeTargets(pbxContents);
     const packageReferences = parseSwiftPackageReferences(pbxContents);
@@ -263,12 +248,15 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         .filter((entry): entry is string => Boolean(entry));
     const uniquePackageDependencies = Array.from(new Set(packageDependenciesList));
 
-    // Resolve developer dir for XCTest framework path in test targets
+    // Resolve developer dir for XCTest framework and Swift overlay paths in test targets
     let xcTestFrameworkPath: string | undefined;
+    let xcTestSwiftOverlayPath: string | undefined;
     try {
         const cp = await import('child_process');
         const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
-        xcTestFrameworkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`;
+        const platformDir = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer`;
+        xcTestFrameworkPath = `${platformDir}/Library/Frameworks`;
+        xcTestSwiftOverlayPath = `${platformDir}/usr/lib`;
     } catch { /* xcode-select not available */ }
 
     // Emit test targets as .target() with XCTest unsafeFlags instead of .testTarget().
@@ -319,9 +307,9 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
             }
         }
 
-        // Add XCTest framework search path and -enable-testing for test targets
-        if (targetDef.isTest && xcTestFrameworkPath) {
-            swiftSettings.push(`.unsafeFlags(["-F", "${xcTestFrameworkPath}", "-enable-testing"])`);
+        // Add XCTest framework search path, Swift overlay path, and -enable-testing for test targets
+        if (targetDef.isTest && xcTestFrameworkPath && xcTestSwiftOverlayPath) {
+            swiftSettings.push(`.unsafeFlags(["-F", "${xcTestFrameworkPath}", "-I", "${xcTestSwiftOverlayPath}", "-enable-testing"])`);
         }
 
         const packageDependencyNames = new Set(
@@ -369,7 +357,10 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
                 '-Xswiftc', '-F',
                 '-Xswiftc', `${sdkPath}/System/Library/Frameworks`,
                 '-Xswiftc', '-F',
-                '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`
+                '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`,
+                '-Xswiftc', '-I',
+                '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/usr/lib`,
+                '-Xswiftc', '-enable-testing'
             ];
 
             const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
