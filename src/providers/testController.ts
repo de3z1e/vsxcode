@@ -2,9 +2,13 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as cp from 'child_process';
+import { promisify } from 'util';
 import type { BuildTaskConfig } from '../types/interfaces';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { determineTargetPath } from '../utils/path';
+
+const execFile = promisify(cp.execFile);
+const COVERAGE_RESULT_PATH = '/tmp/vsxcode-coverage.xcresult';
 
 interface TestTargetInfo {
     name: string;
@@ -17,9 +21,30 @@ interface FailureDetail {
     line: number;
 }
 
+interface XccovFunction {
+    name: string;
+    lineNumber: number;
+    executionCount: number;
+}
+
+interface XccovFile {
+    path: string;
+    coveredLines: number;
+    executableLines: number;
+    functions?: XccovFunction[];
+}
+
+interface XccovReport {
+    targets: Array<{
+        name: string;
+        files: XccovFile[];
+    }>;
+}
+
 export class XCTestController implements vscode.Disposable {
     private controller: vscode.TestController;
     private testTargets: TestTargetInfo[] = [];
+    private coverageReport: XccovReport | undefined;
 
     constructor(
         private workspaceState: vscode.Memento,
@@ -34,12 +59,15 @@ export class XCTestController implements vscode.Disposable {
             true
         );
 
-        this.controller.createRunProfile(
+        const coverageProfile = this.controller.createRunProfile(
             'Run with Coverage',
             vscode.TestRunProfileKind.Coverage,
             (request, token) => this.runHandler(request, token, { coverage: true }),
             true
         );
+        coverageProfile.loadDetailedCoverage = (_run, fileCoverage, _token) => {
+            return Promise.resolve(this.getDetailedCoverage(fileCoverage));
+        };
 
         this.controller.resolveHandler = async (item) => {
             if (!item) {
@@ -179,6 +207,10 @@ export class XCTestController implements vscode.Disposable {
             }
         }
 
+        if (options?.coverage) {
+            await this.loadCoverageResults(run);
+        }
+
         run.end();
     }
 
@@ -205,6 +237,7 @@ export class XCTestController implements vscode.Disposable {
         }
         if (options?.coverage) {
             parts.push('-enableCodeCoverage YES');
+            parts.push(`-resultBundlePath "${COVERAGE_RESULT_PATH}"`);
         }
         for (const filter of include) {
             parts.push(`-only-testing:"${filter}"`);
@@ -213,7 +246,11 @@ export class XCTestController implements vscode.Disposable {
             parts.push(`-skip-testing:"${filter}"`);
         }
         parts.push('test 2>&1');
-        return parts.join(' ');
+        let command = parts.join(' ');
+        if (options?.coverage) {
+            command = `rm -rf "${COVERAGE_RESULT_PATH}"; ${command}`;
+        }
+        return command;
     }
 
     private executeAndParse(
@@ -398,6 +435,47 @@ export class XCTestController implements vscode.Disposable {
         for (const [, child] of item.children) {
             this.enqueueAll(run, child);
         }
+    }
+
+    // ── Coverage ─────────────────────────────────────────────────
+
+    private async loadCoverageResults(run: vscode.TestRun): Promise<void> {
+        try {
+            const { stdout } = await execFile('xcrun', [
+                'xccov', 'view', '--report', '--json', COVERAGE_RESULT_PATH
+            ]);
+            this.coverageReport = JSON.parse(stdout) as XccovReport;
+
+            for (const target of this.coverageReport.targets) {
+                for (const file of target.files) {
+                    if (file.executableLines === 0) { continue; }
+                    run.addCoverage(new vscode.FileCoverage(
+                        vscode.Uri.file(file.path),
+                        new vscode.TestCoverageCount(file.coveredLines, file.executableLines)
+                    ));
+                }
+            }
+        } catch {
+            this.coverageReport = undefined;
+        }
+    }
+
+    private getDetailedCoverage(fileCoverage: vscode.FileCoverage): vscode.FileCoverageDetail[] {
+        if (!this.coverageReport) { return []; }
+
+        const filePath = fileCoverage.uri.fsPath;
+        for (const target of this.coverageReport.targets) {
+            const file = target.files.find(f => f.path === filePath);
+            if (!file?.functions) { continue; }
+            return file.functions.map(func =>
+                new vscode.DeclarationCoverage(
+                    func.name,
+                    func.executionCount,
+                    new vscode.Position(func.lineNumber - 1, 0)
+                )
+            );
+        }
+        return [];
     }
 
     private loadTestTargets(config: BuildTaskConfig): TestTargetInfo[] {
