@@ -251,6 +251,10 @@ export class XCTestController implements vscode.Disposable {
         }
         parts.push('test 2>&1');
         let command = parts.join(' ');
+        // Boot simulator and open Simulator.app before running tests
+        if (!config.isPhysicalDevice) {
+            command = `xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator; ${command}`;
+        }
         if (options?.coverage && this.coverageResultPath) {
             command = `rm -rf "${this.coverageResultPath}"; ${command}`;
         }
