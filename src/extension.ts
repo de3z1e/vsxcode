@@ -360,12 +360,12 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
             const cp = await import('child_process');
             const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
             const sdkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk`;
-            const triple = `arm64-apple-ios${iosPlatform.version}-simulator`;
+            const simulatorTarget = `arm64-apple-ios${iosPlatform.version}-simulator`;
             const serverArguments = [
                 '-Xswiftc', '-sdk',
                 '-Xswiftc', sdkPath,
                 '-Xswiftc', '-target',
-                '-Xswiftc', triple,
+                '-Xswiftc', simulatorTarget,
                 '-Xswiftc', '-F',
                 '-Xswiftc', `${sdkPath}/System/Library/Frameworks`
             ];
