@@ -263,12 +263,24 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         .filter((entry): entry is string => Boolean(entry));
     const uniquePackageDependencies = Array.from(new Set(packageDependenciesList));
 
-    // Exclude test targets from Package.swift — they can't compile under SPM for iOS (UIKit),
-    // and including them causes the Swift extension to duplicate our TestController's discovery.
-    // Test execution is handled by XCTestController via xcodebuild.
-    const nonTestNativeTargets = nativeTargets.filter((t) => !isTestTarget(t.productType));
+    // Resolve developer dir for XCTest framework path in test targets
+    let xcTestFrameworkPath: string | undefined;
+    try {
+        const cp = await import('child_process');
+        const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
+        xcTestFrameworkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`;
+    } catch { /* xcode-select not available */ }
 
-    const targetOutputs: TargetOutput[] = nonTestNativeTargets.map((nativeTarget) => {
+    // Emit test targets as .target() with XCTest unsafeFlags instead of .testTarget().
+    // This preserves SourceKit-LSP IntelliSense (XCTest types, @testable import) while
+    // preventing the Swift extension from discovering them as tests (it only scans .testTarget).
+    for (const targetDef of targetDefinitions) {
+        if (targetDef.isTest) {
+            targetDef.spmType = '.target' as const;
+        }
+    }
+
+    const targetOutputs: TargetOutput[] = nativeTargets.map((nativeTarget) => {
         const targetDef = targetDefinitions.find((t) => t.name === nativeTarget.name)!;
         const buildPhases = parseBuildPhaseIds(pbxContents, nativeTarget.name);
         const targetSettings = nativeTarget.buildConfigurationListId
@@ -305,6 +317,11 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
             } else if (strictConcurrency === 'targeted') {
                 swiftSettings.push(`.unsafeFlags(["-strict-concurrency=targeted"])`);
             }
+        }
+
+        // Add XCTest framework search path and -enable-testing for test targets
+        if (targetDef.isTest && xcTestFrameworkPath) {
+            swiftSettings.push(`.unsafeFlags(["-F", "${xcTestFrameworkPath}", "-enable-testing"])`);
         }
 
         const packageDependencyNames = new Set(
