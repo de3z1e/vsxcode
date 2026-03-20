@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import type { BuildTaskConfig } from '../types/interfaces';
-import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine, testCommandLine } from '../generators/buildTasks';
+import { buildCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine, testCommandLine, testFilteredCommandLine } from '../generators/buildTasks';
 
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
@@ -217,6 +217,29 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
             reveal: vscode.TaskRevealKind.Always,
             panel: vscode.TaskPanelKind.Shared,
             showReuseMessage: false,
+        };
+        return task;
+    }
+
+    createFilteredTestTask(testFilter: string): vscode.Task | undefined {
+        const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+        if (!config) { return undefined; }
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) { return undefined; }
+        const cwd = folder.uri.fsPath;
+        const commandLine = testFilteredCommandLine(config, testFilter);
+        const task = new vscode.Task(
+            { type: TASK_TYPE, task: 'test' },
+            folder, `Test: ${testFilter}`, TASK_SOURCE,
+            new vscode.CustomExecution(async () => new TaskTerminal(commandLine, cwd, { colorize: true })),
+            '$swiftc'
+        );
+        task.group = vscode.TaskGroup.Test;
+        task.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
+            clear: true,
         };
         return task;
     }
