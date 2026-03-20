@@ -77,13 +77,12 @@ export function runAndDebugCommandLine(config: BuildTaskConfig): string {
 }
 
 export function testCommandLine(config: BuildTaskConfig): string {
-    const udid = config.simulatorUdid || config.simulatorDevice;
-    const boot = `xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator;`;
-    return [
-        boot,
-        ...xcodebuildArgs(config),
-        `test -only-testing:"${config.targetName}" 2>&1`,
-    ].join(' ');
+    const args = [...xcodebuildArgs(config), `test -only-testing:"${config.targetName}" 2>&1`];
+    if (!config.isPhysicalDevice) {
+        const udid = config.simulatorUdid || config.simulatorDevice;
+        args.unshift(`xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator;`);
+    }
+    return args.join(' ');
 }
 
 export function debugConsoleCommandLine(config: BuildTaskConfig): string {

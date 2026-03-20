@@ -1121,6 +1121,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 const task = buildTaskProvider.createBuildForTestingTask();
                 if (task) {
                     await executeTaskAndWait(task, (exec) => { buildExecution = exec; });
+                } else {
+                    vscode.window.showErrorMessage('Build task not available. Check configuration.');
                 }
                 return;
             }

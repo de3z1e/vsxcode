@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as cp from 'child_process';
 import { promisify } from 'util';
 import type { BuildTaskConfig } from '../types/interfaces';
@@ -8,7 +9,7 @@ import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { determineTargetPath } from '../utils/path';
 
 const execFile = promisify(cp.execFile);
-const DERIVED_DATA_BASE = path.join(require('os').homedir(), 'Library', 'Developer', 'VSCode', 'DerivedData');
+const DERIVED_DATA_BASE = path.join(os.homedir(), 'Library', 'Developer', 'VSCode', 'DerivedData');
 
 interface TestTargetInfo {
     name: string;
@@ -293,7 +294,10 @@ export class XCTestController implements vscode.Disposable {
             proc.stdout?.on('data', handleData);
             proc.stderr?.on('data', handleData);
 
+            let finished = false;
             const done = () => {
+                if (finished) { return; }
+                finished = true;
                 cancelListener.dispose();
                 if (buffer.length > 0) {
                     this.parseLine(run, buffer, failureDetails, reportedItems, currentTestItem);
