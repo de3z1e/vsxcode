@@ -67,12 +67,22 @@ A dedicated Code Format panel in the sidebar provides native [swift-format](http
 - **Global / Local profiles** — Global profile shares formatting options and rules across all projects. Local profile keeps settings per-project. Switch between them with an option to save local changes to global.
 - **Config file sync** — settings auto-generate `.vscode/.swift-format`. Manual edits to the config file are synced back to the UI.
 
+### Testing
+
+XCTest integration via the VS Code Testing sidebar — tests are discovered from the Xcode project and run with `xcodebuild`.
+
+- **Run, Debug, and Coverage** profiles in the Testing sidebar, powered by `xcodebuild test`.
+- **Test debugging with breakpoints** — the Debug profile builds for testing, attaches LLDB DAP with `--waitfor`, then runs `test-without-building` so the debugger catches the test host at launch.
+- **Code coverage** — the Coverage profile enables `xcodebuild -enableCodeCoverage`, then parses the xcresult via `xcrun xccov` to show per-file percentages and per-line green/red gutter annotations.
+- **Test results** in the Testing sidebar with pass/fail status, durations, and assertion failure messages with source locations.
+
 ### Keyboard Shortcuts
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
 | ⌘R | No active debug session | Build, install, and launch with debugger attached |
 | ⌘R | During debug session | Stop current session and restart |
+| ⌘⇧B | Build tasks configured | Build (or build-for-testing when a test target is selected) |
 
 ### Dependencies
 
@@ -81,7 +91,7 @@ A dedicated Code Format panel in the sidebar provides native [swift-format](http
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.3.3.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.4.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -89,5 +99,5 @@ A dedicated Code Format panel in the sidebar provides native [swift-format](http
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.3.3.vsix
+code --install-extension vsxcode-3.4.0.vsix
 ```
