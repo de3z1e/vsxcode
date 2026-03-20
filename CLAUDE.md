@@ -25,12 +25,12 @@ VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.sw
 
 ### Entry Point
 
-`src/extension.ts` — Orchestrator (~870 lines) that registers all commands, providers, and watchers. Contains two main workflows:
+`src/extension.ts` — Orchestrator (~1500 lines) that registers all commands, providers, and watchers. Contains two main workflows:
 
 1. **generatePackageSwift** — Parses pbxproj, builds Package.swift, configures SourceKit-LSP for iOS simulator SDK
 2. **configureBuildTasks** — Interactive setup of project/target/scheme/simulator, stores `BuildTaskConfig` to workspace state
 
-Also contains inline helpers: `parseDefaultLocalization`, `parseDeploymentTargets`, `ensureMacOSPlatform`, `parseExcludedFiles`, `generateCSettings`, `resolveSwiftLanguageMode`.
+Also contains inline helpers: `parseDefaultLocalization`, `parseDeploymentTargets`, `parseExcludedFiles`, `generateCSettings`, `resolveSwiftLanguageMode`, `formatProductType`, `printToSharedPanel`, `cancelActiveRun`, `executeTaskAndWait`.
 
 ### Commands
 
@@ -39,7 +39,7 @@ Also contains inline helpers: `parseDefaultLocalization`, `parseDeploymentTarget
 | `vsxcode.createFromXcodeproj` | Generate Package.swift (Debug config) |
 | `vsxcode.createFromXcodeprojWithOptions` | Generate Package.swift (QuickPick config selection) |
 | `vsxcode.generateBuildTasks` | Interactive build task configuration |
-| `vsxcode.sidebar.*` | 7 sidebar commands: changeProject, changeTarget, changeScheme, changeBundleId, selectSimulator, build, buildAndRun, refresh |
+| `vsxcode.sidebar.*` | 10 sidebar commands: changeProject, changeTarget, changeScheme, changeBundleId, selectSimulator, changeSwiftVersion, changeStrictConcurrency, build, buildAndRun, refresh |
 
 ### Module Map
 
@@ -72,9 +72,15 @@ src/
 │   └── swiftFileSync.ts         — FileSystemWatcher for *.swift, target-directory mapping,
 │                                  orchestrates pbxproj updates on file create/delete
 ├── providers/
-│   ├── taskProvider.ts          — vscode.TaskProvider for xcode-build task type (3 subtasks)
+│   ├── taskProvider.ts          — vscode.TaskProvider for xcode-build task type (4 subtasks)
 │   ├── debugConfigProvider.ts   — vscode.DebugConfigurationProvider for lldb-dap attach configs
-│   └── sidebarProvider.ts       — vscode.TreeDataProvider for sidebar UI + autoConfigureBuildTasks
+│   ├── sidebarProvider.ts       — vscode.TreeDataProvider for sidebar UI + autoConfigureBuildTasks
+│   ├── swiftFormatProvider.ts   — DocumentFormattingEditProvider for swift-format (format-on-save,
+│   │                              binary detection, config file management, lint mode)
+│   ├── codeQualityWebviewProvider.ts — WebviewViewProvider for Code Format sidebar panel
+│   │                              (swift-format config UI, rule toggles, Homebrew install)
+│   └── testController.ts        — vscode.TestController for XCTest discovery, execution,
+│                                  result parsing, and xccov code coverage integration
 └── utils/
     ├── version.ts               — Swift/macOS version detection via xcrun, version comparison, cleanup()
     ├── path.ts                  — Target path resolution (Sources/, Tests/, shared conventions)
@@ -90,7 +96,10 @@ src/
 - **Auto-sync (Swift files → pbxproj)**: FileSystemWatcher on `*.swift` detects file create/delete in target directories and updates pbxproj (4 entries: PBXBuildFile, PBXFileReference, PBXGroup, PBXSourcesBuildPhase). Handles subdirectories via PBXGroup tree resolution. Debounced (300ms) with write serialization.
 - **Auto-configure**: On activation, auto-detects first project/target/simulator and stores `BuildTaskConfig` to workspace state
 - **Task chaining**: build-install completion triggers run-and-debug; debug session end kills debugserver
+- **Physical device support**: Build → install via devicectl → poll device ready → launch console → attach lldb-dap
 - **SourceKit-LSP**: Auto-configures `swift.sourcekit-lsp.serverArguments` with iOS simulator SDK paths for intellisense
+- **swift-format**: Auto-detects binary, discovers workspace/project config files, format-on-save via DocumentFormattingEditProvider, webview UI for rule configuration in sidebar
+- **XCTest integration**: Discovers test targets from pbxproj, runs via xcodebuild, parses results (xcresulttool), xccov code coverage
 - **Diff view**: Shows current vs generated Package.swift before overwriting
 - **Activation**: `workspaceContains:**/*.pbxproj` and `onDebug`
 
@@ -100,4 +109,4 @@ Swift settings (.define, .unsafeFlags, .swiftLanguageMode), linked frameworks (.
 
 ### Build & Debug Features
 
-Custom `xcode-build` task type with build/build-install/run-and-debug subtasks, lldb-dap debug attachment, simulator boot + app install via xcrun simctl, DerivedData isolation per scheme, Cmd+R keybinding, sidebar UI for configuration management.
+Custom `xcode-build` task type with build/build-install/run-and-debug/test subtasks, lldb-dap debug attachment, simulator boot + app install via xcrun simctl, physical device support via devicectl, DerivedData isolation per scheme, Cmd+R and Cmd+Shift+B keybindings, sidebar UI for configuration management, XCTest controller with code coverage.
