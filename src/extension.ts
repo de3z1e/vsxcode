@@ -360,22 +360,18 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
             const cp = await import('child_process');
             const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
             const sdkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk`;
+            const triple = `arm64-apple-ios${iosPlatform.version}-simulator`;
             const serverArguments = [
                 '-Xswiftc', '-sdk',
                 '-Xswiftc', sdkPath,
                 '-Xswiftc', '-target',
-                '-Xswiftc', `arm64-apple-ios${iosPlatform.version}-simulator`,
+                '-Xswiftc', triple,
                 '-Xswiftc', '-F',
                 '-Xswiftc', `${sdkPath}/System/Library/Frameworks`
             ];
 
             const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
             await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
-
-            // Disable the Swift extension's SPM integration (TestExplorer, build tasks, launch configs)
-            // to prevent duplicate test entries and debug profile buttons — we provide our own.
-            const swiftConfig = vscode.workspace.getConfiguration('swift');
-            await swiftConfig.update('disableSwiftPackageManagerIntegration', true, vscode.ConfigurationTarget.Workspace);
         } catch {
             vscode.window.showWarningMessage(
                 'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
