@@ -76,13 +76,6 @@ export function testCommandLine(config: BuildTaskConfig): string {
     ].join(' ');
 }
 
-export function testFilteredCommandLine(config: BuildTaskConfig, testFilter: string): string {
-    return [
-        ...xcodebuildArgs(config),
-        `test -only-testing:"${testFilter}" 2>&1`,
-    ].join(' ');
-}
-
 export function debugConsoleCommandLine(config: BuildTaskConfig): string {
     const devId = devicectlId(config);
     return `xcrun devicectl device process launch --device "${devId}" --console --start-stopped --terminate-existing "${config.bundleIdentifier}" 2>&1 | ${TIMESTAMP_LINES}`;

@@ -28,7 +28,7 @@ import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDe
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
-import { TestCodeLensProvider } from './providers/testCodeLensProvider';
+import { XCTestController } from './providers/testController';
 import { updateBuildSetting } from './writers/pbxproj';
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
@@ -263,7 +263,12 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         .filter((entry): entry is string => Boolean(entry));
     const uniquePackageDependencies = Array.from(new Set(packageDependenciesList));
 
-    const targetOutputs: TargetOutput[] = nativeTargets.map((nativeTarget) => {
+    // Exclude test targets from Package.swift — they can't compile under SPM for iOS (UIKit),
+    // and including them causes the Swift extension to duplicate our TestController's discovery.
+    // Test execution is handled by XCTestController via xcodebuild.
+    const nonTestNativeTargets = nativeTargets.filter((t) => !isTestTarget(t.productType));
+
+    const targetOutputs: TargetOutput[] = nonTestNativeTargets.map((nativeTarget) => {
         const targetDef = targetDefinitions.find((t) => t.name === nativeTarget.name)!;
         const buildPhases = parseBuildPhaseIds(pbxContents, nativeTarget.name);
         const targetSettings = nativeTarget.buildConfigurationListId
@@ -748,23 +753,8 @@ export function activate(context: vscode.ExtensionContext): void {
         new XcodeDebugConfigProvider(context.workspaceState)
     );
 
-    // Register test CodeLens provider
-    const testCodeLensProvider = new TestCodeLensProvider(context.workspaceState, projectRoot);
-    const testCodeLens = vscode.languages.registerCodeLensProvider(
-        { language: 'swift', scheme: 'file' },
-        testCodeLensProvider
-    );
-    const runTestCmd = vscode.commands.registerCommand(
-        'vsxcode.test.run',
-        async (testFilter: string) => {
-            const task = buildTaskProvider.createFilteredTestTask(testFilter);
-            if (!task) {
-                vscode.window.showErrorMessage('No build configuration. Configure via the VSXcode sidebar.');
-                return;
-            }
-            await vscode.tasks.executeTask(task);
-        }
-    );
+    // Register test controller (Testing sidebar integration)
+    const testController = new XCTestController(context.workspaceState, projectRoot);
 
     // Auto-configure on activation (non-blocking)
     autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
@@ -1413,7 +1403,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.pbxproj');
     const onProjectChange = watcher.onDidChange(async () => {
         sidebarProvider.refresh();
-        testCodeLensProvider.refresh();
+        testController.refresh();
         const wsFolders = vscode.workspace.workspaceFolders;
         if (wsFolders && wsFolders.length > 0) {
             generatePackageSwift(wsFolders[0].uri.fsPath, 'Debug', true).catch((error) => {
@@ -1468,7 +1458,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         generateCommand, generateWithOptionsCommand, generateBuildTasksCommand,
-        taskProvider, debugProvider, treeView, testCodeLens, runTestCmd,
+        taskProvider, debugProvider, treeView, testController,
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
         selectSimulatorCmd, changeSwiftVersionCmd, changeStrictConcurrencyCmd, buildCmd, buildAndRunCmd, refreshCmd,
         watcher, onProjectChange, onDebugStart, onDebugEnd,
