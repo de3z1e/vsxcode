@@ -367,7 +367,9 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
                 '-Xswiftc', '-target',
                 '-Xswiftc', simulatorTarget,
                 '-Xswiftc', '-F',
-                '-Xswiftc', `${sdkPath}/System/Library/Frameworks`
+                '-Xswiftc', `${sdkPath}/System/Library/Frameworks`,
+                '-Xswiftc', '-F',
+                '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`
             ];
 
             const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
