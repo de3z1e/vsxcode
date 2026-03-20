@@ -150,7 +150,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     private createBuildTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
         const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
-            { type: TASK_TYPE, task: 'build' },
+            { type: TASK_TYPE, task: 'build', dontTriggerTestDiscovery: true },
             folder, 'Build', TASK_SOURCE,
             new vscode.CustomExecution(async () => new TaskTerminal(buildCommandLine(config), cwd, { colorize: true })),
             '$swiftc'
@@ -171,7 +171,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         if (!folder) { return undefined; }
         const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
-            { type: TASK_TYPE, task: 'build' },
+            { type: TASK_TYPE, task: 'build', dontTriggerTestDiscovery: true },
             folder, 'Build for Testing', TASK_SOURCE,
             new vscode.CustomExecution(async () => new TaskTerminal(buildForTestingCommandLine(config), cwd, { colorize: true })),
             '$swiftc'
@@ -188,7 +188,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     private createBuildInstallTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
         const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
-            { type: TASK_TYPE, task: 'build-install' },
+            { type: TASK_TYPE, task: 'build-install', dontTriggerTestDiscovery: true },
             folder, 'Build and Install', TASK_SOURCE,
             new vscode.CustomExecution(async () => new TaskTerminal(buildInstallCommandLine(config), cwd, { colorize: true })),
             '$swiftc'
@@ -205,7 +205,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     createPhysicalDebugTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
         const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
-            { type: TASK_TYPE, task: 'run-and-debug' },
+            { type: TASK_TYPE, task: 'run-and-debug', dontTriggerTestDiscovery: true },
             folder, 'Run and Debug', TASK_SOURCE,
             new vscode.CustomExecution(async () => {
                 const terminal = new TaskTerminal(debugConsoleCommandLine(config), cwd);
@@ -225,7 +225,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     private createRunAndDebugTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
         const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
-            { type: TASK_TYPE, task: 'run-and-debug' },
+            { type: TASK_TYPE, task: 'run-and-debug', dontTriggerTestDiscovery: true },
             folder, 'Run and Debug', TASK_SOURCE,
             new vscode.CustomExecution(async () => {
                 const terminal = new TaskTerminal(runAndDebugCommandLine(config), cwd);
@@ -245,7 +245,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
     private createTestTask(config: BuildTaskConfig, folder: vscode.WorkspaceFolder): vscode.Task {
         const cwd = folder.uri.fsPath;
         const task = new vscode.Task(
-            { type: TASK_TYPE, task: 'test' },
+            { type: TASK_TYPE, task: 'test', dontTriggerTestDiscovery: true },
             folder, 'Test', TASK_SOURCE,
             new vscode.CustomExecution(async () => new TaskTerminal(testCommandLine(config), cwd, { colorize: true })),
             '$swiftc'

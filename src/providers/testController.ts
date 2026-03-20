@@ -61,6 +61,13 @@ export class XCTestController implements vscode.Disposable {
             true
         );
 
+        this.controller.createRunProfile(
+            'Debug',
+            vscode.TestRunProfileKind.Debug,
+            (request, token) => this.debugHandler(request, token),
+            true
+        );
+
         const coverageProfile = this.controller.createRunProfile(
             'Run with Coverage',
             vscode.TestRunProfileKind.Coverage,
@@ -215,6 +222,128 @@ export class XCTestController implements vscode.Disposable {
         }
 
         run.end();
+    }
+
+    private async debugHandler(
+        request: vscode.TestRunRequest,
+        token: vscode.CancellationToken
+    ): Promise<void> {
+        const config = this.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+        if (!config) {
+            vscode.window.showErrorMessage('No build configuration. Configure via the VSXcode sidebar.');
+            return;
+        }
+
+        const run = this.controller.createTestRun(request);
+        const itemsToRun = request.include || this.getAllTopLevelItems();
+
+        for (const item of itemsToRun) {
+            this.enqueueAll(run, item);
+        }
+
+        const includeFilters = itemsToRun.map(item => item.id);
+        const excludeFilters = request.exclude
+            ? request.exclude.map(item => item.id)
+            : [];
+
+        // 1. Build for testing
+        const buildCmd = this.buildXcodebuildBase(config);
+        const filterArgs = this.buildFilterArgs(includeFilters, excludeFilters);
+        const buildForTestingCmd = `${buildCmd} build-for-testing ${filterArgs} 2>&1`;
+
+        run.appendOutput('Building for testing...\r\n');
+        const buildExitCode = await new Promise<number>((resolve) => {
+            const proc = cp.spawn('/bin/zsh', ['-c', buildForTestingCmd], {
+                cwd: this.rootPath,
+                env: process.env,
+            });
+            proc.stdout?.on('data', (data: Buffer) => {
+                run.appendOutput(data.toString().replace(/\r?\n/g, '\r\n'));
+            });
+            proc.stderr?.on('data', (data: Buffer) => {
+                run.appendOutput(data.toString().replace(/\r?\n/g, '\r\n'));
+            });
+            proc.on('close', (code) => resolve(code ?? 1));
+            proc.on('error', () => resolve(1));
+            token.onCancellationRequested(() => {
+                try { proc.kill('SIGTERM'); } catch { /* already exited */ }
+            });
+        });
+
+        if (buildExitCode !== 0 || token.isCancellationRequested) {
+            run.appendOutput('\r\nBuild for testing failed.\r\n');
+            run.end();
+            return;
+        }
+
+        // 2. Boot simulator
+        if (!config.isPhysicalDevice) {
+            const udid = config.simulatorUdid || config.simulatorDevice;
+            try {
+                await execFile('xcrun', ['simctl', 'boot', udid]).catch(() => {});
+                await execFile('open', ['-a', 'Simulator']);
+            } catch { /* already booted */ }
+        }
+
+        // 3. Start test-without-building AND attach debugger simultaneously
+        const testCmd = `${buildCmd} test-without-building ${filterArgs} 2>&1`;
+        const folder = vscode.workspace.workspaceFolders?.[0];
+
+        // Start the debug session (attaches to app when it launches)
+        if (folder) {
+            const debugConfig: vscode.DebugConfiguration = {
+                type: 'lldb-dap',
+                request: 'attach',
+                name: `Debug Tests (${config.productName})`,
+                stopOnEntry: false,
+                attachCommands: [
+                    `process attach --name ${config.productName} --waitfor`
+                ]
+            };
+            vscode.debug.startDebugging(folder, debugConfig);
+        }
+
+        // Run test-without-building (this launches the app, lldb catches it)
+        const leafItems = this.collectLeafItems(itemsToRun);
+        const reportedItems = await this.executeAndParse(run, testCmd, token);
+
+        for (const item of leafItems) {
+            if (!reportedItems.has(item.id)) {
+                run.skipped(item);
+            }
+        }
+
+        run.end();
+    }
+
+    private buildXcodebuildBase(config: BuildTaskConfig): string {
+        const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
+        const udid = config.simulatorUdid || config.simulatorDevice;
+        const sdk = config.isPhysicalDevice ? 'iphoneos' : 'iphonesimulator';
+        const parts = [
+            'xcodebuild',
+            `-project "${config.projectFile}"`,
+            `-scheme "${config.schemeName}"`,
+            '-configuration Debug',
+            `-sdk ${sdk}`,
+            `-destination "id=${udid}"`,
+            `-derivedDataPath "${derivedData}"`,
+        ];
+        if (config.isPhysicalDevice) {
+            parts.push('-allowProvisioningUpdates');
+        }
+        return parts.join(' ');
+    }
+
+    private buildFilterArgs(include: string[], exclude: string[]): string {
+        const parts: string[] = [];
+        for (const filter of include) {
+            parts.push(`-only-testing:"${filter}"`);
+        }
+        for (const filter of exclude) {
+            parts.push(`-skip-testing:"${filter}"`);
+        }
+        return parts.join(' ');
     }
 
     private buildCommand(
