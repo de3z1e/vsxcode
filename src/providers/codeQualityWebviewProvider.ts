@@ -473,12 +473,6 @@ input[type="number"]:focus{border-color:var(--vscode-focusBorder)}
 .rule-tags{font-size:10px;opacity:.45;white-space:nowrap;pointer-events:none;user-select:none}
 .rule-modified{width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);flex-shrink:0;margin-left:2px}
 .opt-modified{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--vscode-button-background);margin-left:6px;vertical-align:middle}
-.info-wrap{position:relative;display:inline-flex;align-items:center;vertical-align:middle}
-.info-btn{background:none;border:none;cursor:pointer;opacity:.3;padding:0;margin-left:6px;line-height:1;display:inline-flex;align-items:center;vertical-align:middle}
-.info-btn:hover{opacity:.7}
-.info-btn svg{width:12px;height:12px;fill:var(--vscode-foreground)}
-.info-tip{display:none;position:absolute;left:0;top:calc(100% + 4px);background:var(--vscode-editorHoverWidget-background,var(--vscode-editor-background));border:1px solid var(--vscode-editorHoverWidget-border,var(--vscode-widget-border,rgba(128,128,128,.4)));border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.4;white-space:normal;width:200px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.info-wrap.open .info-tip{display:block}
 .update-row{padding:4px 14px 0;font-size:11px;opacity:.6}
 .gear-btn{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;opacity:.4;font-size:13px;padding:2px 4px;line-height:1;user-select:none}
 .gear-btn:hover{opacity:1}
@@ -615,10 +609,6 @@ function modDot(isModified) {
   return isModified ? '<span class="opt-modified"></span>' : '';
 }
 
-function infoIcon(text) {
-  return '<span class="info-wrap"><button class="info-btn" data-info><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 12.6A5.6 5.6 0 1 1 8 2.4a5.6 5.6 0 0 1 0 11.2zM7.4 5h1.2V3.8H7.4V5zm0 7.2h1.2V6.2H7.4v6z"/></svg></button><span class="info-tip">' + text + '</span></span>';
-}
-
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
 // ── Lightweight rule patch (no full re-render) ────────────
@@ -723,9 +713,9 @@ function render() {
 
   if (sfFound) {
     h += '<div class="section">';
-    h += toggleRow('Format on Save' + infoIcon('Applies swift-format formatting when saving a Swift file. Per-project setting, not part of the profile.'), 'toggle-formatOnSave', c.formatOnSave);
-    h += toggleRow('Lint Mode' + infoIcon('Shows code quality violations as diagnostics in the Problems panel. Per-project setting, not part of the profile.'), 'toggle-lintMode', c.lintMode);
-    h += '<div class="row"><span>Profile' + infoIcon('<b>Global</b>: options and rules shared across all projects.<br><b>Local</b>: options and rules specific to this project.') + '</span><select id="profile-select">';
+    h += toggleRow('Format on Save', 'toggle-formatOnSave', c.formatOnSave, 'Applies swift-format formatting when saving a Swift file. Per-project setting, not part of the profile.');
+    h += toggleRow('Lint Mode', 'toggle-lintMode', c.lintMode, 'Shows code quality violations as diagnostics in the Problems panel. Per-project setting, not part of the profile.');
+    h += '<div class="row"><span title="' + esc('Global: options and rules shared across all projects.\\nLocal: options and rules specific to this project.') + '">Profile</span><select id="profile-select">';
     h += '<option value="global"' + (state.profileMode === 'global' ? ' selected' : '') + '>Global</option>';
     h += '<option value="local"' + (state.profileMode === 'local' ? ' selected' : '') + '>Local</option>';
     h += '</select></div>';
@@ -896,18 +886,6 @@ function applySearch() {
 // ── Bind ──────────────────────────────────────────────────
 
 function bind() {
-  // Info tips
-  document.querySelectorAll('.info-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const wrap = btn.closest('.info-wrap');
-      const wasOpen = wrap?.classList.contains('open');
-      document.querySelectorAll('.info-wrap.open').forEach(w => w.classList.remove('open'));
-      if (!wasOpen) { wrap?.classList.add('open'); }
-    });
-  });
-  document.addEventListener('click', () => document.querySelectorAll('.info-wrap.open').forEach(w => w.classList.remove('open')));
-
   // Tool status
   document.querySelector('[data-gh="sf"]')?.addEventListener('click', e => { e.stopPropagation(); vscode.postMessage({ type: 'openGithub' }); });
   document.getElementById('sf-path-btn')?.addEventListener('click', () => vscode.postMessage({ type: 'changePath' }));
