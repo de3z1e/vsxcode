@@ -989,6 +989,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     picks.push(item);
                 }
             }
+            sidebarProvider.updatePhysicalDevices(physicalDevices);
             const pick = await new Promise<DevicePick | undefined>((resolve) => {
                 const qp = vscode.window.createQuickPick<DevicePick>();
                 qp.items = picks;
@@ -1005,6 +1006,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     qp.dispose();
                 });
                 qp.show();
+                sidebarProvider.notifyConfigChanged();
             });
             if (pick) {
                 await updateConfig({ simulatorDevice: pick.label, simulatorUdid: pick.udid, deviceIdentifier: pick.deviceIdentifier, isPhysicalDevice: pick.isPhysical });

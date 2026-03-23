@@ -135,7 +135,7 @@ export async function listPhysicalDevices(): Promise<PhysicalDevice[]> {
                     udid: device.hardwareProperties?.udid || device.identifier || '',
                     deviceIdentifier: device.identifier || '',
                     osVersion: device.deviceProperties?.osVersionNumber || '',
-                    connectionType: device.connectionProperties?.transportType || 'unknown',
+                    connectionType: device.connectionProperties?.transportType || 'Unknown',
                 });
             }
         }

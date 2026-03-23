@@ -127,7 +127,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             items.push(this.createConfigItem('config-strictConcurrency', 'Strict Concurrency Checking',
                 concurrency, 'vsxcode.sidebar.changeStrictConcurrency', 'shield'));
         }
-        items.push(this.createConfigItem('config-simulator', 'Device', config.simulatorDevice,
+        const deviceLabel = this.formatDeviceLabel(config);
+        items.push(this.createConfigItem('config-simulator', 'Device', deviceLabel,
             'vsxcode.sidebar.selectSimulator', 'device-mobile'));
         return items;
     }
@@ -157,6 +158,19 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         const value = this.projectData?.strictConcurrencyByTarget[targetName];
         if (!value) { return ''; }
         return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    private formatDeviceLabel(config: BuildTaskConfig): string {
+        if (!config.simulatorDevice) { return ''; }
+        if (!config.isPhysicalDevice) {
+            return `${config.simulatorDevice} (Simulator)`;
+        }
+        const physical = this.projectData?.physicalDevices.find(
+            d => d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier
+        );
+        const connectionType = physical?.connectionType;
+        const transport = connectionType === 'wired' ? 'USB' : connectionType === 'localNetwork' ? 'Wi-Fi' : connectionType || 'Unknown';
+        return `${config.simulatorDevice} (${transport})`;
     }
 
     // ── Data loading ──────────────────────────────────────────
@@ -233,6 +247,12 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         ]);
 
         this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, supportedSwiftVersions };
+    }
+
+    updatePhysicalDevices(devices: PhysicalDevice[]): void {
+        if (this.projectData) {
+            this.projectData.physicalDevices = devices;
+        }
     }
 
     getProjectData(): ProjectData | null {
