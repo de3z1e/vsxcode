@@ -109,7 +109,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     }
 
     private getConfigItems(config: BuildTaskConfig): SidebarItem[] {
-        return [
+        const items = [
             this.createConfigItem('config-project', 'Project', config.projectFile,
                 'vsxcode.sidebar.changeProject', 'project'),
             this.createConfigItem('config-target', 'Target', config.targetName,
@@ -121,12 +121,15 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             this.createConfigItem('config-swiftVersion', 'Swift Language Version',
                 this.projectData?.swiftVersionByTarget[config.targetName] ? `Swift ${this.projectData.swiftVersionByTarget[config.targetName].replace(/\.0$/, '')}` : '',
                 'vsxcode.sidebar.changeSwiftVersion', 'swift'),
-            this.createConfigItem('config-strictConcurrency', 'Strict Concurrency Checking',
-                this.formatStrictConcurrency(config.targetName),
-                'vsxcode.sidebar.changeStrictConcurrency', 'shield'),
-            this.createConfigItem('config-simulator', 'Device', config.simulatorDevice,
-                'vsxcode.sidebar.selectSimulator', 'device-mobile'),
         ];
+        const concurrency = this.formatStrictConcurrency(config.targetName);
+        if (concurrency) {
+            items.push(this.createConfigItem('config-strictConcurrency', 'Strict Concurrency Checking',
+                concurrency, 'vsxcode.sidebar.changeStrictConcurrency', 'shield'));
+        }
+        items.push(this.createConfigItem('config-simulator', 'Device', config.simulatorDevice,
+            'vsxcode.sidebar.selectSimulator', 'device-mobile'));
+        return items;
     }
 
     private createConfigItem(
@@ -199,6 +202,17 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 if (Object.keys(strictConcurrencyByTarget).length === 0 && projectSettings?.strictConcurrency) {
                     for (const t of targets) {
                         strictConcurrencyByTarget[t.name] = projectSettings.strictConcurrency;
+                    }
+                }
+                // When SWIFT_STRICT_CONCURRENCY is absent, infer "minimal" for pre-Swift 6
+                // (Swift 6+ has complete by default — hide the row instead of showing it)
+                for (const t of targets) {
+                    if (!strictConcurrencyByTarget[t.name]) {
+                        const ver = swiftVersionByTarget[t.name];
+                        const major = ver ? parseInt(ver, 10) : 0;
+                        if (major > 0 && major < 6) {
+                            strictConcurrencyByTarget[t.name] = 'minimal';
+                        }
                     }
                 }
             } catch { /* no pbxproj */ }
