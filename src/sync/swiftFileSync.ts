@@ -20,6 +20,8 @@ export interface TargetDirectoryMapping {
     pbxprojPath: string;
     /** Relative path from workspace root to target directory (e.g., "Pets" or "Sources/MyApp") */
     relativePath: string;
+    /** Target uses Xcode 16+ file system synchronized groups — pbxproj sync is a no-op */
+    isSynchronized: boolean;
 }
 
 export function buildTargetMappings(
@@ -39,6 +41,8 @@ export function buildTargetMappings(
         const buildPhases = parseBuildPhaseIds(pbxContents, target.name);
         if (!buildPhases.sourcesBuildPhaseId) { continue; }
 
+        const isSynchronized = target.fileSystemSynchronizedGroupIds.length > 0;
+
         const groupId = resolveGroupForPath(groups, mainGroupId, relativePath);
         if (!groupId) { continue; }
 
@@ -48,7 +52,8 @@ export function buildTargetMappings(
             sourcesBuildPhaseId: buildPhases.sourcesBuildPhaseId,
             groupId,
             pbxprojPath,
-            relativePath
+            relativePath,
+            isSynchronized
         });
     }
 
@@ -156,6 +161,12 @@ export function createSwiftFileWatcher(
                 return; // Not in a known target directory
             }
 
+            // Synchronized groups auto-discover files from disk — no pbxproj update needed
+            if (mapping.isSynchronized) {
+                log(`[swift-sync] ${fileName} in synchronized target ${mapping.targetName}, skipping`);
+                return;
+            }
+
             // Resolve the correct group (may be a subgroup for subdirectory files)
             const groups = parseGroups(pbxContents);
             const mainGroupId = findMainGroupId(pbxContents);
@@ -185,6 +196,14 @@ export function createSwiftFileWatcher(
 
         scheduleOperation(filePath, async () => {
             const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+
+            // Synchronized groups auto-remove files from disk — no pbxproj update needed
+            const mappings = buildTargetMappings(rootPath, pbxContents, pbxprojPath);
+            const mapping = findMappingForFile(filePath, mappings);
+            if (mapping?.isSynchronized) {
+                log(`[swift-sync] ${fileName} removed from synchronized target ${mapping.targetName}, skipping`);
+                return;
+            }
 
             // Skip if file not in pbxproj
             if (!findFileReferenceId(pbxContents, fileName)) {

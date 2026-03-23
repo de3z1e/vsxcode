@@ -97,30 +97,53 @@ function formatProductType(productType: string): string {
 }
 
 function parseExcludedFiles(pbxContents: string, targetName: string): string[] {
-    const syncGroupRegex =
-        /\/\* Begin PBXFileSystemSynchronizedRootGroup section \*\/([\s\S]*?)\/\* End PBXFileSystemSynchronizedRootGroup section \*\//;
-    const syncMatch = syncGroupRegex.exec(pbxContents);
-    if (!syncMatch) {
-        return [];
-    }
-    const section = syncMatch[1];
-
     const exceptionRegex =
         /\/\* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section \*\/([\s\S]*?)\/\* End PBXFileSystemSynchronizedBuildFileExceptionSet section \*\//;
     const exceptionMatch = exceptionRegex.exec(pbxContents);
     if (!exceptionMatch) {
         return [];
     }
+    const section = exceptionMatch[1];
 
+    // Parse each exception set entry individually to match by target name.
+    // Use brace-depth tracking to handle entries with nested {} (e.g. attributesByRelativePath).
+    const entryStartRegex =
+        /([A-F0-9]{24})\s*(?:\/\*[^*]*\*\/\s*)?=\s*\{/g;
     const excluded: string[] = [];
-    const entryRegex = /membershipExceptions = \(([\s\S]*?)\);/g;
-    let match: RegExpExecArray | null;
-    while ((match = entryRegex.exec(exceptionMatch[1])) !== null) {
-        const items = match[1];
-        const fileRegex = /"([^"]+)"/g;
-        let fileMatch: RegExpExecArray | null;
-        while ((fileMatch = fileRegex.exec(items)) !== null) {
-            excluded.push(fileMatch[1]);
+    let entry: RegExpExecArray | null;
+    while ((entry = entryStartRegex.exec(section)) !== null) {
+        const braceStart = entry.index + entry[0].length - 1; // index of opening {
+        let depth = 1;
+        let bodyEnd = -1;
+        for (let i = braceStart + 1; i < section.length; i++) {
+            if (section[i] === '{') { depth++; }
+            else if (section[i] === '}') {
+                depth--;
+                if (depth === 0) { bodyEnd = i; break; }
+            }
+        }
+        if (bodyEnd === -1) { continue; }
+        const body = section.slice(braceStart + 1, bodyEnd);
+
+        // Match target comment: target = <ID> /* TargetName */;
+        const targetMatch = /target\s*=\s*[A-F0-9]{24}\s*\/\*\s*([^*]+)\s*\*\/\s*;/.exec(body);
+        if (!targetMatch || targetMatch[1].trim() !== targetName) {
+            continue;
+        }
+
+        const exceptionsMatch = /membershipExceptions\s*=\s*\(([\s\S]*?)\);/.exec(body);
+        if (!exceptionsMatch) {
+            continue;
+        }
+
+        // Match both quoted ("Info.plist") and unquoted (Info.plist) paths
+        const pathRegex = /(?:"([^"]+)"|([A-Za-z0-9_./+-]+))\s*,?/g;
+        let pathMatch: RegExpExecArray | null;
+        while ((pathMatch = pathRegex.exec(exceptionsMatch[1])) !== null) {
+            const filePath = pathMatch[1] || pathMatch[2];
+            if (filePath) {
+                excluded.push(filePath);
+            }
         }
     }
     return excluded;

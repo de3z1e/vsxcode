@@ -21,6 +21,7 @@ export interface NativeTarget {
     productType: string;
     packageProductDependencyIds: string[];
     buildConfigurationListId: string;
+    fileSystemSynchronizedGroupIds: string[];
 }
 
 export interface BasePackageReference {

@@ -47,11 +47,21 @@ export function parseNativeTargets(pbxContents: string): NativeTarget[] {
                 packageProductDependencyIds.push(idMatch[1]);
             }
         }
+        const syncGroupsMatch = /fileSystemSynchronizedGroups = \(([\s\S]*?)\);/.exec(body);
+        const fileSystemSynchronizedGroupIds: string[] = [];
+        if (syncGroupsMatch) {
+            const block = syncGroupsMatch[1];
+            const idRegex = /([A-F0-9]{24})/g;
+            let idMatch: RegExpExecArray | null;
+            while ((idMatch = idRegex.exec(block)) !== null) {
+                fileSystemSynchronizedGroupIds.push(idMatch[1]);
+            }
+        }
         const name = cleanup(nameMatch ? nameMatch[1] : displayName);
         const productName = cleanup(productNameMatch ? productNameMatch[1] : name);
         const productType = cleanup(productTypeMatch ? productTypeMatch[1] : '');
         const buildConfigurationListId = cleanup(buildConfigListMatch ? buildConfigListMatch[1] : '');
-        targets.push({ name, productName, productType, packageProductDependencyIds, buildConfigurationListId });
+        targets.push({ name, productName, productType, packageProductDependencyIds, buildConfigurationListId, fileSystemSynchronizedGroupIds });
     }
     return targets;
 }

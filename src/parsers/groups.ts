@@ -67,7 +67,57 @@ export function parseGroups(pbxContents: string): Map<string, PBXGroupInfo> {
         groups.set(id, { id, name, path: groupPath, childIds });
     }
 
+    // Parse PBXFileSystemSynchronizedRootGroup entries as leaf-node groups
+    // so resolveGroupForPath() can find them in mainGroup children
+    parseSynchronizedRootGroups(pbxContents, groups);
+
     return groups;
+}
+
+export function parseSynchronizedRootGroups(
+    pbxContents: string,
+    groups: Map<string, PBXGroupInfo>
+): void {
+    const sectionRegex =
+        /\/\* Begin PBXFileSystemSynchronizedRootGroup section \*\/([\s\S]*?)\/\* End PBXFileSystemSynchronizedRootGroup section \*\//;
+    const sectionMatch = sectionRegex.exec(pbxContents);
+    if (!sectionMatch) {
+        return;
+    }
+    const section = sectionMatch[1];
+
+    const entryRegex =
+        /\s*([A-F0-9]{24})\s*(?:\/\*[^*]*\*\/\s*)?=\s*\{[^}]*isa\s*=\s*PBXFileSystemSynchronizedRootGroup;/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = entryRegex.exec(section)) !== null) {
+        const id = match[1];
+        const startIdx = match.index;
+
+        let depth = 0;
+        let bodyStart = -1;
+        let bodyEnd = -1;
+        for (let i = section.indexOf('{', startIdx); i < section.length; i++) {
+            if (section[i] === '{') {
+                if (depth === 0) { bodyStart = i; }
+                depth++;
+            } else if (section[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    bodyEnd = i;
+                    break;
+                }
+            }
+        }
+        if (bodyStart === -1 || bodyEnd === -1) { continue; }
+
+        const body = section.slice(bodyStart + 1, bodyEnd);
+        const pathMatch = /\bpath\s*=\s*([^;]+);/.exec(body);
+        const groupPath = pathMatch ? cleanup(pathMatch[1]) : undefined;
+
+        // Synchronized root groups have no children — they are leaf nodes
+        groups.set(id, { id, name: groupPath, path: groupPath, childIds: [] });
+    }
 }
 
 export function findMainGroupId(pbxContents: string): string | null {
