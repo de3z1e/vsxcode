@@ -19,6 +19,7 @@ import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
 import { getBuildSettingsForTarget, getProjectBuildSettings, resolveConfigurationListId } from './parsers/buildSettings';
+import { extractObjectBody } from './parsers/base';
 import { parseLinkedFrameworksForTarget } from './parsers/frameworks';
 import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
@@ -105,27 +106,17 @@ function parseExcludedFiles(pbxContents: string, targetName: string): string[] {
     }
     const section = exceptionMatch[1];
 
-    // Parse each exception set entry individually to match by target name.
-    // Use brace-depth tracking to handle entries with nested {} (e.g. attributesByRelativePath).
+    // Parse each exception set entry individually, filtering by target name.
+    // Uses brace-depth tracking to handle nested {} (e.g. attributesByRelativePath).
     const entryStartRegex =
         /([A-F0-9]{24})\s*(?:\/\*[^*]*\*\/\s*)?=\s*\{/g;
     const excluded: string[] = [];
     let entry: RegExpExecArray | null;
     while ((entry = entryStartRegex.exec(section)) !== null) {
-        const braceStart = entry.index + entry[0].length - 1; // index of opening {
-        let depth = 1;
-        let bodyEnd = -1;
-        for (let i = braceStart + 1; i < section.length; i++) {
-            if (section[i] === '{') { depth++; }
-            else if (section[i] === '}') {
-                depth--;
-                if (depth === 0) { bodyEnd = i; break; }
-            }
-        }
-        if (bodyEnd === -1) { continue; }
-        const body = section.slice(braceStart + 1, bodyEnd);
+        const result = extractObjectBody(section, entry.index);
+        if (!result) { continue; }
+        const body = result.body;
 
-        // Match target comment: target = <ID> /* TargetName */;
         const targetMatch = /target\s*=\s*[A-F0-9]{24}\s*\/\*\s*([^*]+)\s*\*\/\s*;/.exec(body);
         if (!targetMatch || targetMatch[1].trim() !== targetName) {
             continue;

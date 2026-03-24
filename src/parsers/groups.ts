@@ -1,4 +1,5 @@
 import { cleanup } from '../utils/version';
+import { extractObjectBody } from './base';
 
 export interface PBXGroupInfo {
     id: string;
@@ -74,7 +75,7 @@ export function parseGroups(pbxContents: string): Map<string, PBXGroupInfo> {
     return groups;
 }
 
-export function parseSynchronizedRootGroups(
+function parseSynchronizedRootGroups(
     pbxContents: string,
     groups: Map<string, PBXGroupInfo>
 ): void {
@@ -92,27 +93,10 @@ export function parseSynchronizedRootGroups(
 
     while ((match = entryRegex.exec(section)) !== null) {
         const id = match[1];
-        const startIdx = match.index;
+        const result = extractObjectBody(section, match.index);
+        if (!result) { continue; }
 
-        let depth = 0;
-        let bodyStart = -1;
-        let bodyEnd = -1;
-        for (let i = section.indexOf('{', startIdx); i < section.length; i++) {
-            if (section[i] === '{') {
-                if (depth === 0) { bodyStart = i; }
-                depth++;
-            } else if (section[i] === '}') {
-                depth--;
-                if (depth === 0) {
-                    bodyEnd = i;
-                    break;
-                }
-            }
-        }
-        if (bodyStart === -1 || bodyEnd === -1) { continue; }
-
-        const body = section.slice(bodyStart + 1, bodyEnd);
-        const pathMatch = /\bpath\s*=\s*([^;]+);/.exec(body);
+        const pathMatch = /\bpath\s*=\s*([^;]+);/.exec(result.body);
         const groupPath = pathMatch ? cleanup(pathMatch[1]) : undefined;
 
         // Synchronized root groups have no children — they are leaf nodes

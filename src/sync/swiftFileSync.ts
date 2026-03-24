@@ -197,15 +197,8 @@ export function createSwiftFileWatcher(
         scheduleOperation(filePath, async () => {
             const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
 
-            // Synchronized groups auto-remove files from disk — no pbxproj update needed
-            const mappings = buildTargetMappings(rootPath, pbxContents, pbxprojPath);
-            const mapping = findMappingForFile(filePath, mappings);
-            if (mapping?.isSynchronized) {
-                log(`[swift-sync] ${fileName} removed from synchronized target ${mapping.targetName}, skipping`);
-                return;
-            }
-
-            // Skip if file not in pbxproj
+            // Skip if file not in pbxproj (also handles synchronized targets,
+            // which never have PBXFileReference entries)
             if (!findFileReferenceId(pbxContents, fileName)) {
                 return;
             }
