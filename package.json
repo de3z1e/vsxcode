@@ -2,7 +2,7 @@
     "name": "vsxcode",
     "displayName": "VSXcode",
     "description": "Xcode project integration for VS Code — IntelliSense, build tasks, device/simulator debugging, and native swift-format code formatting.",
-    "version": "3.4.7",
+    "version": "3.4.8",
     "publisher": "de3z1e",
     "icon": "images/icon.png",
     "license": "MIT",
@@ -11,7 +11,7 @@
         "url": "https://github.com/de3z1e/vsxcode.git"
     },
     "engines": {
-        "vscode": "^1.85.0"
+        "vscode": "^1.110.0"
     },
     "categories": [
         "Programming Languages",
@@ -157,11 +157,18 @@
         "taskDefinitions": [
             {
                 "type": "xcode-build",
-                "required": ["task"],
+                "required": [
+                    "task"
+                ],
                 "properties": {
                     "task": {
                         "type": "string",
-                        "enum": ["build", "build-install", "run-and-debug", "test"],
+                        "enum": [
+                            "build",
+                            "build-install",
+                            "run-and-debug",
+                            "test"
+                        ],
                         "description": "The Xcode build task to run"
                     }
                 }
@@ -197,7 +204,7 @@
     ],
     "devDependencies": {
         "@types/node": "^20.11.30",
-        "@types/vscode": "^1.85.0",
+        "@types/vscode": "^1.110.0",
         "@vscode/vsce": "^3.6.2",
         "typescript": "^5.4.0"
     }

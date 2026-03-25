@@ -99,6 +99,13 @@ export async function detectMacOSVersion(): Promise<string | null> {
     }
 }
 
+export function isXcodeFirstLaunchNeeded(error: unknown): boolean {
+    const stderr = String((error as { stderr?: string })?.stderr || '');
+    const message = String((error as { message?: string })?.message || '');
+    const combined = stderr + message;
+    return combined.includes('DVTPlugInExtensionFaulting') || combined.includes('runFirstLaunch');
+}
+
 export function cleanup(value: string | null | undefined): string {
     if (!value) {
         return '';

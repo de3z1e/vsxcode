@@ -14,7 +14,7 @@ import type {
     SwiftPackageProductDependency
 } from './types/interfaces';
 import { DEFAULT_SWIFT_VERSION } from './types/constants';
-import { detectSwiftToolsVersion, parseSwiftVersion, cleanup, compareVersions } from './utils/version';
+import { detectSwiftToolsVersion, parseSwiftVersion, cleanup, compareVersions, isXcodeFirstLaunchNeeded } from './utils/version';
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
@@ -28,7 +28,7 @@ import { buildPackageSwift, formatPackageDependencyEntry } from './generators/pa
 import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady } from './utils/simulator';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
-import { SidebarProvider, autoConfigureBuildTasks } from './providers/sidebarProvider';
+import { SidebarProvider, autoConfigureBuildTasks, promptXcodeFirstLaunch } from './providers/sidebarProvider';
 import { XCTestController } from './providers/testController';
 import { updateBuildSetting } from './writers/pbxproj';
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
@@ -554,7 +554,9 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         if (schemesMatch) {
             schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
         }
-    } catch { /* xcodebuild -list failed */ }
+    } catch (error) {
+        if (isXcodeFirstLaunchNeeded(error)) { promptXcodeFirstLaunch(); }
+    }
 
     if (schemes.length === 0) {
         // Fallback: use target names as scheme names (Xcode auto-creates schemes per target)

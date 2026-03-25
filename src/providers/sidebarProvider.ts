@@ -7,9 +7,36 @@ import type { BuildTaskConfig, NativeTarget } from '../types/interfaces';
 import { listAvailableSimulators, listPhysicalDevices, type SimulatorDevice, type PhysicalDevice } from '../utils/simulator';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { getBuildSettingsForTarget, getProjectBuildSettings } from '../parsers/buildSettings';
-import { detectSupportedSwiftVersions } from '../utils/version';
+import { detectSupportedSwiftVersions, isXcodeFirstLaunchNeeded } from '../utils/version';
 
 const execFile = promisify(execFileCallback);
+
+let firstLaunchPrompted = false;
+
+export function promptXcodeFirstLaunch(): void {
+    if (firstLaunchPrompted) { return; }
+    firstLaunchPrompted = true;
+    vscode.window.showWarningMessage(
+        'Xcode requires initial setup before building.',
+        'Run Setup'
+    ).then((selection) => {
+        if (selection !== 'Run Setup') { return; }
+        const terminal = vscode.window.createTerminal('Xcode Setup');
+        terminal.show();
+        const send = () => terminal.sendText('xcodebuild -runFirstLaunch');
+        const listener = vscode.window.onDidChangeTerminalShellIntegration((e) => {
+            if (e.terminal === terminal) {
+                send();
+                listener.dispose();
+                clearTimeout(fallbackTimer);
+            }
+        });
+        const closeListener = vscode.window.onDidCloseTerminal((t) => {
+            if (t === terminal) { listener.dispose(); closeListener.dispose(); clearTimeout(fallbackTimer); }
+        });
+        const fallbackTimer = setTimeout(() => { listener.dispose(); send(); }, 3000);
+    });
+}
 
 // ── Tree item types ──────────────────────────────────────────────
 
@@ -237,7 +264,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 if (schemesMatch) {
                     schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 }
-            } catch { /* xcodebuild -list failed */ }
+            } catch (error) {
+                if (isXcodeFirstLaunchNeeded(error)) { promptXcodeFirstLaunch(); }
+            }
         }
 
         const [simulators, physicalDevices, supportedSwiftVersions] = await Promise.all([
@@ -336,7 +365,12 @@ export async function autoConfigureBuildTasks(
                     schemeName = schemes.find((s) => s === target.name) || schemes[0];
                 }
             }
-        } catch { /* xcodebuild -list failed */ }
+        } catch (error) {
+            if (isXcodeFirstLaunchNeeded(error)) {
+                promptXcodeFirstLaunch();
+                return false;
+            }
+        }
 
         const simulators = await listAvailableSimulators();
         if (simulators.length === 0) {
