@@ -772,6 +772,16 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.executeCommand('setContext', 'vsxcode.buildTasksConfigured', true);
     }
 
+    // Ensure Cmd+R and Cmd+Shift+B bypass terminal input (Kitty protocol in VS Code 1.109+ broke auto-skip)
+    const termConfig = vscode.workspace.getConfiguration('terminal.integrated');
+    const inspected = termConfig.inspect<string[]>('commandsToSkipShell');
+    const userSkipList = inspected?.globalValue || [];
+    const cmdsToSkip = ['vsxcode.sidebar.buildAndRun', 'vsxcode.sidebar.build'];
+    const missing = cmdsToSkip.filter((cmd) => !userSkipList.includes(cmd));
+    if (missing.length > 0) {
+        termConfig.update('commandsToSkipShell', [...userSkipList, ...missing], vscode.ConfigurationTarget.Global);
+    }
+
     // Register TaskProvider and DebugConfigurationProvider
     const buildTaskProvider = new XcodeBuildTaskProvider(context.workspaceState);
     const taskProvider = vscode.tasks.registerTaskProvider(TASK_TYPE, buildTaskProvider);
