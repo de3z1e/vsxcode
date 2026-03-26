@@ -90,7 +90,7 @@ XCTest integration via the VS Code Testing sidebar — tests are discovered from
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.4.10.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.4.11.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -98,5 +98,5 @@ XCTest integration via the VS Code Testing sidebar — tests are discovered from
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.4.10.vsix
+code --install-extension vsxcode-3.4.11.vsix
 ```

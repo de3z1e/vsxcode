@@ -65,7 +65,17 @@ export async function listAvailableSimulators(): Promise<SimulatorDevice[]> {
             .sort((a, b) => {
                 const aBooted = a.state === 'Booted' ? 0 : 1;
                 const bBooted = b.state === 'Booted' ? 0 : 1;
-                return aBooted - bBooted;
+                if (aBooted !== bBooted) { return aBooted - bBooted; }
+                const parseVersion = (runtime: string): number[] => {
+                    const match = runtime.match(/(\d+)-(\d+)(?:-(\d+))?$/);
+                    return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : [0, 0, 0];
+                };
+                const aVer = parseVersion(a.runtime);
+                const bVer = parseVersion(b.runtime);
+                for (let i = 0; i < 3; i++) {
+                    if (bVer[i] !== aVer[i]) { return bVer[i] - aVer[i]; }
+                }
+                return 0;
             });
     } catch {
         return [];
