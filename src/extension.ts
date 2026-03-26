@@ -1286,9 +1286,25 @@ export function activate(context: vscode.ExtensionContext): void {
             log('[physical-debug] install succeeded');
         } catch (error) {
             if (runId !== currentRunId) return;
+            const stderr = String((error as { stderr?: string }).stderr || '');
             const message = (error as { message?: string }).message || String(error);
+            const combined = stderr + message;
             log(`[physical-debug] install failed: ${message}`);
-            vscode.window.showErrorMessage(`Failed to install app on device: ${message}`);
+            if (combined.includes('Developer Disk Image') ||
+                combined.includes('Development services need to be enabled') ||
+                combined.includes('device is locked') ||
+                combined.includes('Ensure that the device is unlocked')) {
+                vscode.window.showErrorMessage(
+                    'Failed to install: device not ready. Unlock your device and ensure Developer Mode is enabled (Settings → Privacy & Security → Developer Mode).',
+                    'Learn More'
+                ).then((selection) => {
+                    if (selection === 'Learn More') {
+                        vscode.env.openExternal(vscode.Uri.parse('https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device'));
+                    }
+                });
+            } else {
+                vscode.window.showErrorMessage(`Failed to install app on device: ${message}`);
+            }
             return;
         }
 
