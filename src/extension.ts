@@ -25,7 +25,7 @@ import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resour
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady } from './utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, findDeviceSymbols } from './utils/simulator';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks, promptXcodeFirstLaunch } from './providers/sidebarProvider';
@@ -1363,17 +1363,43 @@ export function activate(context: vscode.ExtensionContext): void {
         log('[physical-debug] console task is running');
         buildTaskProvider.writeToConsole('\r\n\x1b[32m** APP LAUNCH SUCCEEDED **\x1b[0m\r\n\r\n');
 
-        // 6. Attach debugger by name (--waitfor finds the --start-stopped process)
+        // 6. Check for cached device symbols (Xcode's iOS DeviceSupport)
+        const physicalDevice = sidebarProvider.getProjectData()?.physicalDevices.find(
+            d => d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier
+        );
+        let symbolsPath: string | undefined;
+        if (physicalDevice) {
+            symbolsPath = await findDeviceSymbols(physicalDevice);
+            if (!symbolsPath) {
+                log(`[physical-debug] no cached symbols for ${physicalDevice.productType} ${physicalDevice.osVersion} (${physicalDevice.osBuildVersion})`);
+                vscode.window.showWarningMessage(
+                    `No cached device symbols for iOS ${physicalDevice.osVersion}. Debugging will be slower. Open Xcode with this device connected to download symbols.`,
+                    'Open Xcode'
+                ).then((action) => {
+                    if (action === 'Open Xcode') {
+                        execFile('open', ['-a', 'Xcode'], { encoding: 'utf8' }).catch(() => {});
+                    }
+                });
+            } else {
+                log(`[physical-debug] found cached symbols at ${symbolsPath}`);
+            }
+        }
+
+        // 7. Attach debugger by name (--waitfor finds the --start-stopped process)
+        const initCommands = [
+            'platform select remote-ios',
+            'settings set target.process.stop-on-sharedlibrary-events false',
+        ];
+        if (symbolsPath) {
+            initCommands.push(`settings append target.exec-search-paths "${symbolsPath}"`);
+        }
         const debugConfig: vscode.DebugConfiguration = {
             type: 'lldb-dap',
             request: 'attach',
             name: `Debug ${config.productName} (Device)`,
             program: appPath,
             stopOnEntry: false,
-            initCommands: [
-                'platform select remote-ios',
-                'settings set target.process.stop-on-sharedlibrary-events false',
-            ],
+            initCommands,
             attachCommands: [
                 `device select ${devId}`,
                 `device process attach --name ${config.productName} --waitfor --include-existing`,
