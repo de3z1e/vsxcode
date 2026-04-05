@@ -1204,13 +1204,31 @@ export function activate(context: vscode.ExtensionContext): void {
         if (runId !== currentRunId) return;
         log('[simulator-debug] install succeeded');
 
-        // 3. Launch app with console streaming via task
+        // 3. Start debugger first so it's watching before the app process appears.
+        //    --include-existing handles the race where simctl creates the process
+        //    before lldb begins polling (same pattern as physical-device flow).
         const folder = vscode.workspace.workspaceFolders?.[0];
         if (!folder) {
             vscode.window.showErrorMessage('No workspace folder found.');
             return;
         }
 
+        const debugConfig: vscode.DebugConfiguration = {
+            type: 'lldb-dap',
+            request: 'attach',
+            name: `Debug ${config.productName}`,
+            stopOnEntry: false,
+            initCommands: [
+                'settings set target.process.stop-on-sharedlibrary-events false',
+            ],
+            attachCommands: [
+                `process attach --name ${config.productName} --waitfor --include-existing`
+            ]
+        };
+        log('[simulator-debug] starting debug session...');
+        const debugStarted = vscode.debug.startDebugging(folder, debugConfig);
+
+        // 4. Launch app with console streaming via task (debugger is already watching)
         const allTasks = await vscode.tasks.fetchTasks();
         const launchTask = allTasks.find((t) => t.name === 'Run and Debug');
         if (!launchTask) {
@@ -1221,18 +1239,7 @@ export function activate(context: vscode.ExtensionContext): void {
         consoleExecution = await vscode.tasks.executeTask(launchTask);
         if (runId !== currentRunId) return;
 
-        // 4. Attach debugger
-        const debugConfig: vscode.DebugConfiguration = {
-            type: 'lldb-dap',
-            request: 'attach',
-            name: `Debug ${config.productName}`,
-            stopOnEntry: false,
-            attachCommands: [
-                `process attach --name ${config.productName} --waitfor`
-            ]
-        };
-        log('[simulator-debug] starting debug session...');
-        const started = await vscode.debug.startDebugging(folder, debugConfig);
+        const started = await debugStarted;
         if (!started) {
             log('[simulator-debug] debug session failed to start');
             buildTaskProvider.writeToConsole('\r\n\x1b[31m** APP LAUNCH FAILED **\x1b[0m\r\n\r\n');
