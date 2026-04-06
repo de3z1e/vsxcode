@@ -1218,11 +1218,9 @@ export function activate(context: vscode.ExtensionContext): void {
             request: 'attach',
             name: `Debug ${config.productName}`,
             stopOnEntry: false,
-            initCommands: [
-                'settings set target.process.stop-on-sharedlibrary-events false',
-            ],
             attachCommands: [
-                `process attach --name ${config.productName} --waitfor --include-existing`
+                `process attach --name ${config.productName} --waitfor --include-existing`,
+                'settings set target.process.stop-on-sharedlibrary-events false',
             ]
         };
         log('[simulator-debug] starting debug session...');
@@ -1395,7 +1393,6 @@ export function activate(context: vscode.ExtensionContext): void {
         // 7. Attach debugger by name (--waitfor finds the --start-stopped process)
         const initCommands = [
             'platform select remote-ios',
-            'settings set target.process.stop-on-sharedlibrary-events false',
         ];
         if (symbolsPath) {
             initCommands.push(`settings append target.exec-search-paths "${symbolsPath}"`);
@@ -1410,6 +1407,7 @@ export function activate(context: vscode.ExtensionContext): void {
             attachCommands: [
                 `device select ${devId}`,
                 `device process attach --name ${config.productName} --waitfor --include-existing`,
+                'settings set target.process.stop-on-sharedlibrary-events false',
             ],
         };
         log('[physical-debug] starting debug session...');
