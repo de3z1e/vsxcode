@@ -304,7 +304,6 @@ export class XCTestController implements vscode.Disposable {
                 stopOnEntry: false,
                 attachCommands: [
                     `process attach --name ${config.productName} --waitfor --include-existing`,
-                    'settings set target.process.stop-on-sharedlibrary-events false',
                 ]
             };
             vscode.debug.startDebugging(folder, debugConfig);

@@ -1220,10 +1220,10 @@ export function activate(context: vscode.ExtensionContext): void {
             stopOnEntry: false,
             attachCommands: [
                 `process attach --name ${config.productName} --waitfor --include-existing`,
-                'settings set target.process.stop-on-sharedlibrary-events false',
             ]
         };
         log('[simulator-debug] starting debug session...');
+        dyldResumeUntil = Date.now() + 10_000;
         const debugStarted = vscode.debug.startDebugging(folder, debugConfig);
 
         // 4. Launch app with console streaming via task (debugger is already watching)
@@ -1407,10 +1407,10 @@ export function activate(context: vscode.ExtensionContext): void {
             attachCommands: [
                 `device select ${devId}`,
                 `device process attach --name ${config.productName} --waitfor --include-existing`,
-                'settings set target.process.stop-on-sharedlibrary-events false',
             ],
         };
         log('[physical-debug] starting debug session...');
+        dyldResumeUntil = Date.now() + 10_000;
         const started = await vscode.debug.startDebugging(folder, debugConfig);
         if (!started) {
             log('[physical-debug] debug session failed to start');
@@ -1488,6 +1488,79 @@ export function activate(context: vscode.ExtensionContext): void {
     const swiftWatcherDisposables = createSwiftFileWatcher(projectRoot, log);
     context.subscriptions.push(...swiftWatcherDisposables);
 
+    // ── Auto-continue past debugger-internal stops ──────────────
+    //
+    // Two stops occur on every physical-device launch that must be
+    // silently continued:
+    //
+    // 1. Initial attach stop (reason=none) — the process was launched
+    //    with --start-stopped; lldb-dap reports a stop with no reason
+    //    before configurationDone continues it.
+    //
+    // 2. SIGSTOP from --start-stopped (reason=exception,
+    //    description="signal SIGSTOP") — delivered during early dyld
+    //    execution (lldb_image_notifier / start).
+    //
+    // Additionally, lldb-dap has a bug (fixed in LLVM PR #173848, not
+    // yet in Xcode) where internal breakpoint stops leak through.
+    // Internal breakpoint IDs are negative in LLDB.
+    //
+    // Detection:
+    //   • SIGSTOP exception  → always safe to continue (debugger artifact)
+    //   • All-negative bp IDs → internal breakpoint → always continue
+    //   • No IDs / no reason → initial attach → continue within 10s window
+
+    let dyldResumeUntil = 0;
+
+    const dyldTracker = vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', {
+        createDebugAdapterTracker(session) {
+            return {
+                onDidSendMessage(message: any) {
+                    if (message.type !== 'event' || message.event !== 'stopped') return;
+
+                    const body = message.body || {};
+                    const ids: number[] = body.hitBreakpointIds ?? [];
+                    const desc: string = body.description ?? '';
+
+                    // SIGSTOP from --start-stopped is a debugger artifact, not a crash.
+                    // Always safe to auto-continue regardless of timing.
+                    if (body.reason === 'exception' && desc.startsWith('signal SIGSTOP')) {
+                        log('[debug-tracker] auto-continuing past SIGSTOP');
+                        Promise.resolve(session.customRequest('continue', {
+                            threadId: body.threadId ?? 1,
+                        })).catch(() => {});
+                        return;
+                    }
+
+                    // Real exceptions (EXC_BAD_ACCESS, SIGABRT, etc.) — never swallow
+                    if (body.reason === 'exception') return;
+
+                    // Internal breakpoints have negative IDs in LLDB
+                    // (LLDB_BREAK_ID_IS_INTERNAL(bid) = bid < 0).
+                    // If ANY hitBreakpointIds is >= 0, a user breakpoint was hit.
+                    if (ids.length > 0 && ids.some((id) => id >= 0)) return;
+
+                    // Stops with all-negative IDs are internal (dyld) — always resume.
+                    if (ids.length > 0) {
+                        log('[debug-tracker] auto-continuing past internal breakpoint');
+                        Promise.resolve(session.customRequest('continue', {
+                            threadId: body.threadId ?? 1,
+                        })).catch(() => {});
+                        return;
+                    }
+
+                    // Stops without IDs or reason (initial attach) — resume during window.
+                    if (Date.now() > dyldResumeUntil) return;
+
+                    log('[debug-tracker] auto-continuing past initial attach stop');
+                    Promise.resolve(session.customRequest('continue', {
+                        threadId: body.threadId ?? 1,
+                    })).catch(() => {});
+                },
+            };
+        },
+    });
+
     // ── Debug cleanup ──────────────────────────────────────────
 
     const onDebugEnd = vscode.debug.onDidTerminateDebugSession(async (session) => {
@@ -1531,7 +1604,7 @@ export function activate(context: vscode.ExtensionContext): void {
         taskProvider, debugProvider, treeView, testController,
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
         selectSimulatorCmd, changeSwiftVersionCmd, changeStrictConcurrencyCmd, buildCmd, buildAndRunCmd, refreshCmd,
-        watcher, onProjectChange, onDebugStart, onDebugEnd,
+        watcher, onProjectChange, dyldTracker, onDebugStart, onDebugEnd,
         outputChannel
     );
 
