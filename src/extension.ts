@@ -617,7 +617,7 @@ function printToSharedPanel(message: string, color = '33'): void {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) return;
     const task = new vscode.Task(
-        { type: 'shell' },
+        { type: 'xcode-message' },
         folder,
         'Print Message',
         'vsxcode',
