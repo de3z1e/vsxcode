@@ -1223,7 +1223,6 @@ export function activate(context: vscode.ExtensionContext): void {
             ]
         };
         log('[simulator-debug] starting debug session...');
-        dyldResumeUntil = Date.now() + 10_000;
         const debugStarted = vscode.debug.startDebugging(folder, debugConfig);
 
         // 4. Launch app with console streaming via task (debugger is already watching)
@@ -1410,7 +1409,6 @@ export function activate(context: vscode.ExtensionContext): void {
             ],
         };
         log('[physical-debug] starting debug session...');
-        dyldResumeUntil = Date.now() + 10_000;
         const started = await vscode.debug.startDebugging(folder, debugConfig);
         if (!started) {
             log('[physical-debug] debug session failed to start');
@@ -1490,40 +1488,53 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Auto-continue past debugger-internal stops ──────────────
     //
-    // Two stops occur on every physical-device launch that must be
-    // silently continued:
+    // Physical-device launches with --start-stopped generate several stops
+    // that must be silently continued:
     //
-    // 1. Initial attach stop (reason=none) — the process was launched
-    //    with --start-stopped; lldb-dap reports a stop with no reason
-    //    before configurationDone continues it.
+    // 1. Initial attach stop (reason=none) — lldb-dap reports a stop with
+    //    no reason during attach. Usually handled internally via
+    //    configurationDone, but can leak through afterward.
     //
     // 2. SIGSTOP from --start-stopped (reason=exception,
     //    description="signal SIGSTOP") — delivered during early dyld
     //    execution (lldb_image_notifier / start).
     //
-    // Additionally, lldb-dap has a bug (fixed in LLVM PR #173848, not
-    // yet in Xcode) where internal breakpoint stops leak through.
-    // Internal breakpoint IDs are negative in LLDB.
+    // 3. Internal breakpoint stops (negative IDs in LLDB). This is a
+    //    lldb-dap bug (fixed in LLVM PR #173848, not yet in Xcode).
     //
-    // Detection:
-    //   • SIGSTOP exception  → always safe to continue (debugger artifact)
-    //   • All-negative bp IDs → internal breakpoint → always continue
-    //   • No IDs / no reason → initial attach → continue within 10s window
-
-    let dyldResumeUntil = 0;
+    // Gate: auto-continue only fires AFTER the `configurationDone` response
+    // is sent by the adapter. Stops arriving before that are part of
+    // lldb-dap's launch sequence — resuming them there races the adapter's
+    // state machine and triggers "Expected process to be stopped" errors
+    // (observed on USB, where low latency causes `stopped` events to
+    // arrive before configurationDone; Wi-Fi latency usually hides it).
+    //
+    // Post-configurationDone classification:
+    //   • SIGSTOP exception  → continue (debugger artifact)
+    //   • All-negative bp IDs → continue (internal breakpoint)
+    //   • No IDs / no reason → continue (leaked initial attach)
 
     const dyldTracker = vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', {
         createDebugAdapterTracker(session) {
+            let configDoneAck = false;
             return {
                 onDidSendMessage(message: any) {
+                    // Unlock auto-continue once lldb-dap confirms configurationDone.
+                    if (message.type === 'response' && message.command === 'configurationDone' && message.success) {
+                        configDoneAck = true;
+                        return;
+                    }
+
                     if (message.type !== 'event' || message.event !== 'stopped') return;
+
+                    // Pre-launch stops are owned by lldb-dap. Leave them alone.
+                    if (!configDoneAck) return;
 
                     const body = message.body || {};
                     const ids: number[] = body.hitBreakpointIds ?? [];
                     const desc: string = body.description ?? '';
 
                     // SIGSTOP from --start-stopped is a debugger artifact, not a crash.
-                    // Always safe to auto-continue regardless of timing.
                     if (body.reason === 'exception' && desc.startsWith('signal SIGSTOP')) {
                         log('[debug-tracker] auto-continuing past SIGSTOP');
                         Promise.resolve(session.customRequest('continue', {
@@ -1540,7 +1551,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     // If ANY hitBreakpointIds is >= 0, a user breakpoint was hit.
                     if (ids.length > 0 && ids.some((id) => id >= 0)) return;
 
-                    // Stops with all-negative IDs are internal (dyld) — always resume.
+                    // Stops with all-negative IDs are internal (dyld) — resume.
                     if (ids.length > 0) {
                         log('[debug-tracker] auto-continuing past internal breakpoint');
                         Promise.resolve(session.customRequest('continue', {
@@ -1549,9 +1560,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         return;
                     }
 
-                    // Stops without IDs or reason (initial attach) — resume during window.
-                    if (Date.now() > dyldResumeUntil) return;
-
+                    // Leaked initial-attach stop after configurationDone.
                     log('[debug-tracker] auto-continuing past initial attach stop');
                     Promise.resolve(session.customRequest('continue', {
                         threadId: body.threadId ?? 1,
