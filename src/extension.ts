@@ -14,7 +14,7 @@ import type {
     SwiftPackageProductDependency
 } from './types/interfaces';
 import { DEFAULT_SWIFT_VERSION } from './types/constants';
-import { detectSwiftToolsVersion, parseSwiftVersion, cleanup, compareVersions, isXcodeFirstLaunchNeeded } from './utils/version';
+import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, cleanup, compareVersions, isXcodeFirstLaunchNeeded } from './utils/version';
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
@@ -76,6 +76,24 @@ function parseDeploymentTargets(pbxContents: string): DeploymentTarget[] {
     return Array.from(found.entries()).map(([platform, version]) => ({ platform, version }));
 }
 
+// Required for SourceKit-LSP intellisense on iOS-only packages: its background
+// index build runs `swift build` against the host platform, which fails to
+// plan without macOS — leaving the user's target unindexed.
+async function ensureMacOSPlatform(platforms: DeploymentTarget[]): Promise<DeploymentTarget[]> {
+    const detectedVersion = await detectMacOSVersion();
+    if (!detectedVersion) {
+        return platforms;
+    }
+    const next = platforms.slice();
+    const macIndex = next.findIndex(({ platform }) => platform === 'macOS');
+    const macEntry: DeploymentTarget = { platform: 'macOS', version: detectedVersion };
+    if (macIndex === -1) {
+        next.push(macEntry);
+    } else {
+        next[macIndex] = macEntry;
+    }
+    return next;
+}
 
 function resolveSwiftLanguageMode(swiftVersion: string | undefined): string | undefined {
     if (!swiftVersion) {
@@ -182,7 +200,7 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
 
     const swiftVersion =
         (await detectSwiftToolsVersion()) || parseSwiftVersion(pbxContents) || DEFAULT_SWIFT_VERSION;
-    const platforms = parseDeploymentTargets(pbxContents);
+    const platforms = await ensureMacOSPlatform(parseDeploymentTargets(pbxContents));
     const defaultLocalization = parseDefaultLocalization(pbxContents);
     const nativeTargets = parseNativeTargets(pbxContents);
     const packageReferences = parseSwiftPackageReferences(pbxContents);
