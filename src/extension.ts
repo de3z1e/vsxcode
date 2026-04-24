@@ -313,8 +313,9 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         const resources = parseResourcesForTarget(pbxContents, buildPhases.resourcesBuildPhaseId, targetAbsolutePath);
         const excluded = parseExcludedFiles(pbxContents, nativeTarget.name);
 
+        const isSynchronized = nativeTarget.fileSystemSynchronizedGroupIds.length > 0;
         const { additionalExcludes, additionalResources } = scanForUnhandledFiles(
-            targetAbsolutePath, resources, excluded
+            targetAbsolutePath, resources, excluded, isSynchronized
         );
         const allResources = [...resources, ...additionalResources];
         const allExcludes = [...excluded, ...additionalExcludes];

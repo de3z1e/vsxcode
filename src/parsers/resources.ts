@@ -115,7 +115,8 @@ export function resolveResourcePaths(
 export function scanForUnhandledFiles(
     targetAbsolutePath: string,
     existingResources: ResourceOutput[],
-    existingExcludes: string[]
+    existingExcludes: string[],
+    isSynchronized: boolean = false
 ): { additionalExcludes: string[]; additionalResources: ResourceOutput[] } {
     const additionalExcludes: string[] = [];
     const additionalResources: ResourceOutput[] = [];
@@ -160,6 +161,13 @@ export function scanForUnhandledFiles(
                 }
                 if (SPM_AUTO_EXCLUDE_FILENAMES.has(entry.name) || SPM_AUTO_EXCLUDE_EXTENSIONS.has(ext)) {
                     additionalExcludes.push(relPath);
+                } else if (isSynchronized) {
+                    // Synchronized targets have an empty PBXResourcesBuildPhase but
+                    // xcodebuild still bundles every loose file in the folder. Mirror
+                    // that here so the SPM index build's "unhandled file" warnings stay
+                    // quiet and a real error never gets buried in the noise.
+                    const type = PROCESSABLE_RESOURCE_EXTENSIONS.has(ext) ? '.process' : '.copy';
+                    additionalResources.push({ type, path: relPath });
                 }
             }
         }

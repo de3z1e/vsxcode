@@ -64,6 +64,7 @@ export const SPM_AUTO_EXCLUDE_EXTENSIONS = new Set([
 export const SPM_RESOURCE_DIR_EXTENSIONS = new Set([
     '.xcdatamodeld', '.xcdatamodel', '.xcmappingmodel',
     '.xcassets', '.storyboard', '.xib',
-    '.lproj', '.mlmodel', '.mlpackage', '.bundle'
+    '.lproj', '.mlmodel', '.mlpackage', '.bundle',
+    '.icon'
 ]);
 
