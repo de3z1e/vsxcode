@@ -83,6 +83,10 @@ XCTest integration via the VS Code Testing sidebar — tests are discovered from
 | ⌘R | — | Build, install, and launch with debugger attached |
 | ⌘⇧B | Build tasks configured | Build (or build-for-testing when a test target is selected) |
 
+### AI agent usage
+
+Working with an AI coding assistant in a Swift project that uses VSXcode? Point your agent at [docs/AGENT_README.md](docs/AGENT_README.md) — it documents what the extension does automatically (so the agent doesn't duplicate the work) and how to invoke its build/run/debug/test capabilities (so the agent uses the wired-up tasks instead of constructing raw `xcodebuild` commands).
+
 ### Dependencies
 
 - [Swift for VS Code](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode) — automatically installed as a dependency. Provides SourceKit-LSP support and includes LLDB DAP for debugging.
@@ -90,7 +94,7 @@ XCTest integration via the VS Code Testing sidebar — tests are discovered from
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.4.17.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.5.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -98,5 +102,5 @@ XCTest integration via the VS Code Testing sidebar — tests are discovered from
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.4.17.vsix
+code --install-extension vsxcode-3.5.0.vsix
 ```
