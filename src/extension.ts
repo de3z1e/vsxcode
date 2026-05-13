@@ -34,6 +34,15 @@ import { updateBuildSetting } from './writers/pbxproj';
 import { createSwiftFileWatcher } from './sync/swiftFileSync';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
 import { CodeQualityWebviewProvider } from './providers/codeQualityWebviewProvider';
+import {
+    resolveBundleIdForLaunch,
+    parseBundleIdFromPbxproj,
+    listInstalledSimulatorApps,
+    uninstallSimulatorApp,
+    getInstalledAppExecutableMtime,
+    formatMtime,
+    readInfoPlistDisplayNames,
+} from './utils/bundleId';
 import type { BuildTaskConfig } from './types/interfaces';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
@@ -512,28 +521,12 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         selectedTarget = nativeTargets.find((t) => t.name === pick.targetName)!;
     }
 
-    let bundleIdentifier = '';
     let resolvedProductName = selectedTarget.productName || selectedTarget.name;
     if (selectedTarget.buildConfigurationListId) {
         const settings = getBuildSettingsForTarget(pbxContents, selectedTarget.buildConfigurationListId, 'Debug');
-        bundleIdentifier = settings?.bundleIdentifier || '';
         if (settings?.productName && !settings.productName.includes('$(')) {
             resolvedProductName = settings.productName;
         }
-    }
-    if (!bundleIdentifier) {
-        const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
-        bundleIdentifier = projectSettings?.bundleIdentifier || '';
-    }
-    if (!bundleIdentifier) {
-        const input = await vscode.window.showInputBox({
-            prompt: 'Could not detect bundle identifier. Please enter it manually.',
-            placeHolder: 'com.example.MyApp'
-        });
-        if (!input) {
-            return;
-        }
-        bundleIdentifier = input;
     }
 
     const [simulators, physicalDevices] = await Promise.all([
@@ -601,7 +594,6 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         schemeName,
         targetName: selectedTarget.name,
         productName: resolvedProductName,
-        bundleIdentifier,
         simulatorDevice: simulatorPick.label,
         simulatorUdid: simulatorPick.udid,
         isPhysicalDevice: simulatorPick.isPhysical,
@@ -689,6 +681,88 @@ function executeTaskAndWait(task: vscode.Task, onStart?: (exec: vscode.TaskExecu
         const execution = await vscode.tasks.executeTask(task);
         onStart?.(execution);
     });
+}
+
+// Watch pbxproj for PRODUCT_BUNDLE_IDENTIFIER renames so we can offer to
+// remove the previous install from the selected simulator/device. The
+// previous id is remembered in process memory only — pbxproj is the
+// source of truth, this is just session-scoped state for detecting the
+// "edit happened just now" transition.
+let lastKnownPbxBundleId: string | undefined;
+let lastRenameNotifiedFor: string | undefined;
+async function handlePossibleBundleIdRename(
+    log: (message: string) => void,
+    workspaceState: vscode.Memento,
+    projectRoot: string,
+): Promise<void> {
+    const config = workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+    if (!config) { return; }
+    const pbxprojPath = path.join(projectRoot, config.projectFile, 'project.pbxproj');
+    const fromPbx = await parseBundleIdFromPbxproj(pbxprojPath, config.targetName, 'Debug');
+    if (!fromPbx) { return; }
+    const previous = lastKnownPbxBundleId;
+    lastKnownPbxBundleId = fromPbx;
+    if (!previous) { return; }
+    if (previous === fromPbx) { return; }
+    // Skip interpolated templates — comparing a raw template to a
+    // previously-resolved value would produce false positives.
+    if (fromPbx.includes('$(') || previous.includes('$(')) { return; }
+    const renameKey = `${previous}→${fromPbx}`;
+    if (lastRenameNotifiedFor === renameKey) { return; }
+    lastRenameNotifiedFor = renameKey;
+
+    log(`[pbxproj-watcher] bundle id rename detected: "${previous}" → "${fromPbx}"`);
+    const choice = await vscode.window.showWarningMessage(
+        `Bundle id changed: ${previous} → ${fromPbx}. The previous install may linger on your simulator/device and appear as a duplicate icon. Uninstall it?`,
+        'Uninstall',
+        'Keep',
+    );
+    if (choice !== 'Uninstall') { return; }
+
+    const cp = await import('child_process');
+    if (config.simulatorUdid && !config.isPhysicalDevice) {
+        log(`[pbxproj-watcher] uninstalling "${previous}" from simulator ${config.simulatorUdid}`);
+        await new Promise<void>((resolve) => {
+            cp.exec(`xcrun simctl uninstall "${config.simulatorUdid}" "${previous}"`, () => resolve());
+        });
+    }
+    if (config.deviceIdentifier && config.isPhysicalDevice) {
+        log(`[pbxproj-watcher] uninstalling "${previous}" from device ${config.deviceIdentifier}`);
+        await new Promise<void>((resolve) => {
+            cp.exec(`xcrun devicectl device uninstall app --device "${config.deviceIdentifier}" "${previous}"`, () => resolve());
+        });
+    }
+}
+
+// Renaming PRODUCT_BUNDLE_IDENTIFIER leaves the previous install on the
+// simulator under the old bundle id while the new build installs under
+// the new one — two icons, one running stale code. Detect that twin
+// install and offer to remove it.
+async function offerSimulatorTwinUninstall(
+    log: (message: string) => void,
+    udid: string,
+    appPath: string,
+    newBundleId: string,
+): Promise<void> {
+    const newNames = await readInfoPlistDisplayNames(path.join(appPath, 'Info.plist'));
+    const productName = newNames.name;
+    if (!productName) { return; }
+    const installed = await listInstalledSimulatorApps(udid);
+    const twin = installed.find((app) =>
+        app.bundleId !== newBundleId && app.bundleName === productName
+    );
+    if (!twin) { return; }
+    const twinLabel = twin.displayName || twin.bundleName || twin.bundleId;
+    log(`[simulator-debug] found product-name twin: "${twinLabel}" (${twin.bundleId})`);
+    const choice = await vscode.window.showWarningMessage(
+        `Another app with the same product name is installed on the simulator: "${twinLabel}" (${twin.bundleId}). It probably belongs to a previous bundle id and will appear as a duplicate icon. Uninstall it?`,
+        'Uninstall',
+        'Keep',
+    );
+    if (choice === 'Uninstall') {
+        log(`[simulator-debug] uninstalling twin ${twin.bundleId}`);
+        await uninstallSimulatorApp(udid, twin.bundleId);
+    }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -816,12 +890,30 @@ export function activate(context: vscode.ExtensionContext): void {
     autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
     generatePackageSwift(projectRoot, 'Debug', true).catch(() => {});
 
+    // Seed the rename detector so the very next pbxproj edit can be
+    // compared against the current value (otherwise the first watcher
+    // fire after activation would just seed without notifying). Guard
+    // against the watcher racing this IIFE: if pbxproj is saved during
+    // the parse, the watcher handler may set lastKnownPbxBundleId to a
+    // newer value first; only seed if still unset to avoid overwriting
+    // with a stale snapshot.
+    (async () => {
+        const current = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+        if (!current) { return; }
+        const pbxprojPath = path.join(projectRoot, current.projectFile, 'project.pbxproj');
+        const seed = await parseBundleIdFromPbxproj(pbxprojPath, current.targetName, 'Debug');
+        if (seed && lastKnownPbxBundleId === undefined) { lastKnownPbxBundleId = seed; }
+    })();
+
     // Helper to patch config and refresh sidebar
     async function updateConfig(patch: Partial<BuildTaskConfig>): Promise<void> {
         const current = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
         if (!current) { return; }
         await context.workspaceState.update('buildTaskConfig', { ...current, ...patch });
-        sidebarProvider.notifyConfigChanged();
+        // Changing project/target/scheme/device invalidates target-keyed
+        // data (bundleIdByTarget) and simulator-keyed data
+        // (staleSimulatorInstalls), so reload rather than just redraw.
+        sidebarProvider.refresh();
     }
 
     // ── Package.swift commands ────────────────────────────────
@@ -924,7 +1016,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 const target = data.targets.find((t) => t.name === pick.targetName)!;
                 const rootPath = vscode.workspace.workspaceFolders![0].uri.fsPath;
                 const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
-                let bundleIdentifier = config.bundleIdentifier;
                 let productName = target.productName || target.name;
                 try {
                     const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
@@ -932,15 +1023,12 @@ export function activate(context: vscode.ExtensionContext): void {
                         const settings = getBuildSettingsForTarget(
                             pbxContents, target.buildConfigurationListId, 'Debug'
                         );
-                        if (settings?.bundleIdentifier) {
-                            bundleIdentifier = settings.bundleIdentifier;
-                        }
                         if (settings?.productName && !settings.productName.includes('$(')) {
                             productName = settings.productName;
                         }
                     }
                 } catch { /* use existing values */ }
-                await updateConfig({ targetName: pick.targetName, productName, bundleIdentifier });
+                await updateConfig({ targetName: pick.targetName, productName });
             }
         }
     );
@@ -972,14 +1060,59 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
+            const data = sidebarProvider.getProjectData();
+            const currentValue = data?.bundleIdByTarget[config.targetName] || '';
             const input = await vscode.window.showInputBox({
-                prompt: 'Enter bundle identifier',
-                value: config.bundleIdentifier,
-                placeHolder: 'com.example.MyApp'
+                prompt: 'Bundle Identifier',
+                value: currentValue,
+                placeHolder: 'com.example.MyApp',
             });
-            if (input !== undefined) {
-                await updateConfig({ bundleIdentifier: input });
+            if (input === undefined || input === currentValue) { return; }
+
+            const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!rootPath) { return; }
+            const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
+            try {
+                let pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+                const target = data?.targets.find(t => t.name === config.targetName);
+                if (!target?.buildConfigurationListId) { return; }
+                const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
+                for (const configId of configIds) {
+                    pbxContents = updateBuildSetting(pbxContents, configId, 'PRODUCT_BUNDLE_IDENTIFIER', input);
+                }
+                await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
+            } catch (e) {
+                vscode.window.showErrorMessage(`Failed to update PRODUCT_BUNDLE_IDENTIFIER: ${(e as Error).message}`);
             }
+        }
+    );
+
+    const uninstallStaleAppsCmd = vscode.commands.registerCommand(
+        'vsxcode.sidebar.uninstallStaleAppsOnSimulator',
+        async () => {
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            const data = sidebarProvider.getProjectData();
+            if (!config || !data) { return; }
+            const stale = data.staleSimulatorInstalls;
+            if (stale.length === 0) {
+                vscode.window.showInformationMessage('No stale apps detected on the selected simulator.');
+                return;
+            }
+            const summary = stale.map(s => `"${s.displayName || s.bundleName || s.bundleId}" (${s.bundleId})`).join(', ');
+            const choice = await vscode.window.showWarningMessage(
+                `Uninstall ${stale.length} orphan app(s) from ${config.simulatorDevice}? ${summary}`,
+                'Uninstall',
+                'Cancel',
+            );
+            if (choice !== 'Uninstall') { return; }
+            const cp = await import('child_process');
+            for (const app of stale) {
+                log(`[stale-uninstall] uninstalling "${app.bundleId}" from simulator ${config.simulatorUdid}`);
+                await new Promise<void>((resolve) => {
+                    cp.exec(`xcrun simctl uninstall "${config.simulatorUdid}" "${app.bundleId}"`, () => resolve());
+                });
+            }
+            sidebarProvider.refresh();
         }
     );
 
@@ -1206,14 +1339,29 @@ export function activate(context: vscode.ExtensionContext): void {
         const homeDir = require('os').homedir();
         const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphonesimulator', `${config.productName}.app`);
 
+        const resolved = await resolveBundleIdForLaunch({
+            appPath,
+            pbxprojPath: path.join(projectRoot, config.projectFile, 'project.pbxproj'),
+            targetName: config.targetName,
+        });
+        if (!resolved) {
+            log('[simulator-debug] ERROR: could not resolve bundle id (no Info.plist, no pbxproj)');
+            vscode.window.showErrorMessage('Could not resolve bundle id for launch. Check the build output.');
+            return;
+        }
+        const bundleId = resolved.bundleId;
+
+        await offerSimulatorTwinUninstall(log, udid, appPath, bundleId);
+        if (runId !== currentRunId) return;
+
         // 2. Boot simulator and install app
         const cp = await import('child_process');
-        log('[simulator-debug] booting simulator and installing app...');
+        log(`[simulator-debug] installing ${appPath} (bundleId=${bundleId}, source=${resolved.source})`);
         await new Promise<void>((resolve, reject) => {
             cp.exec(
                 [
                     `xcrun simctl boot "${udid}" 2>/dev/null || true`,
-                    `xcrun simctl terminate "${udid}" "${config.bundleIdentifier}" 2>/dev/null || true`,
+                    `xcrun simctl terminate "${udid}" "${bundleId}" 2>/dev/null || true`,
                     `xcrun simctl install "${udid}" "${appPath}"`,
                     'open -a Simulator',
                 ].join(' && '),
@@ -1221,7 +1369,14 @@ export function activate(context: vscode.ExtensionContext): void {
             );
         });
         if (runId !== currentRunId) return;
-        log('[simulator-debug] install succeeded');
+        sidebarProvider.refresh();
+        const mtimeInfo = await getInstalledAppExecutableMtime(udid, bundleId);
+        if (mtimeInfo) {
+            log(`[simulator-debug] install succeeded — executable mtime ${formatMtime(mtimeInfo.mtimeMs)} (${path.basename(mtimeInfo.executablePath)})`);
+        } else {
+            log('[simulator-debug] install succeeded');
+        }
+        log(`[simulator-debug] launching ${bundleId}`);
 
         // 3. Start debugger first so it's watching before the app process appears.
         //    --include-existing handles the race where simctl creates the process
@@ -1302,9 +1457,20 @@ export function activate(context: vscode.ExtensionContext): void {
         const homeDir = require('os').homedir();
         const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphoneos', `${config.productName}.app`);
 
+        const resolved = await resolveBundleIdForLaunch({
+            appPath,
+            pbxprojPath: path.join(projectRoot, config.projectFile, 'project.pbxproj'),
+            targetName: config.targetName,
+        });
+        if (!resolved) {
+            log('[physical-debug] ERROR: could not resolve bundle id (no Info.plist, no pbxproj)');
+            vscode.window.showErrorMessage('Could not resolve bundle id for launch. Check the build output.');
+            return;
+        }
+
         // 2. Install app on device
         try {
-            log(`[physical-debug] installing ${config.productName}.app on device...`);
+            log(`[physical-debug] installing ${appPath} (bundleId=${resolved.bundleId}, source=${resolved.source}) on device...`);
             await devicectlInstall(devId, appPath);
             if (runId !== currentRunId) return;
             log('[physical-debug] install succeeded');
@@ -1498,6 +1664,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 log(`[file-watcher] Package.swift regen failed: ${message}`);
             });
         }
+        await handlePossibleBundleIdRename(log, context.workspaceState, projectRoot);
     });
 
     // ── Swift file watcher (auto-sync to pbxproj) ─────────────
@@ -1604,15 +1771,24 @@ export function activate(context: vscode.ExtensionContext): void {
         // a separate process not in our group), then killConsoleProcess ends the
         // monitoring process (simctl launch --console-pty) and completes the task.
         if (config && !config.isPhysicalDevice) {
-            const cp = await import('child_process');
-            const udid = config.simulatorUdid || config.simulatorDevice;
-            log(`[debug-end] terminating app "${config.bundleIdentifier}" on simulator`);
-            await new Promise<void>((resolve) => {
-                cp.exec(
-                    `xcrun simctl terminate "${udid}" "${config.bundleIdentifier}"`,
-                    () => resolve()
-                );
+            const homeDir = require('os').homedir();
+            const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphonesimulator', `${config.productName}.app`);
+            const resolved = await resolveBundleIdForLaunch({
+                appPath,
+                pbxprojPath: path.join(projectRoot, config.projectFile, 'project.pbxproj'),
+                targetName: config.targetName,
             });
+            if (resolved) {
+                const cp = await import('child_process');
+                const udid = config.simulatorUdid || config.simulatorDevice;
+                log(`[debug-end] terminating app "${resolved.bundleId}" on simulator`);
+                await new Promise<void>((resolve) => {
+                    cp.exec(
+                        `xcrun simctl terminate "${udid}" "${resolved.bundleId}"`,
+                        () => resolve()
+                    );
+                });
+            }
         }
 
         log('[debug-end] killing console process');
@@ -1630,7 +1806,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         generateCommand, generateWithOptionsCommand, generateBuildTasksCommand,
         taskProvider, debugProvider, treeView, testController,
-        changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
+        changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd, uninstallStaleAppsCmd,
         selectSimulatorCmd, changeSwiftVersionCmd, changeStrictConcurrencyCmd, buildCmd, buildAndRunCmd, refreshCmd,
         watcher, onProjectChange, dyldTracker, onDebugStart, onDebugEnd,
         outputChannel

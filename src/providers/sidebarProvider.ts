@@ -8,6 +8,7 @@ import { listAvailableSimulators, listPhysicalDevices, type SimulatorDevice, typ
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { getBuildSettingsForTarget, getProjectBuildSettings } from '../parsers/buildSettings';
 import { detectSupportedSwiftVersions, isXcodeFirstLaunchNeeded } from '../utils/version';
+import { listInstalledSimulatorApps, type InstalledAppSummary } from '../utils/bundleId';
 
 const execFile = promisify(execFileCallback);
 
@@ -71,7 +72,14 @@ export interface ProjectData {
     physicalDevices: PhysicalDevice[];
     swiftVersionByTarget: Record<string, string>;
     strictConcurrencyByTarget: Record<string, string>;
+    bundleIdByTarget: Record<string, string>;
+    productNameByTarget: Record<string, string>;
     supportedSwiftVersions: string[];
+    /** Apps installed on the currently-selected simulator whose
+     *  CFBundleName matches the project's product name but whose
+     *  bundle id differs from pbxproj. These are usually orphans from
+     *  a previous bundle-id rename. */
+    staleSimulatorInstalls: InstalledAppSummary[];
 }
 
 // ── TreeDataProvider ─────────────────────────────────────────────
@@ -143,8 +151,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 'vsxcode.sidebar.changeTarget', 'symbol-method'),
             this.createConfigItem('config-scheme', 'Scheme', config.schemeName,
                 'vsxcode.sidebar.changeScheme', 'play-circle'),
-            this.createConfigItem('config-bundleId', 'Bundle ID', config.bundleIdentifier,
-                'vsxcode.sidebar.changeBundleId', 'tag'),
+            this.createBundleIdItem(config),
             this.createConfigItem('config-swiftVersion', 'Swift Language Version',
                 this.projectData?.swiftVersionByTarget[config.targetName] ? `Swift ${this.projectData.swiftVersionByTarget[config.targetName].replace(/\.0$/, '')}` : '',
                 'vsxcode.sidebar.changeSwiftVersion', 'swift'),
@@ -158,6 +165,30 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         items.push(this.createConfigItem('config-simulator', 'Device', deviceLabel,
             'vsxcode.sidebar.selectSimulator', 'device-mobile'));
         return items;
+    }
+
+    // pbxproj is the source of truth for bundle id. We surface that value
+    // directly. The warning state is for *external* drift: an old app
+    // installed on the simulator with the same product name but a
+    // different bundle id — usually an orphan from a previous rename.
+    private createBundleIdItem(config: BuildTaskConfig): SidebarItem {
+        const fromPbx = this.projectData?.bundleIdByTarget[config.targetName] || '';
+        const stale = this.projectData?.staleSimulatorInstalls || [];
+        const hasStaleInstall = stale.length > 0;
+
+        const item = new SidebarItem('config-bundleId', 'Bundle ID', vscode.TreeItemCollapsibleState.None, fromPbx);
+        item.description = fromPbx;
+        if (hasStaleInstall) {
+            const ids = stale.map((s) => s.bundleId).join(', ');
+            item.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'));
+            item.tooltip = `An orphan install with a different bundle id is on the selected simulator: ${ids}. It probably belongs to a previous bundle id and will appear as a duplicate icon. Click to uninstall.`;
+            item.command = { command: 'vsxcode.sidebar.uninstallStaleAppsOnSimulator', title: 'Uninstall stale apps' };
+        } else {
+            item.iconPath = new vscode.ThemeIcon('tag');
+            item.tooltip = 'Bundle id from project.pbxproj (the source of truth). Click to edit PRODUCT_BUNDLE_IDENTIFIER.';
+            item.command = { command: 'vsxcode.sidebar.changeBundleId', title: 'Bundle ID' };
+        }
+        return item;
     }
 
     private createConfigItem(
@@ -215,6 +246,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         let schemes: string[] = [];
         const swiftVersionByTarget: Record<string, string> = {};
         const strictConcurrencyByTarget: Record<string, string> = {};
+        const bundleIdByTarget: Record<string, string> = {};
+        const productNameByTarget: Record<string, string> = {};
 
         const projectFile = config?.projectFile || xcodeProjects[0];
         if (projectFile) {
@@ -223,6 +256,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
                 targets = parseNativeTargets(pbxContents);
                 for (const t of targets) {
+                    productNameByTarget[t.name] = t.productName || t.name;
                     if (t.buildConfigurationListId) {
                         const settings = getBuildSettingsForTarget(pbxContents, t.buildConfigurationListId, 'Debug');
                         if (settings?.swiftVersion) {
@@ -230,6 +264,12 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                         }
                         if (settings?.strictConcurrency) {
                             strictConcurrencyByTarget[t.name] = settings.strictConcurrency;
+                        }
+                        if (settings?.bundleIdentifier) {
+                            bundleIdByTarget[t.name] = settings.bundleIdentifier;
+                        }
+                        if (settings?.productName && !settings.productName.includes('$(')) {
+                            productNameByTarget[t.name] = settings.productName;
                         }
                     }
                 }
@@ -243,6 +283,13 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 if (Object.keys(strictConcurrencyByTarget).length === 0 && projectSettings?.strictConcurrency) {
                     for (const t of targets) {
                         strictConcurrencyByTarget[t.name] = projectSettings.strictConcurrency;
+                    }
+                }
+                if (projectSettings?.bundleIdentifier) {
+                    for (const t of targets) {
+                        if (!bundleIdByTarget[t.name]) {
+                            bundleIdByTarget[t.name] = projectSettings.bundleIdentifier;
+                        }
                     }
                 }
                 // When SWIFT_STRICT_CONCURRENCY is absent, infer "minimal" for pre-Swift 6
@@ -275,7 +322,37 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             detectSupportedSwiftVersions(),
         ]);
 
-        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, supportedSwiftVersions };
+        const staleSimulatorInstalls = await this.findStaleSimulatorInstalls(
+            config,
+            bundleIdByTarget,
+            productNameByTarget,
+        );
+
+        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, supportedSwiftVersions, staleSimulatorInstalls };
+    }
+
+    private async findStaleSimulatorInstalls(
+        config: BuildTaskConfig | null | undefined,
+        bundleIdByTarget: Record<string, string>,
+        productNameByTarget: Record<string, string>,
+    ): Promise<InstalledAppSummary[]> {
+        if (!config || config.isPhysicalDevice || !config.simulatorUdid) { return []; }
+        const pbxBundleId = bundleIdByTarget[config.targetName];
+        // Skip detection when pbxproj uses interpolation (e.g.
+        // `com.example.$(PRODUCT_NAME)`) — the raw template won't match
+        // any resolved bundle id from simctl, so the current install
+        // would be misclassified as a stale orphan.
+        if (!pbxBundleId || pbxBundleId.includes('$(')) { return []; }
+        const productName = productNameByTarget[config.targetName] || config.productName;
+        if (!productName) { return []; }
+        const installed = await listInstalledSimulatorApps(config.simulatorUdid);
+        // Match on CFBundleName (defaults to the Xcode product name and is
+        // rarely customized). CFBundleDisplayName isn't reliable because
+        // users often override it independently of the product name, so a
+        // displayName mismatch doesn't mean different app.
+        return installed.filter((app) =>
+            app.bundleId !== pbxBundleId && app.bundleName === productName
+        );
     }
 
     updatePhysicalDevices(devices: PhysicalDevice[]): void {
@@ -336,23 +413,14 @@ export async function autoConfigureBuildTasks(
         }
         const target = nonTestTargets[0];
 
-        let bundleIdentifier = '';
         let resolvedProductName = target.productName || target.name;
         if (target.buildConfigurationListId) {
             const settings = getBuildSettingsForTarget(
                 pbxContents, target.buildConfigurationListId, 'Debug'
             );
-            bundleIdentifier = settings?.bundleIdentifier || '';
             if (settings?.productName && !settings.productName.includes('$(')) {
                 resolvedProductName = settings.productName;
             }
-        }
-        if (!bundleIdentifier) {
-            const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
-            bundleIdentifier = projectSettings?.bundleIdentifier || '';
-        }
-        if (!bundleIdentifier) {
-            bundleIdentifier = `com.example.${target.name}`;
         }
 
         let schemeName = path.basename(projectFile, '.xcodeproj');
@@ -383,7 +451,6 @@ export async function autoConfigureBuildTasks(
             schemeName,
             targetName: target.name,
             productName: resolvedProductName,
-            bundleIdentifier,
             simulatorDevice: iphone.name,
             simulatorUdid: iphone.udid,
         };

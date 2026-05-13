@@ -34,7 +34,8 @@ The extension activates on `workspaceContains:**/*.pbxproj` or `onDebug`. Once a
 - The Code Format sidebar panel is a webview that lets the user toggle individual swift-format rules. Configuration ends up in `.vscode/.swift-format` (JSON).
 
 ### Workspace-state persistence
-- **What**: Selected project, target, scheme, bundle ID, simulator/device, Swift version, and strict-concurrency setting are persisted in VS Code workspace state (not in any file the user can edit). Auto-detected on first activation.
+- **What**: Selected project, target, scheme, simulator/device, Swift version, and strict-concurrency setting are persisted in VS Code workspace state (not in any file the user can edit). Auto-detected on first activation.
+- **Bundle id is NOT cached.** It's read live from `project.pbxproj` on every read, and from the freshly-built `.app/Info.plist` on every install/launch/terminate. Edits to `PRODUCT_BUNDLE_IDENTIFIER` take effect immediately with no resync step.
 - **Don't try to write these to `.vscode/settings.json` or any other file.** They live in the extension's `BuildTaskConfig` workspace state.
 
 ### Xcode 26 Icon Composer (`.icon`) and synchronized-target loose resources
@@ -87,7 +88,8 @@ User-facing commands (palette and programmatic):
 | `vsxcode.sidebar.changeProject` | Select a different `.xcodeproj` |
 | `vsxcode.sidebar.changeTarget` | Select a different target within current project |
 | `vsxcode.sidebar.changeScheme` | Select a different scheme |
-| `vsxcode.sidebar.changeBundleId` | Override the bundle identifier |
+| `vsxcode.sidebar.changeBundleId` | Edit `PRODUCT_BUNDLE_IDENTIFIER` in `project.pbxproj` |
+| `vsxcode.sidebar.uninstallStaleAppsOnSimulator` | Uninstall orphan apps left on the selected simulator after a bundle id rename |
 | `vsxcode.sidebar.selectSimulator` | Pick simulator or physical device |
 | `vsxcode.sidebar.changeSwiftVersion` | Pick Swift compiler version (toolchain switch) |
 | `vsxcode.sidebar.changeStrictConcurrency` | Set strict-concurrency level |
@@ -104,7 +106,7 @@ Or suggest the user run them from the Command Palette (`Cmd+Shift+P`).
 ### Sidebar UI
 
 There's a "VSXcode" activity-bar item with two views when an Xcode project is detected:
-- **Xcode Build** — Tree view showing current project, target, scheme, bundle ID, swift version, strict concurrency, device. Each row is clickable to change the corresponding setting.
+- **Xcode Build** — Tree view showing current project, target, scheme, bundle ID, swift version, strict concurrency, device. Each row is clickable to change the corresponding setting. The Bundle ID row reads from `project.pbxproj` and shows a warning when an app with the same product name but different bundle id is installed on the selected simulator (typically an orphan from a previous rename); clicking the warning offers to uninstall it.
 - **Code Format** — Webview for swift-format rule configuration and the Homebrew install button.
 
 When the user asks to change build configuration, suggest the sidebar instead of editing config files.
@@ -172,4 +174,4 @@ Before doing one of these manually, check the table:
 
 ## Version
 
-This document describes VSXcode v3.5.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
+This document describes VSXcode v3.5.1. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.

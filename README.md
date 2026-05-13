@@ -9,7 +9,7 @@ Lightweight Xcode project integration for VS Code — IntelliSense, build tasks,
 Open a folder containing an `.xcodeproj` and the extension handles the rest:
 
 1. **Auto-generates `Package.swift`** from the Xcode project on activation, with correct target paths, resources, dependencies, and Swift settings.
-2. **Auto-configures build tasks** with sensible defaults (target, scheme, device/simulator, bundle ID).
+2. **Auto-configures build tasks** with sensible defaults (target, scheme, device/simulator). Bundle id is sourced live from `project.pbxproj` on every operation, so renames take effect immediately.
 3. **Configures SourceKit-LSP** for iOS simulator target resolution so IntelliSense works for UIKit and other iOS frameworks.
 4. **Silently regenerates** `Package.swift` whenever the `.pbxproj` file changes.
 5. **Syncs Swift files to the Xcode project** — when `.swift` files are added or removed from a target directory, the `.xcodeproj` is updated automatically (PBXBuildFile, PBXFileReference, PBXGroup, and PBXSourcesBuildPhase entries).
@@ -21,7 +21,7 @@ The extension adds a panel to the Activity Bar with configurable build settings:
 - **Project** — select which `.xcodeproj` to use (when multiple exist)
 - **Target** — select the build target
 - **Scheme** — select the build scheme
-- **Bundle ID** — edit the bundle identifier
+- **Bundle ID** — read directly from `project.pbxproj`; click to edit (writes `PRODUCT_BUNDLE_IDENTIFIER` back to pbxproj). Shows a ⚠ warning when an app with the same product name but a different bundle id is installed on the selected simulator — usually a leftover from a previous rename. Click the warning to uninstall the orphan.
 - **Device** — select from connected physical devices (USB or Wi-Fi) or available iOS simulators
 
 Title bar actions: **Build**, **Build & Run**, and **Refresh**.
@@ -32,7 +32,7 @@ Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 |---------|-------------|
 | **Swift: Generate Package.swift from Xcode Project** | Generates `Package.swift` using the Debug configuration with a diff view. |
 | **Swift: Generate Package.swift from Xcode Project (with Options)** | Same as above but lets you choose Debug or Release configuration. |
-| **Swift: Configure Build Tasks** | Manually configure build target, scheme, device/simulator, and bundle ID. |
+| **Swift: Configure Build Tasks** | Manually configure build target, scheme, and device/simulator (bundle id is read from pbxproj). |
 
 ### Package.swift Generation
 
@@ -94,7 +94,7 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.5.0.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.5.1.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -102,5 +102,5 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.5.0.vsix
+code --install-extension vsxcode-3.5.1.vsix
 ```
