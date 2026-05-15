@@ -141,13 +141,15 @@ export async function listPhysicalDevices(): Promise<PhysicalDevice[]> {
         for (const device of parsed.result?.devices || []) {
             const platform = device.hardwareProperties?.platform;
             const pairingState = device.connectionProperties?.pairingState;
-            if (platform === 'iOS' && pairingState === 'paired') {
+            const transportType = device.connectionProperties?.transportType;
+            // Devices with no transport are paired but unreachable — can't build/run to them.
+            if (platform === 'iOS' && pairingState === 'paired' && transportType) {
                 devices.push({
                     name: device.deviceProperties?.name || 'Unknown Device',
                     udid: device.hardwareProperties?.udid || device.identifier || '',
                     deviceIdentifier: device.identifier || '',
                     osVersion: device.deviceProperties?.osVersionNumber || '',
-                    connectionType: device.connectionProperties?.transportType || 'Unknown',
+                    connectionType: transportType,
                     productType: device.hardwareProperties?.productType || '',
                     osBuildVersion: device.deviceProperties?.osBuildUpdate || '',
                 });
