@@ -18,14 +18,15 @@ import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, cleanup
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
-import { getBuildSettingsForTarget, getProjectBuildSettings, resolveConfigurationListId } from './parsers/buildSettings';
+import { getBuildSettingsForTarget, getProjectBuildSettings, resolveConfigurationListId, platformsSupported } from './parsers/buildSettings';
 import { extractObjectBody } from './parsers/base';
 import { parseLinkedFrameworksForTarget } from './parsers/frameworks';
 import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resources';
 import { generateSwiftSettings } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, findDeviceSymbols } from './utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, findDeviceSymbols, getMyMacDestination } from './utils/simulator';
+import { getDestinationType, builtAppPath } from './utils/destination';
 import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks, promptXcodeFirstLaunch } from './providers/sidebarProvider';
@@ -42,8 +43,9 @@ import {
     getInstalledAppExecutableMtime,
     formatMtime,
     readInfoPlistDisplayNames,
+    readInfoPlistExecutable,
 } from './utils/bundleId';
-import type { BuildTaskConfig } from './types/interfaces';
+import type { BuildTaskConfig, DestinationType } from './types/interfaces';
 
 import type { PlatformName, DeploymentTarget } from './types/interfaces';
 import { PLATFORM_KEYS, DEFAULT_PLATFORM } from './types/constants';
@@ -177,7 +179,84 @@ function generateCSettings(headerSearchPaths: string[] | undefined): string[] {
     return filtered.map((p) => `.headerSearchPath("${p}")`);
 }
 
-async function generatePackageSwift(rootPath: string, configurationName: string = 'Debug', silent: boolean = false): Promise<void> {
+function currentDestinationType(workspaceState: vscode.Memento): DestinationType {
+    const config = workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+    return config ? getDestinationType(config) : 'simulator';
+}
+
+/**
+ * Point SourceKit-LSP at the SDK matching the selected run destination.
+ * macOS indexes against the host SDK (we clear our iOS override so SwiftPM
+ * uses the default macOS toolchain); iOS destinations resolve against the
+ * iPhoneSimulator SDK. macOS stays in the package's platform list so
+ * mac-only indexing resolves.
+ */
+async function configureSourceKitLSP(dest: DestinationType, platforms: DeploymentTarget[]): Promise<void> {
+    const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
+
+    // Removing a setting that isn't present still creates an empty
+    // .vscode/settings.json, so only clear when a workspace value exists.
+    const clearIfPresent = async () => {
+        if (lspConfig.inspect('serverArguments')?.workspaceValue !== undefined) {
+            await lspConfig.update('serverArguments', undefined, vscode.ConfigurationTarget.Workspace);
+        }
+    };
+
+    if (dest === 'mac') {
+        await clearIfPresent();
+        return;
+    }
+
+    const iosPlatform = platforms.find((p) => p.platform === 'iOS');
+    if (!iosPlatform) {
+        // Nothing iOS to target — clear the override (defaults to host macOS).
+        await clearIfPresent();
+        return;
+    }
+    try {
+        const cp = await import('child_process');
+        const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
+        const sdkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk`;
+        const simulatorTarget = `arm64-apple-ios${iosPlatform.version}-simulator`;
+        const serverArguments = [
+            '-Xswiftc', '-sdk',
+            '-Xswiftc', sdkPath,
+            '-Xswiftc', '-target',
+            '-Xswiftc', simulatorTarget,
+            '-Xswiftc', '-F',
+            '-Xswiftc', `${sdkPath}/System/Library/Frameworks`,
+            '-Xswiftc', '-F',
+            '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`,
+            '-Xswiftc', '-I',
+            '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/usr/lib`,
+            '-Xswiftc', '-enable-testing'
+        ];
+        await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
+    } catch {
+        vscode.window.showWarningMessage(
+            'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
+        );
+    }
+}
+
+/**
+ * Reconfigure SourceKit-LSP to match the config's destination without
+ * regenerating Package.swift.
+ */
+async function reconfigureSourceKitLSP(projectRoot: string, config: BuildTaskConfig): Promise<void> {
+    const dest = getDestinationType(config);
+    let platforms: DeploymentTarget[] = [];
+    if (dest !== 'mac') {
+        // Only the iOS branch needs the deployment version for the triple.
+        try {
+            const pbx = await fsp.readFile(path.join(projectRoot, config.projectFile, 'project.pbxproj'), 'utf8');
+            platforms = parseDeploymentTargets(pbx);
+        } catch { /* ignore — configureSourceKitLSP clears when no iOS platform */ }
+    }
+    await configureSourceKitLSP(dest, platforms);
+}
+
+async function generatePackageSwift(rootPath: string, configurationName: string = 'Debug', silent: boolean = false, destinationType: DestinationType = 'simulator'): Promise<void> {
     const entries = await fsp.readdir(rootPath, { withFileTypes: true });
     const xcodeProjects = entries.filter(
         (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
@@ -383,36 +462,8 @@ async function generatePackageSwift(rootPath: string, configurationName: string 
         defaultLocalization: defaultLocalization || undefined
     });
 
-    // Populate SourceKit-LSP settings for iOS simulator target resolution
-    const iosPlatform = platforms.find((p) => p.platform === 'iOS');
-    if (iosPlatform) {
-        try {
-            const cp = await import('child_process');
-            const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
-            const sdkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk`;
-            const simulatorTarget = `arm64-apple-ios${iosPlatform.version}-simulator`;
-            const serverArguments = [
-                '-Xswiftc', '-sdk',
-                '-Xswiftc', sdkPath,
-                '-Xswiftc', '-target',
-                '-Xswiftc', simulatorTarget,
-                '-Xswiftc', '-F',
-                '-Xswiftc', `${sdkPath}/System/Library/Frameworks`,
-                '-Xswiftc', '-F',
-                '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`,
-                '-Xswiftc', '-I',
-                '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/usr/lib`,
-                '-Xswiftc', '-enable-testing'
-            ];
-
-            const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
-            await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
-        } catch {
-            vscode.window.showWarningMessage(
-                'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
-            );
-        }
-    }
+    // Point SourceKit-LSP at the SDK matching the selected run destination.
+    await configureSourceKitLSP(destinationType, platforms);
 
     const packagePath = path.join(rootPath, 'Package.swift');
 
@@ -529,26 +580,37 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         }
     }
 
+    const targetSettings = selectedTarget.buildConfigurationListId
+        ? getBuildSettingsForTarget(pbxContents, selectedTarget.buildConfigurationListId, 'Debug')
+        : null;
+    const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
+    const caps = platformsSupported(targetSettings, projectSettings);
+
     const [simulators, physicalDevices] = await Promise.all([
         listAvailableSimulators(),
         listPhysicalDevices(),
     ]);
-    if (simulators.length === 0 && physicalDevices.length === 0) {
+    const macDest = caps.mac ? await getMyMacDestination() : null;
+    if (simulators.length === 0 && physicalDevices.length === 0 && !macDest) {
         throw new Error('No available iOS devices found. Connect a device or install simulators via Xcode.');
     }
 
-    const devicePicks: (vscode.QuickPickItem & { udid: string; deviceIdentifier: string; isPhysical: boolean })[] = [];
+    const devicePicks: (vscode.QuickPickItem & { udid: string; deviceIdentifier: string; destinationType: DestinationType })[] = [];
+    if (macDest) {
+        devicePicks.push({ label: 'My Mac', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', destinationType: 'mac' });
+        devicePicks.push({ label: 'My Mac', description: `${macDest.name} · ${macDest.arch}`, udid: '', deviceIdentifier: '', destinationType: 'mac' });
+    }
     if (physicalDevices.length > 0) {
-        devicePicks.push({ label: 'Physical Devices', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+        devicePicks.push({ label: 'Physical Devices', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', destinationType: 'device' });
         for (const d of physicalDevices) {
             const transport = d.connectionType === 'wired' ? 'USB' : d.connectionType === 'localNetwork' ? 'Wi-Fi' : d.connectionType;
-            devicePicks.push({ label: d.name, description: `iOS ${d.osVersion} (${transport})`, udid: d.udid, deviceIdentifier: d.deviceIdentifier, isPhysical: true });
+            devicePicks.push({ label: d.name, description: `iOS ${d.osVersion} (${transport})`, udid: d.udid, deviceIdentifier: d.deviceIdentifier, destinationType: 'device' });
         }
     }
     if (simulators.length > 0) {
-        devicePicks.push({ label: 'Simulators', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+        devicePicks.push({ label: 'Simulators', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', destinationType: 'simulator' });
         for (const s of simulators) {
-            devicePicks.push({ label: s.name, description: s.state, detail: s.runtime, udid: s.udid, deviceIdentifier: '', isPhysical: false });
+            devicePicks.push({ label: s.name, description: s.state, detail: s.runtime, udid: s.udid, deviceIdentifier: '', destinationType: 'simulator' });
         }
     }
 
@@ -596,11 +658,13 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         productName: resolvedProductName,
         simulatorDevice: simulatorPick.label,
         simulatorUdid: simulatorPick.udid,
-        isPhysicalDevice: simulatorPick.isPhysical,
+        isPhysicalDevice: simulatorPick.destinationType === 'device',
         deviceIdentifier: simulatorPick.deviceIdentifier,
+        destinationType: simulatorPick.destinationType,
     };
 
     await workspaceState.update('buildTaskConfig', buildTaskConfig);
+    await configureSourceKitLSP(buildTaskConfig.destinationType ?? 'simulator', parseDeploymentTargets(pbxContents));
 
     vscode.window.showInformationMessage(
         `Build tasks configured for ${selectedTarget.name} on ${simulatorPick.label}`
@@ -707,6 +771,10 @@ async function handlePossibleBundleIdRename(
     // Skip interpolated templates — comparing a raw template to a
     // previously-resolved value would produce false positives.
     if (fromPbx.includes('$(') || previous.includes('$(')) { return; }
+    // macOS has no simulator/device install to uninstall — skip the prompt
+    // (and don't consume the rename-notified dedupe key). lastKnownPbxBundleId
+    // is already updated above, so detection stays consistent across switches.
+    if (getDestinationType(config) === 'mac') { return; }
     const renameKey = `${previous}→${fromPbx}`;
     if (lastRenameNotifiedFor === renameKey) { return; }
     lastRenameNotifiedFor = renameKey;
@@ -886,9 +954,13 @@ export function activate(context: vscode.ExtensionContext): void {
     // Register test controller (Testing sidebar integration)
     const testController = new XCTestController(context.workspaceState, projectRoot);
 
-    // Auto-configure on activation (non-blocking)
-    autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
-    generatePackageSwift(projectRoot, 'Debug', true).catch(() => {});
+    // Auto-configure on activation, then generate Package.swift for the resolved
+    // destination — sequenced so SourceKit-LSP matches the auto-picked device
+    // (e.g. cleared to the host SDK for a macOS-only project). Non-blocking.
+    void (async () => {
+        await autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
+        await generatePackageSwift(projectRoot, 'Debug', true, currentDestinationType(context.workspaceState)).catch(() => {});
+    })();
 
     // Seed the rename detector so the very next pbxproj edit can be
     // compared against the current value (otherwise the first watcher
@@ -926,7 +998,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!workspaceFolders || workspaceFolders.length === 0) {
                     throw new Error('Open a workspace folder before running this command.');
                 }
-                await generatePackageSwift(workspaceFolders[0].uri.fsPath);
+                await generatePackageSwift(workspaceFolders[0].uri.fsPath, 'Debug', false, currentDestinationType(context.workspaceState));
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
                 vscode.window.showErrorMessage(message);
@@ -946,7 +1018,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     placeHolder: 'Select build configuration for settings extraction'
                 });
                 if (!config) { return; }
-                await generatePackageSwift(workspaceFolders[0].uri.fsPath, config);
+                await generatePackageSwift(workspaceFolders[0].uri.fsPath, config, false, currentDestinationType(context.workspaceState));
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
                 vscode.window.showErrorMessage(message);
@@ -1125,15 +1197,31 @@ export function activate(context: vscode.ExtensionContext): void {
                 listAvailableSimulators(),
                 listPhysicalDevices(),
             ]);
-            if (simulators.length === 0 && physicalDevices.length === 0) {
+            const macSupported = !!sidebarProvider.getProjectData()?.macSupportByTarget?.[config.targetName];
+            const macDest = macSupported ? await getMyMacDestination() : null;
+            if (simulators.length === 0 && physicalDevices.length === 0 && !macDest) {
                 vscode.window.showWarningMessage('No devices found.');
                 return;
             }
-            type DevicePick = vscode.QuickPickItem & { udid: string; deviceIdentifier: string; isPhysical: boolean };
+            type DevicePick = vscode.QuickPickItem & { udid: string; deviceIdentifier: string; destinationType: DestinationType };
             const picks: DevicePick[] = [];
             let activePick: DevicePick | undefined;
+            if (macDest) {
+                picks.push({ label: 'My Mac', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', destinationType: 'mac' });
+                const item: DevicePick = {
+                    label: 'My Mac',
+                    description: `${macDest.name} · ${macDest.arch}`,
+                    udid: '',
+                    deviceIdentifier: '',
+                    destinationType: 'mac',
+                };
+                if (getDestinationType(config) === 'mac') {
+                    activePick = item;
+                }
+                picks.push(item);
+            }
             if (physicalDevices.length > 0) {
-                picks.push({ label: 'Physical Devices', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+                picks.push({ label: 'Physical Devices', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', destinationType: 'device' });
                 for (const d of physicalDevices) {
                     const transport = d.connectionType === 'wired' ? 'USB' : d.connectionType === 'localNetwork' ? 'Wi-Fi' : d.connectionType;
                     const item: DevicePick = {
@@ -1141,16 +1229,16 @@ export function activate(context: vscode.ExtensionContext): void {
                         description: `iOS ${d.osVersion} (${transport})`,
                         udid: d.udid,
                         deviceIdentifier: d.deviceIdentifier,
-                        isPhysical: true,
+                        destinationType: 'device',
                     };
-                    if (d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier) {
+                    if (getDestinationType(config) === 'device' && (d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier)) {
                         activePick = item;
                     }
                     picks.push(item);
                 }
             }
             if (simulators.length > 0) {
-                picks.push({ label: 'Simulators', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', isPhysical: false });
+                picks.push({ label: 'Simulators', kind: vscode.QuickPickItemKind.Separator, udid: '', deviceIdentifier: '', destinationType: 'simulator' });
                 for (const s of simulators) {
                     const runtime = sidebarProvider.formatRuntime(s.runtime);
                     const booted = s.state === 'Booted' ? ' (Booted)' : '';
@@ -1159,9 +1247,9 @@ export function activate(context: vscode.ExtensionContext): void {
                         description: `${runtime}${booted}`,
                         udid: s.udid,
                         deviceIdentifier: '',
-                        isPhysical: false,
+                        destinationType: 'simulator',
                     };
-                    if (s.udid === config.simulatorUdid) {
+                    if (getDestinationType(config) === 'simulator' && s.udid === config.simulatorUdid) {
                         activePick = item;
                     }
                     picks.push(item);
@@ -1187,7 +1275,15 @@ export function activate(context: vscode.ExtensionContext): void {
                 sidebarProvider.notifyConfigChanged();
             });
             if (pick) {
-                await updateConfig({ simulatorDevice: pick.label, simulatorUdid: pick.udid, deviceIdentifier: pick.deviceIdentifier, isPhysicalDevice: pick.isPhysical });
+                await updateConfig({
+                    simulatorDevice: pick.label,
+                    simulatorUdid: pick.udid,
+                    deviceIdentifier: pick.deviceIdentifier,
+                    isPhysicalDevice: pick.destinationType === 'device',
+                    destinationType: pick.destinationType,
+                });
+                const updated = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+                if (updated) { await reconfigureSourceKitLSP(projectRoot, updated); }
             }
         }
     );
@@ -1336,8 +1432,7 @@ export function activate(context: vscode.ExtensionContext): void {
         log('[simulator-debug] build succeeded');
 
         const udid = config.simulatorUdid || config.simulatorDevice;
-        const homeDir = require('os').homedir();
-        const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphonesimulator', `${config.productName}.app`);
+        const appPath = builtAppPath(config);
 
         const resolved = await resolveBundleIdForLaunch({
             appPath,
@@ -1423,6 +1518,82 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     }
 
+    async function buildAndDebugMac(config: BuildTaskConfig): Promise<void> {
+        await cancelActiveRun();
+        const runId = currentRunId;
+
+        // 1. Fetch and execute build task, wait for completion
+        const tasks = await vscode.tasks.fetchTasks({ type: TASK_TYPE });
+        const buildTask = tasks.find((t) => t.name === 'Build');
+        if (!buildTask) {
+            vscode.window.showErrorMessage('Build task not available. Check configuration.');
+            return;
+        }
+
+        // Use shared panel so build output and the launch banner share a terminal
+        buildTask.presentationOptions = {
+            reveal: vscode.TaskRevealKind.Always,
+            panel: vscode.TaskPanelKind.Shared,
+            showReuseMessage: false,
+            clear: true,
+        };
+
+        log('[mac-debug] starting build...');
+        const exitCode = await executeTaskAndWait(buildTask, (exec) => { buildExecution = exec; });
+        if (runId !== currentRunId) return;
+        if (exitCode !== 0) {
+            log(`[mac-debug] build failed with exit code ${exitCode}`);
+            return;
+        }
+        log('[mac-debug] build succeeded');
+
+        // 2. Locate the built .app and its executable. macOS bundles keep
+        //    Info.plist (and the Mach-O) under Contents/, unlike iOS where
+        //    Info.plist sits at the bundle root.
+        const appPath = builtAppPath(config);
+        const infoPlist = path.join(appPath, 'Contents', 'Info.plist');
+        const executableName = (await readInfoPlistExecutable(infoPlist)) || config.productName;
+        const program = path.join(appPath, 'Contents', 'MacOS', executableName);
+
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+            vscode.window.showErrorMessage('No workspace folder found.');
+            return;
+        }
+
+        // 3. Launch under lldb-dap directly. lldb owns the process lifecycle,
+        //    streams stdout/stderr to the Debug Console, and terminates it when
+        //    the session ends — no simctl/devicectl, install, or console task.
+        const debugConfig: vscode.DebugConfiguration = {
+            type: 'lldb-dap',
+            request: 'launch',
+            name: `Debug ${config.productName}`,
+            program,
+            args: [],
+            env: {},
+            cwd: folder.uri.fsPath,
+            stopOnEntry: false,
+        };
+        log(`[mac-debug] launching ${program}`);
+        const started = await vscode.debug.startDebugging(folder, debugConfig);
+        const session = vscode.debug.activeDebugSession;
+        if (runId !== currentRunId) {
+            // Superseded after launch. Unlike simulator/device there is no
+            // console task for cancelActiveRun to terminate, so stop the session
+            // we just started here or the app + lldb would leak untracked.
+            if (session) { await vscode.debug.stopDebugging(session); }
+            return;
+        }
+        if (!started) {
+            log('[mac-debug] debug session failed to start');
+            printToSharedPanel('** APP LAUNCH FAILED **', '31');
+        } else {
+            log('[mac-debug] debug session started');
+            printToSharedPanel('** APP LAUNCH SUCCEEDED **', '32');
+            activeDebugSession = session;
+        }
+    }
+
     async function buildAndDebugPhysicalDevice(config: BuildTaskConfig): Promise<void> {
         await cancelActiveRun();
         const runId = currentRunId;
@@ -1454,8 +1625,7 @@ export function activate(context: vscode.ExtensionContext): void {
         log('[physical-debug] build succeeded');
 
         const devId = config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
-        const homeDir = require('os').homedir();
-        const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphoneos', `${config.productName}.app`);
+        const appPath = builtAppPath(config);
 
         const resolved = await resolveBundleIdForLaunch({
             appPath,
@@ -1634,10 +1804,16 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
                 return;
             }
-            if (config.isPhysicalDevice) {
-                await buildAndDebugPhysicalDevice(config);
-            } else {
-                await buildAndDebugSimulator(config);
+            switch (getDestinationType(config)) {
+                case 'device':
+                    await buildAndDebugPhysicalDevice(config);
+                    break;
+                case 'mac':
+                    await buildAndDebugMac(config);
+                    break;
+                case 'simulator':
+                    await buildAndDebugSimulator(config);
+                    break;
             }
         }
     );
@@ -1659,7 +1835,7 @@ export function activate(context: vscode.ExtensionContext): void {
         testController.refresh();
         const wsFolders = vscode.workspace.workspaceFolders;
         if (wsFolders && wsFolders.length > 0) {
-            generatePackageSwift(wsFolders[0].uri.fsPath, 'Debug', true).catch((error) => {
+            generatePackageSwift(wsFolders[0].uri.fsPath, 'Debug', true, currentDestinationType(context.workspaceState)).catch((error) => {
                 const message = (error as { message?: string }).message || String(error);
                 log(`[file-watcher] Package.swift regen failed: ${message}`);
             });
@@ -1702,6 +1878,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const dyldTracker = vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', {
         createDebugAdapterTracker(session) {
+            // macOS uses request:'launch' with stopOnEntry:false and has none of
+            // the --start-stopped/attach artifacts this tracker exists to skip.
+            // Scope it to attach sessions so it can never auto-continue a real
+            // launch stop.
+            if (session.configuration.request === 'launch') {
+                return undefined;
+            }
             let configDoneAck = false;
             return {
                 onDidSendMessage(message: any) {
@@ -1765,14 +1948,21 @@ export function activate(context: vscode.ExtensionContext): void {
         // Physical device: killing the console process (devicectl --console) terminates the app.
         // Next launch uses --terminate-existing as a safety net.
         const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+        const dest = config ? getDestinationType(config) : 'simulator';
+
+        // macOS: lldb-dap owns the launched process; ending the session already
+        // terminated it. There is no console task or simctl app to clean up.
+        if (dest === 'mac') {
+            log('[debug-end] mac launch session ended');
+            return;
+        }
 
         // Simulator: terminate the app first, then kill the console process.
         // simctl terminate tells the simulator runtime to stop the app (which is
         // a separate process not in our group), then killConsoleProcess ends the
         // monitoring process (simctl launch --console-pty) and completes the task.
-        if (config && !config.isPhysicalDevice) {
-            const homeDir = require('os').homedir();
-            const appPath = path.join(homeDir, 'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName, 'Build', 'Products', 'Debug-iphonesimulator', `${config.productName}.app`);
+        if (config && dest === 'simulator') {
+            const appPath = builtAppPath(config);
             const resolved = await resolveBundleIdForLaunch({
                 appPath,
                 pbxprojPath: path.join(projectRoot, config.projectFile, 'project.pbxproj'),
@@ -1797,8 +1987,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const onDebugStart = vscode.debug.onDidStartDebugSession((session) => {
         const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-        const target = config?.isPhysicalDevice ? 'device' : 'simulator';
-        log(`[run-and-debug] ${session.name} — debugger attached to ${target}`);
+        const target = config ? getDestinationType(config) : 'simulator';
+        log(`[run-and-debug] ${session.name} — debugger active on ${target}`);
     });
 
     // ── Register all disposables ──────────────────────────────

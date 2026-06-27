@@ -1,6 +1,6 @@
 # VSXcode
 
-Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on both simulators and physical devices, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS apps directly from VS Code.
+Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on simulators, physical devices, and your Mac, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS and macOS apps directly from VS Code.
 
 ### How It Works
 
@@ -8,7 +8,7 @@ Open a folder containing an `.xcodeproj` and the extension handles the rest:
 
 1. **Auto-generates `Package.swift`** from the Xcode project on activation, with correct target paths, resources, dependencies, and Swift settings.
 2. **Auto-configures build tasks** with sensible defaults (target, scheme, device/simulator). Bundle id is sourced live from `project.pbxproj` on every operation, so renames take effect immediately.
-3. **Configures SourceKit-LSP** for iOS simulator target resolution so IntelliSense works for UIKit and other iOS frameworks.
+3. **Configures SourceKit-LSP** for the active run destination so IntelliSense resolves the right SDK — the iOS simulator SDK for UIKit, or the macOS SDK when targeting My Mac.
 4. **Silently regenerates** `Package.swift` whenever the `.pbxproj` file changes.
 5. **Syncs Swift files to the Xcode project** — when `.swift` files are added or removed from a target directory, the `.xcodeproj` is updated automatically (PBXBuildFile, PBXFileReference, PBXGroup, and PBXSourcesBuildPhase entries).
 
@@ -20,7 +20,7 @@ The extension adds a panel to the Activity Bar with configurable build settings:
 - **Target** — select the build target
 - **Scheme** — select the build scheme
 - **Bundle ID** — read directly from `project.pbxproj`; click to edit (writes `PRODUCT_BUNDLE_IDENTIFIER` back to pbxproj). Shows a ⚠ warning when an app with the same product name but a different bundle id is installed on the selected simulator — usually a leftover from a previous rename. Click the warning to uninstall the orphan.
-- **Device** — select from connected physical devices (USB or Wi-Fi) or available iOS simulators
+- **Device** — select **My Mac**, a connected physical device (USB or Wi-Fi), or an available iOS simulator (My Mac appears only for macOS-capable targets)
 
 Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 
@@ -39,7 +39,7 @@ Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 - Resolves target source paths on disk, including `productName` directory lookup.
 - Resolves resource file paths on disk relative to the target directory.
 - Includes per-target swift settings (`.define`, `.unsafeFlags`, `.swiftLanguageMode`), linked system frameworks, resources, header search paths, target dependencies, and excluded files.
-- Automatically configures SourceKit-LSP server arguments for iOS simulator target resolution (SDK path, target triple, framework search path).
+- Automatically configures SourceKit-LSP server arguments for the selected destination — the iOS simulator SDK (SDK path, target triple, framework search path), or the host macOS SDK when targeting My Mac.
 - Shows a diff view before overwriting when run manually from the command palette.
 
 ### Build Tasks
@@ -47,9 +47,10 @@ Title bar actions: **Build**, **Build & Run**, and **Refresh**.
 Build tasks are integrated directly into the extension — no shell scripts, `tasks.json`, or `launch.json` files are written to the workspace.
 
 - Uses VS Code's `TaskProvider` API to provide build, build-install, and run-and-debug tasks.
-- Full debug support with breakpoints and `print()` console output for both **simulator** and **physical device** builds.
+- Full debug support with breakpoints and `print()` console output for **simulator**, **physical device**, and **macOS** builds.
 - Simulator debugging uses `simctl launch --console-pty --wait-for-debugger` with LLDB DAP attach.
 - Physical device debugging uses `devicectl --console --start-stopped` with LLDB DAP remote-ios attach. Supports USB and Wi-Fi connected devices (requires Xcode 15+). Code signing uses the project's existing settings from Xcode.
+- macOS debugging launches the built `.app` directly under LLDB DAP (`request: launch`) — no simulator boot or install step; the app's output streams to the Debug Console.
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
 
@@ -92,7 +93,7 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.5.2.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.6.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -100,5 +101,5 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.5.2.vsix
+code --install-extension vsxcode-3.6.0.vsix
 ```

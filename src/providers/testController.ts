@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import type { BuildTaskConfig } from '../types/interfaces';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { determineTargetPath } from '../utils/path';
+import { getDestinationType, xcodebuildDestinationFlags } from '../utils/destination';
 
 const execFile = promisify(cp.execFile);
 const DERIVED_DATA_BASE = path.join(os.homedir(), 'Library', 'Developer', 'VSCode', 'DerivedData');
@@ -282,7 +283,7 @@ export class XCTestController implements vscode.Disposable {
         }
 
         // 2. Boot simulator
-        if (!config.isPhysicalDevice) {
+        if (getDestinationType(config) === 'simulator') {
             const udid = config.simulatorUdid || config.simulatorDevice;
             try {
                 await execFile('xcrun', ['simctl', 'boot', udid]).catch(() => {});
@@ -296,7 +297,9 @@ export class XCTestController implements vscode.Disposable {
 
         // Start the debug session (fire-and-forget — lldb --waitfor blocks until
         // the test host process appears, so we must start tests concurrently)
-        if (folder) {
+        // macOS test hosts run natively; the attach-by-name path is iOS-shaped,
+        // so run mac tests (with coverage) without a debugger attached.
+        if (folder && getDestinationType(config) !== 'mac') {
             const debugConfig: vscode.DebugConfiguration = {
                 type: 'lldb-dap',
                 request: 'attach',
@@ -319,8 +322,9 @@ export class XCTestController implements vscode.Disposable {
             }
         }
 
-        // Stop the debug session after tests complete
-        if (vscode.debug.activeDebugSession) {
+        // Stop the debug session after tests complete. mac test runs start no
+        // session (the attach path is iOS-only), so don't stop an unrelated one.
+        if (getDestinationType(config) !== 'mac' && vscode.debug.activeDebugSession) {
             vscode.debug.stopDebugging();
         }
 
@@ -329,21 +333,14 @@ export class XCTestController implements vscode.Disposable {
 
     private buildXcodebuildBase(config: BuildTaskConfig): string {
         const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
-        const udid = config.simulatorUdid || config.simulatorDevice;
-        const sdk = config.isPhysicalDevice ? 'iphoneos' : 'iphonesimulator';
-        const parts = [
+        return [
             'xcodebuild',
             `-project "${config.projectFile}"`,
             `-scheme "${config.schemeName}"`,
             '-configuration Debug',
-            `-sdk ${sdk}`,
-            `-destination "id=${udid}"`,
+            ...xcodebuildDestinationFlags(config),
             `-derivedDataPath "${derivedData}"`,
-        ];
-        if (config.isPhysicalDevice) {
-            parts.push('-allowProvisioningUpdates');
-        }
-        return parts.join(' ');
+        ].join(' ');
     }
 
     private buildFilterArgs(include: string[], exclude: string[]): string {
@@ -373,7 +370,7 @@ export class XCTestController implements vscode.Disposable {
         }
         let command = `${base}${coverageArgs} test ${filters} 2>&1`;
         // Boot simulator and open Simulator.app before running tests
-        if (!config.isPhysicalDevice) {
+        if (getDestinationType(config) === 'simulator') {
             const udid = config.simulatorUdid || config.simulatorDevice;
             command = `xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator; ${command}`;
         }

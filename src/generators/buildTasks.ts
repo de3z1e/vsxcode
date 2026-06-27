@@ -1,27 +1,28 @@
 import type { BuildTaskConfig } from '../types/interfaces';
+import { getDestinationType, productDirForDestination, xcodebuildDestinationFlags } from '../utils/destination';
 
 function xcodebuildArgs(config: BuildTaskConfig): string[] {
     const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
-    const udid = config.simulatorUdid || config.simulatorDevice;
-    const sdk = config.isPhysicalDevice ? 'iphoneos' : 'iphonesimulator';
-    const args = [
+    return [
         'set -eo pipefail; xcodebuild',
         `-project "${config.projectFile}"`,
         `-scheme "${config.schemeName}"`,
         '-configuration Debug',
-        `-sdk ${sdk}`,
-        `-destination "id=${udid}"`,
+        ...xcodebuildDestinationFlags(config),
         `-derivedDataPath "${derivedData}"`,
     ];
-    if (config.isPhysicalDevice) {
-        args.push('-allowProvisioningUpdates');
-    }
-    return args;
 }
 
 // For physical devices, devicectl uses CoreDevice identifier (not hardware UDID)
 function devicectlId(config: BuildTaskConfig): string {
     return config.deviceIdentifier || config.simulatorUdid || config.simulatorDevice;
+}
+
+// Shell-string path ($HOME-relative) to the built .app for the active destination.
+function appBundleShellPath(config: BuildTaskConfig): string {
+    const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
+    const productDir = productDirForDestination(getDestinationType(config));
+    return `${derivedData}/Build/Products/${productDir}/${config.productName}.app`;
 }
 
 export function buildCommandLine(config: BuildTaskConfig): string {
@@ -50,10 +51,14 @@ const BUNDLE_ID_FROM_INFOPLIST = (appPath: string): string =>
 const ASSERT_BID = `if [ -z "$BID" ]; then echo "ERROR: failed to read CFBundleIdentifier from Info.plist" >&2; exit 1; fi`;
 
 export function buildInstallCommandLine(config: BuildTaskConfig): string {
-    const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
+    // macOS has no simulator/device install step — Build & Run (Cmd+R) launches
+    // the .app directly under lldb-dap. Guard the Tasks-menu entry point.
+    if (getDestinationType(config) === 'mac') {
+        return `echo 'error: Build and Install is not used for macOS targets. Use Build & Run (Cmd+R) instead.' >&2; exit 1`;
+    }
+    const appPath = appBundleShellPath(config);
 
-    if (config.isPhysicalDevice) {
-        const appPath = `${derivedData}/Build/Products/Debug-iphoneos/${config.productName}.app`;
+    if (getDestinationType(config) === 'device') {
         const devId = devicectlId(config);
         return [
             ...xcodebuildArgs(config),
@@ -65,7 +70,6 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
     }
 
     const udid = config.simulatorUdid || config.simulatorDevice;
-    const appPath = `${derivedData}/Build/Products/Debug-iphonesimulator/${config.productName}.app`;
     return [
         ...xcodebuildArgs(config),
         'build 2>&1',
@@ -81,20 +85,22 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
 const TIMESTAMP_LINES = `perl -pe 'BEGIN { $| = 1 } use POSIX qw(strftime); my $t = strftime("%l:%M:%S %p", localtime); $t =~ s/^\\s+//; $_ = "[" . $t . "] " . $_'`;
 
 export function runAndDebugCommandLine(config: BuildTaskConfig): string {
-    const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
-    if (config.isPhysicalDevice) {
-        const appPath = `${derivedData}/Build/Products/Debug-iphoneos/${config.productName}.app`;
+    // macOS launches via lldb-dap directly, not this task.
+    if (getDestinationType(config) === 'mac') {
+        return `echo 'error: Run and Debug is not used for macOS targets. Use Build & Run (Cmd+R) instead.' >&2; exit 1`;
+    }
+    const appPath = appBundleShellPath(config);
+    if (getDestinationType(config) === 'device') {
         const devId = devicectlId(config);
         return `set -e; ${BUNDLE_ID_FROM_INFOPLIST(appPath)}; ${ASSERT_BID}; xcrun devicectl device process launch --device "${devId}" --console "$BID" 2>&1 | ${TIMESTAMP_LINES}`;
     }
     const udid = config.simulatorUdid || config.simulatorDevice;
-    const appPath = `${derivedData}/Build/Products/Debug-iphonesimulator/${config.productName}.app`;
     return `set -e; ${BUNDLE_ID_FROM_INFOPLIST(appPath)}; ${ASSERT_BID}; xcrun simctl launch --console-pty --wait-for-debugger "${udid}" "$BID" 2>&1 | ${TIMESTAMP_LINES}`;
 }
 
 export function testCommandLine(config: BuildTaskConfig): string {
     const args = [...xcodebuildArgs(config), `test -only-testing:"${config.targetName}" 2>&1`];
-    if (!config.isPhysicalDevice) {
+    if (getDestinationType(config) === 'simulator') {
         const udid = config.simulatorUdid || config.simulatorDevice;
         args.unshift(`xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator;`);
     }
@@ -102,8 +108,7 @@ export function testCommandLine(config: BuildTaskConfig): string {
 }
 
 export function debugConsoleCommandLine(config: BuildTaskConfig): string {
-    const derivedData = `$HOME/Library/Developer/VSCode/DerivedData/${config.schemeName}`;
-    const appPath = `${derivedData}/Build/Products/Debug-iphoneos/${config.productName}.app`;
+    const appPath = appBundleShellPath(config);
     const devId = devicectlId(config);
     return `set -e; ${BUNDLE_ID_FROM_INFOPLIST(appPath)}; ${ASSERT_BID}; xcrun devicectl device process launch --device "${devId}" --console --start-stopped --terminate-existing "$BID" 2>&1 | ${TIMESTAMP_LINES}`;
 }

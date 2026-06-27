@@ -1,0 +1,61 @@
+import * as os from 'os';
+import * as path from 'path';
+import type { BuildTaskConfig, DestinationType } from '../types/interfaces';
+
+/**
+ * Resolve the destination type for a config. Prefers the explicit
+ * `destinationType`; falls back to the legacy `isPhysicalDevice` boolean so
+ * configs persisted before macOS support keep working with no migration.
+ */
+export function getDestinationType(config: BuildTaskConfig): DestinationType {
+    if (config.destinationType) {
+        return config.destinationType;
+    }
+    return config.isPhysicalDevice ? 'device' : 'simulator';
+}
+
+/**
+ * The product subdirectory under `Build/Products` for a destination. macOS
+ * builds have no SDK suffix; iOS device/simulator builds do.
+ */
+export function productDirForDestination(dest: DestinationType): string {
+    switch (dest) {
+        case 'device':
+            return 'Debug-iphoneos';
+        case 'simulator':
+            return 'Debug-iphonesimulator';
+        case 'mac':
+            return 'Debug';
+    }
+}
+
+/**
+ * The `-sdk`/`-destination` tokens for an xcodebuild invocation. macOS is
+ * destination-only (passing `-sdk` alongside the macOS destination conflicts);
+ * iOS passes both an SDK and a UDID-pinned destination.
+ */
+export function xcodebuildDestinationFlags(config: BuildTaskConfig): string[] {
+    const dest = getDestinationType(config);
+    if (dest === 'mac') {
+        return [`-destination 'platform=macOS'`, '-allowProvisioningUpdates'];
+    }
+    const sdk = dest === 'device' ? 'iphoneos' : 'iphonesimulator';
+    const udid = config.simulatorUdid || config.simulatorDevice;
+    const flags = [`-sdk ${sdk}`, `-destination "id=${udid}"`];
+    if (dest === 'device') {
+        flags.push('-allowProvisioningUpdates');
+    }
+    return flags;
+}
+
+/**
+ * Absolute path to the built `.app` bundle in the extension's DerivedData.
+ */
+export function builtAppPath(config: BuildTaskConfig): string {
+    const derivedData = path.join(
+        os.homedir(),
+        'Library', 'Developer', 'VSCode', 'DerivedData', config.schemeName
+    );
+    const productDir = productDirForDestination(getDestinationType(config));
+    return path.join(derivedData, 'Build', 'Products', productDir, `${config.productName}.app`);
+}

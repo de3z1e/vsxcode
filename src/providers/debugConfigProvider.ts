@@ -30,7 +30,7 @@ export class XcodeDebugConfigProvider implements vscode.DebugConfigurationProvid
                 });
                 return undefined;
             }
-            // Trigger the unified build-and-run flow for both simulator and device
+            // Trigger the unified build-and-run flow (simulator, device, or My Mac)
             vscode.commands.executeCommand('vsxcode.sidebar.buildAndRun');
             return undefined;
         }

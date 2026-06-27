@@ -28,6 +28,11 @@ export interface PhysicalDevice {
     osBuildVersion: string;
 }
 
+export interface MacDestination {
+    name: string; // ComputerName, e.g. "Dimitry's MacBook Pro"
+    arch: string; // arm64 | x86_64
+}
+
 interface SimctlDevice {
     name: string;
     udid: string;
@@ -81,6 +86,29 @@ export async function listAvailableSimulators(): Promise<SimulatorDevice[]> {
             });
     } catch {
         return [];
+    }
+}
+
+/**
+ * Describe the host Mac as a run/debug destination ("My Mac"). Returns null on
+ * non-macOS hosts. The arch is display-only; Debug builds compile native-arch
+ * via ONLY_ACTIVE_ARCH, so it is not pinned into the xcodebuild destination.
+ */
+export async function getMyMacDestination(): Promise<MacDestination | null> {
+    if (process.platform !== 'darwin') {
+        return null;
+    }
+    try {
+        const [nameResult, archResult] = await Promise.all([
+            execFile('scutil', ['--get', 'ComputerName'], { encoding: 'utf8' }),
+            execFile('uname', ['-m'], { encoding: 'utf8' }),
+        ]);
+        return {
+            name: nameResult.stdout.trim() || 'My Mac',
+            arch: archResult.stdout.trim() || 'arm64',
+        };
+    } catch {
+        return { name: 'My Mac', arch: 'arm64' };
     }
 }
 

@@ -3,6 +3,9 @@ export type PlatformDeclaration = '.iOS' | '.macOS' | '.tvOS' | '.watchOS';
 export type ProductType = '.library' | '.executable';
 export type TargetSPMType = '.target' | '.testTarget';
 
+// Where a build/run/debug targets: an iOS simulator, a physical iOS device, or the host Mac.
+export type DestinationType = 'simulator' | 'device' | 'mac';
+
 export interface DeploymentTarget {
     platform: PlatformName;
     version: string;
@@ -98,6 +101,9 @@ export interface BuildSettings {
     headerSearchPaths?: string[];
     bundleIdentifier?: string;
     productName?: string;
+    supportedPlatforms?: string;
+    sdkRoot?: string;
+    macosxDeploymentTarget?: string;
 }
 
 export interface SwiftSettingsOutput {
@@ -149,6 +155,9 @@ export interface BuildTaskConfig {
     simulatorUdid: string;
     isPhysicalDevice?: boolean;
     deviceIdentifier?: string;
+    // Authoritative destination discriminator. When absent (legacy stored
+    // configs), derive via getDestinationType() from isPhysicalDevice.
+    destinationType?: DestinationType;
 }
 
 export interface SwiftFormatConfig {

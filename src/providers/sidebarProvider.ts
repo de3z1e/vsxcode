@@ -6,7 +6,8 @@ import { execFile as execFileCallback } from 'child_process';
 import type { BuildTaskConfig, NativeTarget } from '../types/interfaces';
 import { listAvailableSimulators, listPhysicalDevices, type SimulatorDevice, type PhysicalDevice } from '../utils/simulator';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
-import { getBuildSettingsForTarget, getProjectBuildSettings } from '../parsers/buildSettings';
+import { getBuildSettingsForTarget, getProjectBuildSettings, platformsSupported } from '../parsers/buildSettings';
+import { getDestinationType } from '../utils/destination';
 import { detectSupportedSwiftVersions, isXcodeFirstLaunchNeeded } from '../utils/version';
 import { listInstalledSimulatorApps, type InstalledAppSummary } from '../utils/bundleId';
 
@@ -74,6 +75,7 @@ export interface ProjectData {
     strictConcurrencyByTarget: Record<string, string>;
     bundleIdByTarget: Record<string, string>;
     productNameByTarget: Record<string, string>;
+    macSupportByTarget: Record<string, boolean>;
     supportedSwiftVersions: string[];
     /** Apps installed on the currently-selected simulator whose
      *  CFBundleName matches the project's product name but whose
@@ -220,7 +222,11 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
     private formatDeviceLabel(config: BuildTaskConfig): string {
         if (!config.simulatorDevice) { return ''; }
-        if (!config.isPhysicalDevice) {
+        const dest = getDestinationType(config);
+        if (dest === 'mac') {
+            return 'My Mac';
+        }
+        if (dest === 'simulator') {
             return `${config.simulatorDevice} (Simulator)`;
         }
         const physical = this.projectData?.physicalDevices.find(
@@ -248,6 +254,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         const strictConcurrencyByTarget: Record<string, string> = {};
         const bundleIdByTarget: Record<string, string> = {};
         const productNameByTarget: Record<string, string> = {};
+        const macSupportByTarget: Record<string, boolean> = {};
 
         const projectFile = config?.projectFile || xcodeProjects[0];
         if (projectFile) {
@@ -255,26 +262,28 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             try {
                 const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
                 targets = parseNativeTargets(pbxContents);
+                // Project-level settings act as the inheritance fallback for the
+                // per-target lookups below (platforms, swift version, bundle id).
+                const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
                 for (const t of targets) {
                     productNameByTarget[t.name] = t.productName || t.name;
-                    if (t.buildConfigurationListId) {
-                        const settings = getBuildSettingsForTarget(pbxContents, t.buildConfigurationListId, 'Debug');
-                        if (settings?.swiftVersion) {
-                            swiftVersionByTarget[t.name] = settings.swiftVersion;
-                        }
-                        if (settings?.strictConcurrency) {
-                            strictConcurrencyByTarget[t.name] = settings.strictConcurrency;
-                        }
-                        if (settings?.bundleIdentifier) {
-                            bundleIdByTarget[t.name] = settings.bundleIdentifier;
-                        }
-                        if (settings?.productName && !settings.productName.includes('$(')) {
-                            productNameByTarget[t.name] = settings.productName;
-                        }
+                    const settings = t.buildConfigurationListId
+                        ? getBuildSettingsForTarget(pbxContents, t.buildConfigurationListId, 'Debug')
+                        : null;
+                    macSupportByTarget[t.name] = platformsSupported(settings, projectSettings).mac;
+                    if (settings?.swiftVersion) {
+                        swiftVersionByTarget[t.name] = settings.swiftVersion;
+                    }
+                    if (settings?.strictConcurrency) {
+                        strictConcurrencyByTarget[t.name] = settings.strictConcurrency;
+                    }
+                    if (settings?.bundleIdentifier) {
+                        bundleIdByTarget[t.name] = settings.bundleIdentifier;
+                    }
+                    if (settings?.productName && !settings.productName.includes('$(')) {
+                        productNameByTarget[t.name] = settings.productName;
                     }
                 }
-                // Fall back to project-level settings
-                const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
                 if (Object.keys(swiftVersionByTarget).length === 0 && projectSettings?.swiftVersion) {
                     for (const t of targets) {
                         swiftVersionByTarget[t.name] = projectSettings.swiftVersion;
@@ -328,7 +337,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             productNameByTarget,
         );
 
-        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, supportedSwiftVersions, staleSimulatorInstalls };
+        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, macSupportByTarget, supportedSwiftVersions, staleSimulatorInstalls };
     }
 
     private async findStaleSimulatorInstalls(
@@ -440,20 +449,39 @@ export async function autoConfigureBuildTasks(
             }
         }
 
+        const targetSettings = target.buildConfigurationListId
+            ? getBuildSettingsForTarget(pbxContents, target.buildConfigurationListId, 'Debug')
+            : null;
+        const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
+        const caps = platformsSupported(targetSettings, projectSettings);
+
         const simulators = await listAvailableSimulators();
-        if (simulators.length === 0) {
+        let config: BuildTaskConfig;
+        if (simulators.length > 0 && caps.ios) {
+            const iphone = simulators.find((s) => s.name.startsWith('iPhone')) || simulators[0];
+            config = {
+                projectFile,
+                schemeName,
+                targetName: target.name,
+                productName: resolvedProductName,
+                simulatorDevice: iphone.name,
+                simulatorUdid: iphone.udid,
+                destinationType: 'simulator',
+            };
+        } else if (caps.mac) {
+            // macOS-only project (or no simulators installed) — target the host Mac.
+            config = {
+                projectFile,
+                schemeName,
+                targetName: target.name,
+                productName: resolvedProductName,
+                simulatorDevice: 'My Mac',
+                simulatorUdid: '',
+                destinationType: 'mac',
+            };
+        } else {
             return false;
         }
-        const iphone = simulators.find((s) => s.name.startsWith('iPhone')) || simulators[0];
-
-        const config: BuildTaskConfig = {
-            projectFile,
-            schemeName,
-            targetName: target.name,
-            productName: resolvedProductName,
-            simulatorDevice: iphone.name,
-            simulatorUdid: iphone.udid,
-        };
         await workspaceState.update('buildTaskConfig', config);
 
         vscode.commands.executeCommand('setContext', 'vsxcode.buildTasksConfigured', true);
