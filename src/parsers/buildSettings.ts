@@ -162,10 +162,12 @@ export function platformsSupported(
     if (targetSupported.includes('$(inherited)')) {
         supported = `${projectSupported} ${targetSupported}`;
     }
-    if (supported) {
+    // Strip unresolved interpolation so a bare `$(inherited)` with nothing to inherit falls through to the SDKROOT/deployment signals below; a surviving concrete token stays authoritative even when only non-iOS/mac (e.g. tvOS).
+    const concreteSupported = supported.replace(/\$\([^)]*\)/g, ' ').trim();
+    if (concreteSupported) {
         return {
-            ios: /\biphoneos\b/.test(supported) || /\biphonesimulator\b/.test(supported),
-            mac: /\bmacosx\b/.test(supported),
+            ios: /\biphoneos\b/.test(concreteSupported) || /\biphonesimulator\b/.test(concreteSupported),
+            mac: /\bmacosx\b/.test(concreteSupported),
         };
     }
 
