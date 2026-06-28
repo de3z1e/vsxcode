@@ -4,6 +4,7 @@ import { promises as fsp } from 'fs';
 import * as path from 'path';
 import { getBuildSettingsForTarget, getProjectBuildSettings } from '../parsers/buildSettings';
 import { parseNativeTargets } from '../parsers/targets';
+import { isXcodeFirstLaunchComplete } from './version';
 
 const execFile = promisify(execFileCallback);
 const exec = promisify(execCallback);
@@ -125,6 +126,8 @@ export interface InstalledAppSummary {
  * Filters out system apps and returns user-installed apps only.
  */
 export async function listInstalledSimulatorApps(udid: string): Promise<InstalledAppSummary[]> {
+    // simctl wedges when Xcode first-launch setup is incomplete — gate it.
+    if (!(await isXcodeFirstLaunchComplete())) { return []; }
     try {
         // listapps emits an old-style plist keyed by bundle id; pipe through
         // plutil → JSON for reliable parsing.

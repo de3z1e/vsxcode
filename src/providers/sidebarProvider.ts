@@ -8,24 +8,32 @@ import { listAvailableSimulators, listPhysicalDevices, type SimulatorDevice, typ
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { getBuildSettingsForTarget, getProjectBuildSettings, platformsSupported } from '../parsers/buildSettings';
 import { getDestinationType } from '../utils/destination';
-import { detectSupportedSwiftVersions, isXcodeFirstLaunchNeeded } from '../utils/version';
+import { detectSupportedSwiftVersions, isXcodeFirstLaunchComplete } from '../utils/version';
 import { listInstalledSimulatorApps, type InstalledAppSummary } from '../utils/bundleId';
 
 const execFile = promisify(execFileCallback);
 
 let firstLaunchPrompted = false;
 
-export function promptXcodeFirstLaunch(): void {
-    if (firstLaunchPrompted) { return; }
+export function promptXcodeFirstLaunch(force = false): void {
+    // Show once per session (avoids activation spam) unless an explicit action forces it.
+    if (firstLaunchPrompted && !force) { return; }
     firstLaunchPrompted = true;
     vscode.window.showWarningMessage(
-        'Xcode requires initial setup before building.',
+        'Xcode needs to finish setting up after an update — simulators and devices are unavailable until then.',
+        'Open Xcode',
         'Run Setup'
     ).then((selection) => {
+        if (selection === 'Open Xcode') {
+            // Launching Xcode.app triggers its component-install flow, completing first launch.
+            execFile('open', ['-a', 'Xcode']).catch(() => {});
+            return;
+        }
         if (selection !== 'Run Setup') { return; }
         const terminal = vscode.window.createTerminal('Xcode Setup');
         terminal.show();
-        const send = () => terminal.sendText('xcodebuild -runFirstLaunch');
+        // runFirstLaunch needs root to install the updated components; the terminal prompts for it.
+        const send = () => terminal.sendText('sudo xcodebuild -runFirstLaunch');
         const listener = vscode.window.onDidChangeTerminalShellIntegration((e) => {
             if (e.terminal === terminal) {
                 send();
@@ -38,6 +46,33 @@ export function promptXcodeFirstLaunch(): void {
         });
         const fallbackTimer = setTimeout(() => { listener.dispose(); send(); }, 3000);
     });
+}
+
+let readinessWatch: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * Poll readiness in the background while first-launch is incomplete and refresh
+ * the sidebar the instant setup completes, so no manual reload is needed.
+ */
+function startXcodeReadinessWatch(): void {
+    if (readinessWatch) { return; }
+    let elapsedMs = 0;
+    const timer = setInterval(async () => {
+        elapsedMs += 10000;
+        let ready = false;
+        try { ready = await isXcodeFirstLaunchComplete(); } catch { /* keep polling */ }
+        if (ready) {
+            clearInterval(timer);
+            readinessWatch = undefined;
+            firstLaunchPrompted = false; // re-arm the prompt if Xcode breaks again later
+            vscode.window.showInformationMessage('Xcode is ready — simulators and devices are available.');
+            vscode.commands.executeCommand('vsxcode.sidebar.refresh');
+        } else if (elapsedMs >= 30 * 60 * 1000) {
+            clearInterval(timer);
+            readinessWatch = undefined;
+        }
+    }, 10000);
+    readinessWatch = timer;
 }
 
 // ── Tree item types ──────────────────────────────────────────────
@@ -76,6 +111,8 @@ export interface ProjectData {
     bundleIdByTarget: Record<string, string>;
     productNameByTarget: Record<string, string>;
     macSupportByTarget: Record<string, boolean>;
+    // False when Xcode's first-launch setup is incomplete — simulators/devices unavailable.
+    xcodeReady: boolean;
     supportedSwiftVersions: string[];
     /** Apps installed on the currently-selected simulator whose
      *  CFBundleName matches the project's product name but whose
@@ -94,7 +131,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
     constructor(
         private workspaceState: vscode.Memento,
-        private readonly extensionUri: vscode.Uri
+        private readonly extensionUri: vscode.Uri,
+        private readonly log: (message: string) => void = () => {}
     ) {}
 
     refresh(): void {
@@ -226,15 +264,17 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         if (dest === 'mac') {
             return 'My Mac';
         }
+        // Simulators/devices are down until first-launch completes — flag the stale selection.
+        const unavailable = this.projectData?.xcodeReady === false ? ' — unavailable' : '';
         if (dest === 'simulator') {
-            return `${config.simulatorDevice} (Simulator)`;
+            return `${config.simulatorDevice} (Simulator)${unavailable}`;
         }
         const physical = this.projectData?.physicalDevices.find(
             d => d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier
         );
         const connectionType = physical?.connectionType;
         const transport = connectionType === 'wired' ? 'USB' : connectionType === 'localNetwork' ? 'Wi-Fi' : connectionType || 'Unknown';
-        return `${config.simulatorDevice} (${transport})`;
+        return `${config.simulatorDevice} (${transport})${unavailable}`;
     }
 
     // ── Data loading ──────────────────────────────────────────
@@ -243,6 +283,15 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!rootPath) { return; }
 
+        this.log('[sidebar] loading project data…');
+        // simctl/devicectl block indefinitely until first-launch completes, so gate up
+        // front and skip the Xcode-dependent probes. The enumeration helpers self-gate too.
+        const xcodeReady = await isXcodeFirstLaunchComplete();
+        if (!xcodeReady) {
+            this.log('[sidebar] Xcode first-launch incomplete — simulator/device support unavailable until setup completes');
+            promptXcodeFirstLaunch();
+            startXcodeReadinessWatch();
+        }
         const entries = await fsp.readdir(rootPath, { withFileTypes: true });
         const xcodeProjects = entries
             .filter((e) => e.isDirectory() && e.name.endsWith('.xcodeproj'))
@@ -314,30 +363,34 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 }
             } catch { /* no pbxproj */ }
 
-            try {
-                const { stdout } = await execFile('xcodebuild', ['-list', '-project', path.join(rootPath, projectFile)], { encoding: 'utf8', timeout: 10000 });
-                const schemesMatch = /Schemes:\n([\s\S]*?)(?:\n\n|$)/.exec(stdout);
-                if (schemesMatch) {
-                    schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            // Scheme discovery needs xcodebuild; skip it when Xcode isn't ready.
+            if (xcodeReady) {
+                try {
+                    const { stdout } = await execFile('xcodebuild', ['-list', '-project', path.join(rootPath, projectFile)], { encoding: 'utf8', timeout: 10000 });
+                    const schemesMatch = /Schemes:\n([\s\S]*?)(?:\n\n|$)/.exec(stdout);
+                    if (schemesMatch) {
+                        schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                    }
+                } catch (error) {
+                    const message = (error as { message?: string }).message || String(error);
+                    this.log(`[sidebar] xcodebuild -list failed: ${message}`);
                 }
-            } catch (error) {
-                if (isXcodeFirstLaunchNeeded(error)) { promptXcodeFirstLaunch(); }
             }
         }
 
-        const [simulators, physicalDevices, supportedSwiftVersions] = await Promise.all([
+        // These probes self-gate on Xcode readiness, resolving empty instead of
+        // hanging on a wedged simctl/devicectl when setup is incomplete.
+        const [simulators, physicalDevices, supportedSwiftVersions, staleSimulatorInstalls] = await Promise.all([
             listAvailableSimulators(),
             listPhysicalDevices(),
             detectSupportedSwiftVersions(),
+            this.findStaleSimulatorInstalls(config, bundleIdByTarget, productNameByTarget),
         ]);
 
-        const staleSimulatorInstalls = await this.findStaleSimulatorInstalls(
-            config,
-            bundleIdByTarget,
-            productNameByTarget,
-        );
-
-        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, macSupportByTarget, supportedSwiftVersions, staleSimulatorInstalls };
+        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, macSupportByTarget, xcodeReady, supportedSwiftVersions, staleSimulatorInstalls };
+        this.log(`[sidebar] project data loaded — ${targets.length} target(s), ${schemes.length} scheme(s), ${simulators.length} simulator(s), ${physicalDevices.length} device(s)`);
+        // Force a fresh render now data is in; otherwise the spinner can persist until the view is re-entered.
+        this._onDidChangeTreeData.fire();
     }
 
     private async findStaleSimulatorInstalls(
@@ -433,20 +486,21 @@ export async function autoConfigureBuildTasks(
         }
 
         let schemeName = path.basename(projectFile, '.xcodeproj');
-        try {
-            const { stdout } = await execFile('xcodebuild', ['-list', '-project', path.join(rootPath, projectFile)], { encoding: 'utf8', timeout: 10000 });
-            const schemesMatch = /Schemes:\n([\s\S]*?)(?:\n\n|$)/.exec(stdout);
-            if (schemesMatch) {
-                const schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                if (schemes.length >= 1) {
-                    schemeName = schemes.find((s) => s === target.name) || schemes[0];
+        if (await isXcodeFirstLaunchComplete()) {
+            try {
+                const { stdout } = await execFile('xcodebuild', ['-list', '-project', path.join(rootPath, projectFile)], { encoding: 'utf8', timeout: 10000 });
+                const schemesMatch = /Schemes:\n([\s\S]*?)(?:\n\n|$)/.exec(stdout);
+                if (schemesMatch) {
+                    const schemes = schemesMatch[1].split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                    if (schemes.length >= 1) {
+                        schemeName = schemes.find((s) => s === target.name) || schemes[0];
+                    }
                 }
-            }
-        } catch (error) {
-            if (isXcodeFirstLaunchNeeded(error)) {
-                promptXcodeFirstLaunch();
-                return false;
-            }
+            } catch { /* fall back to the project-name scheme */ }
+        } else {
+            // Setup pending — skip scheme discovery and prompt, but keep going so a
+            // macOS-capable target can still default to My Mac.
+            promptXcodeFirstLaunch();
         }
 
         const targetSettings = target.buildConfigurationListId

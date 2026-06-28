@@ -4,6 +4,7 @@ import type { ExecFileOptionsWithStringEncoding } from 'child_process';
 import { promises as fsp } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { isXcodeFirstLaunchComplete } from './version';
 
 const execFile = promisify(execFileCallback) as (
     file: string,
@@ -45,6 +46,8 @@ interface SimctlOutput {
 }
 
 export async function listAvailableSimulators(): Promise<SimulatorDevice[]> {
+    // simctl blocks indefinitely until Xcode first-launch completes — gate rather than hang.
+    if (!(await isXcodeFirstLaunchComplete())) { return []; }
     try {
         const { stdout } = await execFile(
             'xcrun',
@@ -155,6 +158,8 @@ export async function checkDeviceReady(deviceId: string): Promise<{ ready: boole
 }
 
 export async function listPhysicalDevices(): Promise<PhysicalDevice[]> {
+    // devicectl also wedges until first-launch completes — same gate.
+    if (!(await isXcodeFirstLaunchComplete())) { return []; }
     const tmpFile = path.join(os.tmpdir(), `sph-devices-${Date.now()}.json`);
     try {
         await execFile(

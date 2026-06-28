@@ -99,6 +99,21 @@ export async function detectMacOSVersion(): Promise<string | null> {
     }
 }
 
+/**
+ * Whether Xcode's post-update first-launch tasks are complete. `xcodebuild
+ * -checkFirstLaunchStatus` exits 0 when ready; while pending, simctl/devicectl
+ * block indefinitely and simulator builds fail, so the device subsystems gate
+ * on this fast check. Any failure/timeout fails safe to "not ready".
+ */
+export async function isXcodeFirstLaunchComplete(): Promise<boolean> {
+    try {
+        await execFile('xcodebuild', ['-checkFirstLaunchStatus'], { encoding: 'utf8', timeout: 10000 });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export function isXcodeFirstLaunchNeeded(error: unknown): boolean {
     const stderr = String((error as { stderr?: string })?.stderr || '');
     const message = String((error as { message?: string })?.message || '');

@@ -14,7 +14,7 @@ import type {
     SwiftPackageProductDependency
 } from './types/interfaces';
 import { DEFAULT_SWIFT_VERSION } from './types/constants';
-import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, cleanup, compareVersions, isXcodeFirstLaunchNeeded } from './utils/version';
+import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, cleanup, compareVersions, isXcodeFirstLaunchNeeded, isXcodeFirstLaunchComplete } from './utils/version';
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
@@ -841,7 +841,7 @@ export function activate(context: vscode.ExtensionContext): void {
     };
 
     // Register sidebar and no-project placeholder
-    const sidebarProvider = new SidebarProvider(context.workspaceState, context.extensionUri);
+    const sidebarProvider = new SidebarProvider(context.workspaceState, context.extensionUri, log);
     const treeView = vscode.window.createTreeView('vsxcode.sidebar', {
         treeDataProvider: sidebarProvider,
     });
@@ -1200,7 +1200,12 @@ export function activate(context: vscode.ExtensionContext): void {
             const macSupported = !!sidebarProvider.getProjectData()?.macSupportByTarget?.[config.targetName];
             const macDest = macSupported ? await getMyMacDestination() : null;
             if (simulators.length === 0 && physicalDevices.length === 0 && !macDest) {
-                vscode.window.showWarningMessage('No devices found.');
+                // An empty list may mean Xcode setup is pending, not truly no devices — offer the fix.
+                if (!(await isXcodeFirstLaunchComplete())) {
+                    promptXcodeFirstLaunch(true);
+                } else {
+                    vscode.window.showWarningMessage('No devices found.');
+                }
                 return;
             }
             type DevicePick = vscode.QuickPickItem & { udid: string; deviceIdentifier: string; destinationType: DestinationType };
@@ -1403,6 +1408,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Debug orchestration ─────────────────────────────────────
     async function buildAndDebugSimulator(config: BuildTaskConfig): Promise<void> {
+        // When first-launch is pending, simulator builds fail with a cryptic exit 70
+        // ("no device matched the destination") — prompt up front instead.
+        if (!(await isXcodeFirstLaunchComplete())) {
+            log('[simulator-debug] Xcode first-launch incomplete — simulator build unavailable');
+            printToSharedPanel('** Xcode setup incomplete — simulators and devices are unavailable. Finish Xcode setup, then try again. **', '33');
+            promptXcodeFirstLaunch();
+            return;
+        }
         await cancelActiveRun();
         const runId = currentRunId;
 
