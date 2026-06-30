@@ -32,7 +32,7 @@ import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks, promptXcodeFirstLaunch } from './providers/sidebarProvider';
 import { XCTestController } from './providers/testController';
 import { updateBuildSetting } from './writers/pbxproj';
-import { createSwiftFileWatcher } from './sync/swiftFileSync';
+import { createSwiftFileWatcher, reconcileSwiftFiles } from './sync/swiftFileSync';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
 import { CodeQualityWebviewProvider } from './providers/codeQualityWebviewProvider';
 import {
@@ -1860,6 +1860,33 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const swiftWatcherDisposables = createSwiftFileWatcher(projectRoot, log);
     context.subscriptions.push(...swiftWatcherDisposables);
+
+    // Catch-up scan for Swift files added while the watcher wasn't live (VS Code closed, git checkout, external tooling).
+    reconcileSwiftFiles(projectRoot, log)
+        .then((added) => {
+            if (added > 0) {
+                vscode.window.showInformationMessage(`VSXcode: added ${added} Swift file(s) to the Xcode project.`);
+            }
+        })
+        .catch((error) => {
+            const message = (error as { message?: string }).message || String(error);
+            log(`[swift-sync] reconcile failed: ${message}`);
+        });
+
+    const syncProjectFilesCmd = vscode.commands.registerCommand('vsxcode.syncProjectFiles', async () => {
+        try {
+            const added = await reconcileSwiftFiles(projectRoot, log);
+            vscode.window.showInformationMessage(
+                added > 0
+                    ? `VSXcode: added ${added} Swift file(s) to the Xcode project.`
+                    : 'VSXcode: all Swift files are already in sync.'
+            );
+        } catch (error) {
+            const message = (error as { message?: string }).message || String(error);
+            vscode.window.showErrorMessage(`VSXcode: sync failed — ${message}`);
+        }
+    });
+    context.subscriptions.push(syncProjectFilesCmd);
 
     // ── Auto-continue past debugger-internal stops ──────────────
     //

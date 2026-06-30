@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { cleanup } from '../utils/version';
 import { extractObjectBody } from './base';
 
@@ -113,6 +114,31 @@ export function findMainGroupId(pbxContents: string): string | null {
     }
     const mainGroupMatch = /mainGroup\s*=\s*([A-F0-9]{24})/.exec(projectMatch[1]);
     return mainGroupMatch ? mainGroupMatch[1] : null;
+}
+
+/** Map every group reachable from mainGroup to its absolute on-disk dir. A group adds a path segment only if it has a `path`; name-only "virtual" groups inherit the parent dir. */
+export function buildGroupDirectories(
+    groups: Map<string, PBXGroupInfo>,
+    mainGroupId: string,
+    rootPath: string
+): Map<string, string> {
+    const dirs = new Map<string, string>();
+    const visited = new Set<string>();
+
+    const visit = (groupId: string, parentDir: string): void => {
+        if (visited.has(groupId)) { return; } // guard against malformed cyclic trees
+        visited.add(groupId);
+        const group = groups.get(groupId);
+        if (!group) { return; }
+        const dir = group.path ? path.join(parentDir, group.path) : parentDir;
+        dirs.set(groupId, dir);
+        for (const childId of group.childIds) {
+            visit(childId, dir);
+        }
+    };
+
+    visit(mainGroupId, rootPath);
+    return dirs;
 }
 
 export function resolveGroupForPath(
