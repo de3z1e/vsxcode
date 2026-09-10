@@ -2,6 +2,23 @@ import type { BuildSettings } from '../types/interfaces';
 import { cleanup } from '../utils/version';
 import { parseListValue } from './base';
 
+// A value runs to the first line-final `;`, so multi-line parenthesised lists (whose items
+// end in `,`) are captured whole; a quoted value ending in `;` would truncate. Xcode quotes
+// the whole key when it carries an SDK condition, so the quotes are optional on both sides
+// and the condition stays part of the key — folding it onto the bare name would shadow the
+// unconditional value. One setting per line, as Xcode writes them.
+const RAW_SETTING_REGEX = /^[\t ]*"?([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?)"?\s*=\s*([\s\S]*?);[\t ]*$/gm;
+
+function parseRawSettings(settingsBlock: string): Record<string, string> {
+    const raw: Record<string, string> = {};
+    const regex = new RegExp(RAW_SETTING_REGEX.source, RAW_SETTING_REGEX.flags);
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(settingsBlock)) !== null) {
+        raw[match[1]] = cleanup(match[2]);
+    }
+    return raw;
+}
+
 export function parseBuildConfigurations(pbxContents: string): Map<string, BuildSettings> {
     const configs = new Map<string, BuildSettings>();
 
@@ -23,7 +40,8 @@ export function parseBuildConfigurations(pbxContents: string): Map<string, Build
 
         const settings: BuildSettings = {
             configurationName,
-            targetId: null
+            targetId: null,
+            raw: parseRawSettings(settingsBlock)
         };
 
         const swiftVersionMatch = /SWIFT_VERSION = ([^;]+);/.exec(settingsBlock);

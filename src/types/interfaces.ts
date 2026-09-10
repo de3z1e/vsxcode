@@ -92,9 +92,23 @@ export interface BuildPackageSwiftOptions {
     preamble?: string;
 }
 
+export interface SwiftSettingsInput {
+    projectSettings: BuildSettings | null;
+    targetSettings: BuildSettings | null;
+    /** Xcode configuration the settings were resolved from ("Debug"/"Release"). */
+    configurationName: string;
+    /** Never applied to the language mode, which follows the target's SWIFT_VERSION alone. */
+    fallbackSwiftVersion: string;
+}
+
 export interface BuildSettings {
     configurationName: string;
     targetId: string | null;
+    /**
+     * Every `KEY = value;` pair, `cleanup()`-ed only — `$(inherited)` and parenthesised
+     * list literals survive verbatim, so callers run `parseListValue` themselves.
+     */
+    raw: Record<string, string>;
     swiftVersion?: string;
     strictConcurrency?: string;
     swiftActiveCompilationConditions?: string[];

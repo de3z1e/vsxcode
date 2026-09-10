@@ -32,7 +32,7 @@ VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.sw
 1. **generatePackageSwift** — Parses pbxproj, builds Package.swift, configures SourceKit-LSP for iOS simulator SDK
 2. **configureBuildTasks** — Interactive setup of project/target/scheme/simulator, stores `BuildTaskConfig` to workspace state
 
-Also contains inline helpers: `parseDefaultLocalization`, `parseDeploymentTargets`, `parseExcludedFiles`, `generateCSettings`, `resolveSwiftLanguageMode`, `formatProductType`, `printToSharedPanel`, `cancelActiveRun`, `executeTaskAndWait`.
+Also contains inline helpers: `parseDefaultLocalization`, `parseDeploymentTargets`, `parseExcludedFiles`, `generateCSettings`, `formatProductType`, `printToSharedPanel`, `cancelActiveRun`, `executeTaskAndWait`.
 
 ### Commands
 
@@ -54,7 +54,8 @@ src/
 │                                  resource extensions, SPM source/exclude/resource constants
 ├── parsers/
 │   ├── base.ts                  — extractObjectBody (brace-matching), parsePackageRequirement, parseListValue
-│   ├── buildSettings.ts         — XCBuildConfiguration parsing, mergeWithInherited, project/target settings
+│   ├── buildSettings.ts         — XCBuildConfiguration parsing, mergeWithInherited, project/target settings,
+│   │                              raw KEY=value capture for settings the typed fields don't name
 │   ├── targets.ts               — PBXNativeTarget parsing, isTestTarget, target dependencies, build phase IDs
 │   ├── packages.ts              — XCRemoteSwiftPackageReference + XCLocalSwiftPackageReference + product deps
 │   ├── frameworks.ts            — PBXFrameworksBuildPhase parsing, framework name extraction
@@ -65,7 +66,8 @@ src/
 │                                  currentVersion, section bounds, entry offsets
 ├── generators/
 │   ├── packageSwift.ts          — Main Package.swift builder (platforms, products, deps, targets)
-│   ├── swiftSettings.ts         — .define(), .unsafeFlags() from build settings
+│   ├── swiftSettings.ts         — swiftSettings entries from build settings: language mode, .define(),
+│   │                              .unsafeFlags(), strict concurrency; effectiveSwiftMajor
 │   ├── linkerSettings.ts        — .linkedFramework() from linked frameworks
 │   ├── resources.ts             — Resource entry formatting (.process/.copy)
 │   └── buildTasks.ts            — xcodebuild shell commands (build, build-install, run-and-debug)

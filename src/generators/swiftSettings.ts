@@ -1,12 +1,39 @@
-import type { BuildSettings } from '../types/interfaces';
+import type { BuildSettings, SwiftSettingsInput } from '../types/interfaces';
 import { mergeWithInherited } from '../parsers/buildSettings';
 
-export function generateSwiftSettings(
-    projectSettings: BuildSettings | null,
+/**
+ * Target's own SWIFT_VERSION, else the toolchain fallback. Returns `NaN` verbatim —
+ * the strict-concurrency gate below relies on `NaN < 6` being false.
+ */
+export function effectiveSwiftMajor(
     targetSettings: BuildSettings | null,
-    configurationName: string
-): string[] {
+    fallbackSwiftVersion: string
+): number {
+    const version = targetSettings?.swiftVersion || fallbackSwiftVersion;
+    return parseInt(version.split('.')[0], 10);
+}
+
+/** Never the toolchain fallback — that would declare a language mode the project never asked for. */
+function resolveSwiftLanguageMode(swiftVersion: string | undefined): string | undefined {
+    if (!swiftVersion) {
+        return undefined;
+    }
+    const major = parseInt(swiftVersion.split('.')[0], 10);
+    return isNaN(major) ? undefined : `.v${major}`;
+}
+
+export function generateSwiftSettings({
+    projectSettings,
+    targetSettings,
+    configurationName,
+    fallbackSwiftVersion
+}: SwiftSettingsInput): string[] {
     const settings: string[] = [];
+
+    const swiftLanguageMode = resolveSwiftLanguageMode(targetSettings?.swiftVersion);
+    if (swiftLanguageMode) {
+        settings.push(`.swiftLanguageMode(${swiftLanguageMode})`);
+    }
 
     const projectConditions = projectSettings?.swiftActiveCompilationConditions;
     const targetConditions = targetSettings?.swiftActiveCompilationConditions;
@@ -20,9 +47,6 @@ export function generateSwiftSettings(
         settings.push(`.define("${condition}")`);
     }
 
-    if (mergedConditions.includes('DEBUG') || mergedConditions.some((c) => c === 'DEBUG')) {
-        // DEBUG is typically only for debug configuration
-    }
     const hasDebugCondition = mergedConditions.includes('DEBUG');
     if (hasDebugCondition && configurationName === 'Debug') {
         settings.push(`.define("DEBUG", .when(configuration: .debug))`);
@@ -52,6 +76,16 @@ export function generateSwiftSettings(
     if (filteredFlags.length > 0) {
         const flagsStr = filteredFlags.map((f) => `"${f}"`).join(', ');
         settings.push(`.unsafeFlags([${flagsStr}])`);
+    }
+
+    // Swift 6 is 'complete' by definition, so Xcode stops emitting the flag there.
+    const strictConcurrency = targetSettings?.strictConcurrency || projectSettings?.strictConcurrency;
+    if (strictConcurrency && effectiveSwiftMajor(targetSettings, fallbackSwiftVersion) < 6) {
+        if (strictConcurrency === 'complete') {
+            settings.push(`.enableUpcomingFeature("StrictConcurrency")`);
+        } else if (strictConcurrency === 'targeted') {
+            settings.push(`.unsafeFlags(["-strict-concurrency=targeted"])`);
+        }
     }
 
     return settings;

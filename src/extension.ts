@@ -22,7 +22,7 @@ import { getBuildSettingsForTarget, getProjectBuildSettings, resolveConfiguratio
 import { extractObjectBody } from './parsers/base';
 import { parseLinkedFrameworksForTarget } from './parsers/frameworks';
 import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resources';
-import { generateSwiftSettings } from './generators/swiftSettings';
+import { generateSwiftSettings, effectiveSwiftMajor } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
 import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, findDeviceSymbols, getMyMacDestination, listSimulatorAppProcesses, waitForNewSimulatorAppProcess } from './utils/simulator';
@@ -117,14 +117,6 @@ async function ensureMacOSPlatform(platforms: DeploymentTarget[]): Promise<Deplo
         next[macIndex] = macEntry;
     }
     return next;
-}
-
-function resolveSwiftLanguageMode(swiftVersion: string | undefined): string | undefined {
-    if (!swiftVersion) {
-        return undefined;
-    }
-    const major = parseInt(swiftVersion.split('.')[0], 10);
-    return isNaN(major) ? undefined : `.v${major}`;
 }
 
 function formatProductType(productType: string): string {
@@ -422,7 +414,12 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
             ? getBuildSettingsForTarget(pbxContents, nativeTarget.buildConfigurationListId, configurationName)
             : null;
 
-        const swiftSettings = generateSwiftSettings(projectBuildSettings, targetSettings, configurationName);
+        const swiftSettings = generateSwiftSettings({
+            projectSettings: projectBuildSettings,
+            targetSettings,
+            configurationName,
+            fallbackSwiftVersion: swiftVersion
+        });
         const linkedFrameworks = parseLinkedFrameworksForTarget(pbxContents, buildPhases.frameworksBuildPhaseId);
         const targetAbsolutePath = path.join(rootPath, targetDef.path);
         const resources = parseResourcesForTarget(pbxContents, buildPhases.resourcesBuildPhaseId, targetAbsolutePath);
@@ -438,23 +435,9 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
         const headerPaths = targetSettings?.headerSearchPaths;
         const cSettings = generateCSettings(headerPaths);
 
-        const swiftLangVersion = targetSettings?.swiftVersion;
-        const swiftLanguageMode = resolveSwiftLanguageMode(swiftLangVersion);
-        if (swiftLanguageMode) {
-            swiftSettings.unshift(`.swiftLanguageMode(${swiftLanguageMode})`);
-        }
-
-        const strictConcurrency = targetSettings?.strictConcurrency || projectBuildSettings?.strictConcurrency;
-        const effectiveVersion = swiftLangVersion || swiftVersion;
-        const majorVersion = parseInt(effectiveVersion.split('.')[0], 10);
+        // momc needs a concrete language version; NaN means the project named none.
+        const majorVersion = effectiveSwiftMajor(targetSettings, swiftVersion);
         swiftMajorByTarget.set(nativeTarget.name, Number.isNaN(majorVersion) ? '5' : String(majorVersion));
-        if (strictConcurrency && majorVersion < 6) {
-            if (strictConcurrency === 'complete') {
-                swiftSettings.push(`.enableUpcomingFeature("StrictConcurrency")`);
-            } else if (strictConcurrency === 'targeted') {
-                swiftSettings.push(`.unsafeFlags(["-strict-concurrency=targeted"])`);
-            }
-        }
 
         // Add XCTest framework search path, Swift overlay path, and -enable-testing for test targets
         if (targetDef.isTest && xcTestFrameworkPath && xcTestSwiftOverlayPath) {
