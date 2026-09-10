@@ -30,8 +30,11 @@ export function parseBuildConfigurations(pbxContents: string): Map<string, Build
     }
     const section = sectionMatch[1];
 
+    // `[^{}]*?` spans the keys Xcode interposes between `isa` and `buildSettings` — chiefly
+    // `baseConfigurationReference` on any .xcconfig-backed configuration. Braces are excluded so a
+    // configuration lacking `buildSettings` can't swallow the next block's settings under its own id.
     const configRegex =
-        /([A-F0-9]+)\s*\/\*\s*([^*]+)\s*\*\/\s*=\s*\{\s*isa\s*=\s*XCBuildConfiguration;\s*buildSettings\s*=\s*\{([\s\S]*?)\};\s*name\s*=\s*([^;]+);/g;
+        /([A-F0-9]+)\s*\/\*\s*([^*]+)\s*\*\/\s*=\s*\{\s*isa\s*=\s*XCBuildConfiguration;[^{}]*?buildSettings\s*=\s*\{([\s\S]*?)\};\s*name\s*=\s*([^;]+);/g;
     let match: RegExpExecArray | null;
     while ((match = configRegex.exec(section)) !== null) {
         const configId = match[1];
