@@ -99,6 +99,16 @@ export interface SwiftSettingsInput {
     configurationName: string;
     /** Never applied to the language mode, which follows the target's SWIFT_VERSION alone. */
     fallbackSwiftVersion: string;
+    /**
+     * The `swift-tools-version` the manifest will declare; gates which first-class
+     * SwiftSetting factories exist. Same value as `fallbackSwiftVersion` today, but not
+     * the same meaning.
+     */
+    toolsVersion: string;
+    /** Reports build settings the flag table doesn't cover. */
+    logger?: (message: string) => void;
+    /** Shared across one generation's targets so a project-level setting is reported once. */
+    reportedSettings?: Set<string>;
 }
 
 export interface BuildSettings {

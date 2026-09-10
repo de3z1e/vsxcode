@@ -407,6 +407,8 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
     }
 
     const swiftMajorByTarget = new Map<string, string>();
+    // One set for the whole pass: an unmapped project-level setting logs once, not per target.
+    const reportedSwiftSettings = new Set<string>();
     const targetOutputs: TargetOutput[] = nativeTargets.map((nativeTarget) => {
         const targetDef = targetDefinitions.find((t) => t.name === nativeTarget.name)!;
         const buildPhases = parseBuildPhaseIds(pbxContents, nativeTarget.name);
@@ -418,7 +420,10 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
             projectSettings: projectBuildSettings,
             targetSettings,
             configurationName,
-            fallbackSwiftVersion: swiftVersion
+            fallbackSwiftVersion: swiftVersion,
+            toolsVersion: swiftVersion,
+            logger,
+            reportedSettings: reportedSwiftSettings
         });
         const linkedFrameworks = parseLinkedFrameworksForTarget(pbxContents, buildPhases.frameworksBuildPhaseId);
         const targetAbsolutePath = path.join(rootPath, targetDef.path);
