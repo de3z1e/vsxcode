@@ -1,0 +1,176 @@
+// !$*UTF8*$!
+// Fixture project for `npm run test:flag-parity`; flag-parity.js materialises it into a
+// temp directory per run. Deliberately NOT stored as a .pbxproj inside a .xcodeproj: this
+// extension activates on `workspaceContains:**/*.pbxproj`, so a real project here would
+// make the installed extension reconcile files into the fixture, write a Package.swift at
+// the repo root, and auto-configure its sidebar against it.
+//
+// A row is only covered when this fixture gives it a flag-emitting value.
+//   FlagParityTarget    every table row, SWIFT_VERSION on the target
+//   FlagParityInherited SWIFT_VERSION inherited from the project, the warning-group lists
+//                       split across project and target with $(inherited), and an
+//                       .xcconfig attached so the baseConfigurationReference path is
+//                       exercised too
+// SWIFT_TREAT_WARNINGS_AS_ERRORS stays NO: with it YES any incidental warning fails the
+// build for reasons unrelated to parity. No OTHER_SWIFT_FLAGS: xcodebuild keeps
+// `-Xfrontend <flag>` paired while SwiftPM forwards it bare, so it cannot be compared.
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000001 /* Covered.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* Covered.swift */; };
+		AA0000000000000000000011 /* Inherited.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* Inherited.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000002 /* Covered.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Covered.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* libFlagParityTarget.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libFlagParityTarget.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000012 /* Inherited.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Inherited.swift; sourceTree = "<group>"; };
+		AA0000000000000000000013 /* libFlagParityInherited.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libFlagParityInherited.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA000000000000000000001B /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000004 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		AA0000000000000000000014 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000000005 = {isa = PBXGroup; children = (AA0000000000000000000006 /* FlagParityTarget */, AA0000000000000000000015 /* FlagParityInherited */, AA0000000000000000000007 /* Products */, ); sourceTree = "<group>"; };
+		AA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = "<group>"; };
+		AA0000000000000000000015 /* FlagParityInherited */ = {isa = PBXGroup; children = (AA0000000000000000000012 /* Inherited.swift */, ); path = FlagParityInherited; sourceTree = "<group>"; };
+		AA0000000000000000000007 /* Products */ = {isa = PBXGroup; children = (AA0000000000000000000003 /* libFlagParityTarget.a */, AA0000000000000000000013 /* libFlagParityInherited.a */, ); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000008 /* FlagParityTarget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000009 /* Build configuration list for PBXNativeTarget "FlagParityTarget" */;
+			buildPhases = (AA000000000000000000000A /* Sources */, AA0000000000000000000004 /* Frameworks */, );
+			buildRules = ();
+			dependencies = ();
+			name = FlagParityTarget;
+			productName = FlagParityTarget;
+			productReference = AA0000000000000000000003 /* libFlagParityTarget.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		AA0000000000000000000016 /* FlagParityInherited */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000017 /* Build configuration list for PBXNativeTarget "FlagParityInherited" */;
+			buildPhases = (AA0000000000000000000018 /* Sources */, AA0000000000000000000014 /* Frameworks */, );
+			buildRules = ();
+			dependencies = ();
+			name = FlagParityInherited;
+			productName = FlagParityInherited;
+			productReference = AA0000000000000000000013 /* libFlagParityInherited.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA000000000000000000000B /* Project object */ = {
+			isa = PBXProject;
+			attributes = { BuildIndependentTargetsInParallel = 1; LastUpgradeCheck = 2600; };
+			buildConfigurationList = AA000000000000000000000C /* Build configuration list for PBXProject "FlagParity" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base, );
+			mainGroup = AA0000000000000000000005;
+			productRefGroup = AA0000000000000000000007 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (AA0000000000000000000008 /* FlagParityTarget */, AA0000000000000000000016 /* FlagParityInherited */, );
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		AA0000000000000000000018 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000011 /* Inherited.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA000000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG FEATURE_X $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				SWIFT_WARNINGS_AS_ERRORS_GROUPS = PreconcurrencyImport;
+			};
+			name = Debug;
+		};
+		AA000000000000000000000F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = FlagParityTarget;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_STRICT_MEMORY_SAFETY = YES;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = NO;
+				SWIFT_UPCOMING_FEATURE_CONCISE_MAGIC_FILE = YES;
+				SWIFT_UPCOMING_FEATURE_DEPRECATE_APPLICATION_MAIN = YES;
+				SWIFT_UPCOMING_FEATURE_DISABLE_OUTWARD_ACTOR_ISOLATION = YES;
+				SWIFT_UPCOMING_FEATURE_DYNAMIC_ACTOR_ISOLATION = YES;
+				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = MIGRATE;
+				SWIFT_UPCOMING_FEATURE_FORWARD_TRAILING_CLOSURES = YES;
+				SWIFT_UPCOMING_FEATURE_GLOBAL_ACTOR_ISOLATED_TYPES_USABILITY = YES;
+				SWIFT_UPCOMING_FEATURE_GLOBAL_CONCURRENCY = YES;
+				SWIFT_UPCOMING_FEATURE_IMPLICIT_OPEN_EXISTENTIALS = YES;
+				SWIFT_UPCOMING_FEATURE_IMPORT_OBJC_FORWARD_DECLS = YES;
+				SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES = YES;
+				SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES = YES;
+				SWIFT_UPCOMING_FEATURE_INTERNAL_IMPORTS_BY_DEFAULT = YES;
+				SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = MIGRATE;
+				SWIFT_UPCOMING_FEATURE_NONFROZEN_ENUM_EXHAUSTIVITY = YES;
+				SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT = YES;
+				SWIFT_UPCOMING_FEATURE_REGION_BASED_ISOLATION = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000019 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AA000000000000000000001B /* Shared.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = FlagParityInherited;
+				SWIFT_WARNINGS_AS_ERRORS_GROUPS = "$(inherited) DeprecatedDeclaration";
+				SWIFT_WARNINGS_AS_WARNINGS_GROUPS = StrictMemorySafety;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA000000000000000000000C /* Build configuration list for PBXProject "FlagParity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (AA000000000000000000000D /* Debug */, );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA0000000000000000000009 /* Build configuration list for PBXNativeTarget "FlagParityTarget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (AA000000000000000000000F /* Debug */, );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA0000000000000000000017 /* Build configuration list for PBXNativeTarget "FlagParityInherited" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (AA0000000000000000000019 /* Debug */, );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA000000000000000000000B /* Project object */;
+}
