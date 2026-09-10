@@ -9,15 +9,24 @@ import { mergeWithInherited } from '../parsers/buildSettings';
 import { parseListValue } from '../parsers/base';
 import { compareVersions } from '../utils/version';
 
+/** SWIFT_VERSION as Xcode resolves it: the target's, else the project's. */
+function resolveSwiftVersion(
+    targetSettings: BuildSettings | null,
+    projectSettings: BuildSettings | null
+): string | undefined {
+    return targetSettings?.swiftVersion || projectSettings?.swiftVersion;
+}
+
 /**
- * Target's own SWIFT_VERSION, else the toolchain fallback. Returns `NaN` verbatim —
- * the version gate below relies on `NaN < 6` being false.
+ * Swift language major, resolved target → project → toolchain. Returns `NaN` verbatim: the
+ * version gate relies on `NaN < 6` being false and `extension.ts` substitutes '5' for momc.
  */
 export function effectiveSwiftMajor(
     targetSettings: BuildSettings | null,
+    projectSettings: BuildSettings | null,
     fallbackSwiftVersion: string
 ): number {
-    const version = targetSettings?.swiftVersion || fallbackSwiftVersion;
+    const version = resolveSwiftVersion(targetSettings, projectSettings) || fallbackSwiftVersion;
     return parseInt(version.split('.')[0], 10);
 }
 
@@ -126,7 +135,7 @@ export function generateSwiftSettings({
 }: SwiftSettingsInput): string[] {
     const settings: string[] = [];
 
-    const swiftLanguageMode = resolveSwiftLanguageMode(targetSettings?.swiftVersion);
+    const swiftLanguageMode = resolveSwiftLanguageMode(resolveSwiftVersion(targetSettings, projectSettings));
     if (swiftLanguageMode) {
         settings.push(`.swiftLanguageMode(${swiftLanguageMode})`);
     }
@@ -174,7 +183,7 @@ export function generateSwiftSettings({
     }
 
     // ── Table-driven settings, in declaration order so output is deterministic ──
-    const swiftMajor = effectiveSwiftMajor(targetSettings, fallbackSwiftVersion);
+    const swiftMajor = effectiveSwiftMajor(targetSettings, projectSettings, fallbackSwiftVersion);
     const umbrellaValue = resolveRawSetting(projectSettings, targetSettings, APPROACHABLE_CONCURRENCY_SETTING);
     const umbrellaOn = (umbrellaValue || 'NO').toUpperCase() === 'YES';
     const handled = new Set<string>([APPROACHABLE_CONCURRENCY_SETTING]);

@@ -441,7 +441,7 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
         const cSettings = generateCSettings(headerPaths);
 
         // momc needs a concrete language version; NaN means the project named none.
-        const majorVersion = effectiveSwiftMajor(targetSettings, swiftVersion);
+        const majorVersion = effectiveSwiftMajor(targetSettings, projectBuildSettings, swiftVersion);
         swiftMajorByTarget.set(nativeTarget.name, Number.isNaN(majorVersion) ? '5' : String(majorVersion));
 
         // Add XCTest framework search path, Swift overlay path, and -enable-testing for test targets

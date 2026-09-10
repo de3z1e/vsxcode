@@ -97,7 +97,7 @@ export interface SwiftSettingsInput {
     targetSettings: BuildSettings | null;
     /** Xcode configuration the settings were resolved from ("Debug"/"Release"). */
     configurationName: string;
-    /** Never applied to the language mode, which follows the target's SWIFT_VERSION alone. */
+    /** Never applied to the language mode, which must not declare a version the project never named. */
     fallbackSwiftVersion: string;
     /**
      * The `swift-tools-version` the manifest will declare; gates which first-class
