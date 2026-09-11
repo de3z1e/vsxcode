@@ -1,5 +1,4 @@
-import { cleanup } from '../utils/version';
-import { extractObjectBody } from './base';
+import { locateObject, readProject, stringList, stringValue } from './projectIndex';
 
 export const VERSION_GROUP_SECTION_BEGIN = '/* Begin XCVersionGroup section */';
 export const VERSION_GROUP_SECTION_END = '/* End XCVersionGroup section */';
@@ -44,64 +43,27 @@ export function findVersionGroupSection(pbxContents: string): VersionGroupSectio
     return { beginIndex, bodyStart, bodyEnd };
 }
 
-/** Offset just past an entry's closing `};` plus any trailing line break. */
-function consumeEntryTail(pbxContents: string, closingBraceEnd: number): number {
-    let index = closingBraceEnd;
-    if (pbxContents[index] === ';') { index += 1; }
-    while (pbxContents[index] === ' ' || pbxContents[index] === '\t') { index += 1; }
-    if (pbxContents[index] === '\r') { index += 1; }
-    if (pbxContents[index] === '\n') { index += 1; }
-    return index;
-}
-
-/** Every XCVersionGroup in the file, in document order. */
+/** Every XCVersionGroup in the file, in definition order. */
 export function parseVersionGroups(pbxContents: string): XCVersionGroupInfo[] {
-    const section = findVersionGroupSection(pbxContents);
-    if (!section) { return []; }
+    const index = readProject(pbxContents);
+    if (typeof index === 'string') { return []; }
 
     const groups: XCVersionGroupInfo[] = [];
-    const entryRegex =
-        /^[\t ]*([A-F0-9]{24})\s*(?:\/\*[^*]*\*\/\s*)?=\s*\{[^}]*isa\s*=\s*XCVersionGroup;/gm;
-    entryRegex.lastIndex = section.bodyStart;
-
-    let match: RegExpExecArray | null;
-    while ((match = entryRegex.exec(pbxContents)) !== null) {
-        if (match.index >= section.bodyEnd) { break; }
-
-        const extracted = extractObjectBody(pbxContents, match.index);
-        if (!extracted) { break; }
-        const body = extracted.body;
-
-        const childIds: string[] = [];
-        const childrenMatch = /children\s*=\s*\(([\s\S]*?)\);/.exec(body);
-        if (childrenMatch) {
-            const childIdRegex = /([A-F0-9]{24})/g;
-            let childMatch: RegExpExecArray | null;
-            while ((childMatch = childIdRegex.exec(childrenMatch[1])) !== null) {
-                childIds.push(childMatch[1]);
-            }
-        }
-
-        const currentVersionMatch = /\bcurrentVersion\s*=\s*([A-F0-9]{24})/.exec(body);
-        const nameMatch = /\bname\s*=\s*([^;]+);/.exec(body);
-        const pathMatch = /\bpath\s*=\s*([^;]+);/.exec(body);
-        const sourceTreeMatch = /\bsourceTree\s*=\s*([^;]+);/.exec(body);
-
+    for (const { id, object } of index.objectsOfIsa('XCVersionGroup')) {
+        // Writers splice by these offsets, so an entry the text walk can't place is left out rather than guessed at.
+        const location = locateObject(pbxContents, id);
+        if (!location) { continue; }
         groups.push({
-            id: match[1],
-            name: nameMatch ? cleanup(nameMatch[1]) : undefined,
-            path: pathMatch ? cleanup(pathMatch[1]) : undefined,
-            childIds,
-            currentVersionId: currentVersionMatch ? currentVersionMatch[1] : undefined,
-            sourceTree: sourceTreeMatch ? cleanup(sourceTreeMatch[1]) : undefined,
-            startIndex: match.index,
-            endIndex: consumeEntryTail(pbxContents, extracted.endIndex)
+            id,
+            name: stringValue(object.name),
+            path: stringValue(object.path),
+            childIds: stringList(object.children),
+            currentVersionId: stringValue(object.currentVersion),
+            sourceTree: stringValue(object.sourceTree),
+            startIndex: location.startIndex,
+            endIndex: location.endIndex
         });
-
-        // Resume past this entry so nested child lines are never read as entries.
-        entryRegex.lastIndex = extracted.endIndex;
     }
-
     return groups;
 }
 

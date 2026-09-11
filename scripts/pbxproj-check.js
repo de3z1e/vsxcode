@@ -46,7 +46,13 @@ const writers = load('writers/pbxproj.js');
 
 // Entry families — the name before the first space, or `writer <function>` for edits — whose output on the
 // comment-stripped fixture must equal the commented golden.
-const COMMENT_FREE = new Set(['parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds']);
+const COMMENT_FREE = new Set([
+    'parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds', 'usesXcodeObjectIds',
+    'parseGroups', 'findMainGroupId', 'buildGroupDirectories', 'resolveGroupForPath', 'parseVersionGroups'
+]);
+
+// Families whose entries carry text offsets, which must be mapped back from the stripped fixture before comparing.
+const TEXT_OFFSET_FAMILIES = new Set(['parseVersionGroups']);
 
 const CONFIGURATIONS = ['Debug', 'Release'];
 const MAX_DIFF_LINES = 500;
@@ -214,9 +220,17 @@ function objectGraph(text) {
     }
 }
 
-/** Removes every block comment outside quoted strings; `//` line comments stay as written. */
+/**
+ * Removes every block comment outside quoted strings; `//` line comments stay as written. `origin[k]` is the original
+ * index of stripped character k, with a final entry holding the original length.
+ */
 function stripComments(text) {
-    let out = '';
+    const kept = [];
+    const origin = [];
+    const keep = (from, to) => {
+        kept.push(text.slice(from, to));
+        for (let k = from; k < to; k++) { origin.push(k); }
+    };
     for (let i = 0; i < text.length; i++) {
         const char = text[i];
         if (char === '"') {
@@ -224,20 +238,31 @@ function stripComments(text) {
             for (i++; i < text.length && text[i] !== '"'; i++) {
                 if (text[i] === '\\') { i++; }
             }
-            out += text.slice(start, i + 1);
+            keep(start, Math.min(i + 1, text.length));
         } else if (char === '/' && text[i + 1] === '/') {
             const end = text.indexOf('\n', i);
             const stop = end === -1 ? text.length : end;
-            out += text.slice(i, stop);
+            keep(i, stop);
             i = stop - 1;
         } else if (char === '/' && text[i + 1] === '*') {
             const end = text.indexOf('*/', i + 2);
             i = end === -1 ? text.length : end + 1;
         } else {
-            out += char;
+            keep(i, i + 1);
         }
     }
-    return out;
+    origin.push(text.length);
+    return { text: kept.join(''), origin };
+}
+
+/** Maps stripped-text offsets back to the original; an exclusive end maps through the character before it, since a removed comment can follow. */
+function offsetsInOriginal(value, origin) {
+    if (!Array.isArray(value)) { return value; }
+    return value.map((entry) => ({
+        ...entry,
+        startIndex: origin[entry.startIndex],
+        endIndex: entry.endIndex === 0 ? 0 : origin[entry.endIndex - 1] + 1
+    }));
 }
 
 /**
@@ -342,6 +367,7 @@ function parserEntries(text, inputs) {
     record('parseDeploymentTargets', () => project.parseDeploymentTargets(text));
     record('parseDefaultLocalization', () => project.parseDefaultLocalization(text));
     record('usesSwiftPMObjectIds', () => project.usesSwiftPMObjectIds(text));
+    record('usesXcodeObjectIds', () => project.usesXcodeObjectIds(text));
     for (const phaseId of inputs.frameworksPhases) {
         record(`parseFrameworksBuildPhase ${phaseId}`, () => frameworks.parseFrameworksBuildPhase(text, phaseId));
         record(`parseLinkedFrameworksForTarget ${phaseId}`, () => frameworks.parseLinkedFrameworksForTarget(text, phaseId));
@@ -373,12 +399,15 @@ function writerEntries(text, inputs) {
     return entries;
 }
 
-function commentFreeProblems(inputs, text, stripped, goldenEntries) {
+function commentFreeProblems(inputs, text, stripped, origin, goldenEntries) {
     const problems = [];
     if (COMMENT_FREE.size === 0) { return problems; }
     for (const [key, value] of Object.entries(parserEntries(stripped, inputs))) {
-        if (COMMENT_FREE.has(entryFamily(key)) && !sameValue(value, goldenEntries[key])) {
-            problems.push({ key: `${key} [comments stripped]`, expected: goldenEntries[key], actual: value });
+        const family = entryFamily(key);
+        if (!COMMENT_FREE.has(family)) { continue; }
+        const actual = TEXT_OFFSET_FAMILIES.has(family) ? offsetsInOriginal(value, origin) : value;
+        if (!sameValue(actual, goldenEntries[key])) {
+            problems.push({ key: `${key} [comments stripped]`, expected: goldenEntries[key], actual });
         }
     }
     for (const [label, edit] of Object.entries(inputs.writers)) {
@@ -420,7 +449,7 @@ function report(name, problems, summary) {
 
 function checkFixture(fixture, producedKeys) {
     const text = fs.readFileSync(fixture.file, 'utf8');
-    const stripped = stripComments(text);
+    const { text: stripped, origin } = stripComments(text);
     const problems = [];
     if (lint(text) !== 'OK') {
         problems.push({ key: 'fixture passes plutil -lint', expected: 'OK', actual: 'FAIL' });
@@ -440,7 +469,7 @@ function checkFixture(fixture, producedKeys) {
             .filter((key) => !(key in previous) || !(key in entries) || !sameValue(previous[key], entries[key]));
         fs.mkdirSync(GOLDEN_DIR, { recursive: true });
         fs.writeFileSync(goldenPath, `${JSON.stringify({ fixture: path.relative(REPO, fixture.file), entries }, null, 2)}\n`);
-        problems.push(...commentFreeProblems(fixture, text, stripped, entries));
+        problems.push(...commentFreeProblems(fixture, text, stripped, origin, entries));
         report(fixture.name, problems, `golden rewritten; ${changed.length} of ${entryCount} entries changed`);
         for (const key of changed) { console.log(`          changed: ${key}`); }
         return problems.length;
@@ -459,7 +488,7 @@ function checkFixture(fixture, producedKeys) {
                 problems.push({ key, expected: golden[key], actual: entries[key] });
             }
         }
-        problems.push(...commentFreeProblems(fixture, text, stripped, golden));
+        problems.push(...commentFreeProblems(fixture, text, stripped, origin, golden));
     }
     report(fixture.name, problems, `${entryCount} entries`);
     return problems.length;
@@ -580,7 +609,7 @@ function paddedProject(text, bytes) {
     return text.replace(marker, `${lines.join('')}${marker}`);
 }
 
-/** The target readers on a project too large for plutil's default output buffer, and on one plutil rejects. */
+/** The index-backed readers on a project too large for plutil's default output buffer, and on one plutil rejects. */
 function indexCaseProblems() {
     const text = fs.readFileSync(path.join(FIXTURE_DIR, 'explicit-app.txt'), 'utf8');
     const problems = [];
@@ -593,14 +622,21 @@ function indexCaseProblems() {
     }
 
     const conflicted = text.replace('\tobjects = {\n', '<<<<<<< HEAD\n\tobjects = {\n');
-    const empty = { parseNativeTargets: [], parseTargetDependencies: [], parseBuildPhaseIds: {} };
+    const empty = {
+        parseNativeTargets: [], parseTargetDependencies: [], parseBuildPhaseIds: {},
+        parseGroups: [], findMainGroupId: null, parseVersionGroups: [], usesXcodeObjectIds: false
+    };
     const read = capture(() => ({
         parseNativeTargets: targets.parseNativeTargets(conflicted),
         parseTargetDependencies: mapEntries(targets.parseTargetDependencies(conflicted)),
-        parseBuildPhaseIds: targets.parseBuildPhaseIds(conflicted, 'SampleApp')
+        parseBuildPhaseIds: targets.parseBuildPhaseIds(conflicted, 'SampleApp'),
+        parseGroups: mapEntries(groups.parseGroups(conflicted)),
+        findMainGroupId: groups.findMainGroupId(conflicted),
+        parseVersionGroups: versionGroups.parseVersionGroups(conflicted),
+        usesXcodeObjectIds: project.usesXcodeObjectIds(conflicted)
     }));
     if (!sameValue(read, empty)) {
-        problems.push({ key: 'target readers on explicit-app with a merge conflict marker', expected: empty, actual: read });
+        problems.push({ key: 'index-backed readers on explicit-app with a merge conflict marker', expected: empty, actual: read });
     }
     return problems;
 }

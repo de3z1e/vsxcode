@@ -715,6 +715,7 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": false,
+    "usesXcodeObjectIds": true,
     "parseFrameworksBuildPhase C30000000000000000000702": [
       "UIKit.framework",
       "libz.tbd",

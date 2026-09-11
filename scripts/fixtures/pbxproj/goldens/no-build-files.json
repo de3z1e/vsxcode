@@ -202,6 +202,7 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": false,
+    "usesXcodeObjectIds": true,
     "parseFrameworksBuildPhase B20000000000000000000702": [],
     "parseLinkedFrameworksForTarget B20000000000000000000702": [],
     "findFileReferenceId README.md": "B20000000000000000000101",

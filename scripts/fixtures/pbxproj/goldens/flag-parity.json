@@ -285,6 +285,7 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": false,
+    "usesXcodeObjectIds": true,
     "parseFrameworksBuildPhase AA0000000000000000000004": [],
     "parseLinkedFrameworksForTarget AA0000000000000000000004": [],
     "parseFrameworksBuildPhase AA0000000000000000000014": [],

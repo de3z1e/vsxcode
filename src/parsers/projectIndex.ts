@@ -96,11 +96,40 @@ interface Token {
 const WHITESPACE = new Set([' ', '\t', '\n', '\r']);
 const PUNCTUATION = new Set(['{', '}', '(', ')', '=', ';', ',']);
 
+/** Where one root `objects` entry sits in the project text. */
+export interface ObjectLocation {
+    /** The start of the entry's line. */
+    startIndex: number;
+    /** Just past the entry's `};`, any spaces or tabs after it, and its line break. */
+    endIndex: number;
+}
+
 /**
  * The keys of the root `objects` dictionary, in the order the OpenStep text defines them. Values are skipped by nesting
  * depth, so ids that reappear as keys further down (a project's TargetAttributes) are never counted.
  */
 export function definitionOrder(contents: string): string[] {
+    return walkObjects(contents).map((entry) => entry.id);
+}
+
+let lastLocatedContents: string | undefined;
+let lastLocations = new Map<string, ObjectLocation>();
+
+/** The offsets of one root `objects` entry; undefined when the id isn't an entry or the text can't be walked. */
+export function locateObject(contents: string, id: string): ObjectLocation | undefined {
+    if (contents !== lastLocatedContents) {
+        try {
+            lastLocations = new Map(walkObjects(contents).map((entry) => [entry.id, entry.location]));
+        } catch {
+            lastLocations = new Map();
+        }
+        lastLocatedContents = contents;
+    }
+    return lastLocations.get(id);
+}
+
+/** Every root `objects` entry with its offsets, in text order; throws where the text doesn't follow the grammar. */
+function walkObjects(contents: string): { id: string; location: ObjectLocation }[] {
     const length = contents.length;
     let position = 0;
 
@@ -149,9 +178,9 @@ export function definitionOrder(contents: string): string[] {
         return token;
     };
 
-    const skipValue = (first: Token | null): void => {
+    const skipValue = (first: Token | null): number => {
         if (!first) { throw new Error('missing value'); }
-        if (first.type === 'string') { return; }
+        if (first.type === 'string') { return position; }
         if (first.type !== '{' && first.type !== '(') { throw new Error(`unexpected "${first.type}" at ${first.start}`); }
         for (let depth = 1; depth > 0;) {
             const token = next();
@@ -162,6 +191,7 @@ export function definitionOrder(contents: string): string[] {
                 depth--;
             }
         }
+        return position;
     };
 
     expect('{');
@@ -171,20 +201,39 @@ export function definitionOrder(contents: string): string[] {
         expect('=');
         const value = next();
         if (key.type === 'string' && key.value === 'objects' && value?.type === '{') {
-            const order: string[] = [];
+            const entries: { id: string; location: ObjectLocation }[] = [];
             for (;;) {
                 const objectKey = next();
                 if (!objectKey) { throw new Error('unterminated objects dictionary'); }
-                if (objectKey.type === '}') { return order; }
+                if (objectKey.type === '}') { return entries; }
                 expect('=');
-                skipValue(next());
+                const valueEnd = skipValue(next());
                 expect(';');
-                order.push(objectKey.value);
+                entries.push({
+                    id: objectKey.value,
+                    location: { startIndex: lineStart(contents, objectKey.start), endIndex: entryEnd(contents, valueEnd) }
+                });
             }
         }
         skipValue(value);
         expect(';');
     }
+}
+
+/** The start of `offset`'s line, when only spaces or tabs precede it there. */
+function lineStart(contents: string, offset: number): number {
+    let start = offset;
+    while (start > 0 && (contents[start - 1] === ' ' || contents[start - 1] === '\t')) { start--; }
+    return start;
+}
+
+function entryEnd(contents: string, valueEnd: number): number {
+    let index = valueEnd;
+    if (contents[index] === ';') { index += 1; }
+    while (contents[index] === ' ' || contents[index] === '\t') { index += 1; }
+    if (contents[index] === '\r') { index += 1; }
+    if (contents[index] === '\n') { index += 1; }
+    return index;
 }
 
 /** A string value, or undefined when the key is absent or holds something else. */

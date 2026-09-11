@@ -89,3 +89,9 @@ export function usesSwiftPMObjectIds(pbxContents: string): boolean {
     const index = readProject(pbxContents);
     return typeof index !== 'string' && Object.keys(index.objects).some((id) => /^OBJ_\d+$/.test(id));
 }
+
+/** Whether every object id has the 24-character uppercase hex form Xcode writes, the only form the pbxproj writers match. */
+export function usesXcodeObjectIds(pbxContents: string): boolean {
+    const index = readProject(pbxContents);
+    return typeof index !== 'string' && Object.keys(index.objects).every((id) => /^[A-F0-9]{24}$/.test(id));
+}

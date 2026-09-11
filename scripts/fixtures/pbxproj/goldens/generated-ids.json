@@ -106,10 +106,72 @@
     "getProjectBuildSettings Release": null,
     "parseSwiftPackageReferences": [],
     "parseSwiftPackageProductDependencies": [],
-    "parseGroups": [],
-    "findMainGroupId": null,
-    "buildGroupDirectories": null,
-    "resolveGroupForPath Sources": null,
+    "parseGroups": [
+      [
+        "OBJ_10",
+        {
+          "id": "OBJ_10",
+          "name": "Products",
+          "path": "",
+          "childIds": [
+            "SampleKit::SampleKit::Product"
+          ]
+        }
+      ],
+      [
+        "OBJ_5",
+        {
+          "id": "OBJ_5",
+          "childIds": [
+            "OBJ_6",
+            "OBJ_7",
+            "OBJ_10"
+          ]
+        }
+      ],
+      [
+        "OBJ_7",
+        {
+          "id": "OBJ_7",
+          "name": "Sources",
+          "path": "",
+          "childIds": [
+            "OBJ_8"
+          ]
+        }
+      ],
+      [
+        "OBJ_8",
+        {
+          "id": "OBJ_8",
+          "name": "SampleKit",
+          "path": "Sources/SampleKit",
+          "childIds": [
+            "OBJ_9"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "OBJ_5",
+    "buildGroupDirectories": [
+      [
+        "OBJ_5",
+        "/project"
+      ],
+      [
+        "OBJ_7",
+        "/project"
+      ],
+      [
+        "OBJ_8",
+        "/project/Sources/SampleKit"
+      ],
+      [
+        "OBJ_10",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath Sources": "OBJ_7",
     "resolveGroupForPath SampleKit": null,
     "parseVersionGroups": [],
     "findVersionGroupSection": null,
@@ -122,6 +184,7 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": true,
+    "usesXcodeObjectIds": false,
     "parseFrameworksBuildPhase OBJ_17": [],
     "parseLinkedFrameworksForTarget OBJ_17": [],
     "findFileReferenceId SampleKit.swift": null,

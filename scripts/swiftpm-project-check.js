@@ -457,6 +457,8 @@ const SCENARIOS = [
                 expect.that(fs.existsSync(path.join(workspace.root, original)), `${original} is gone`);
             }
             expect.that(open.changed.includes('Package.swift'), 'Package.swift not regenerated');
+            // File sync must never register the project's files a second time; the backup is a separate file.
+            expect.that(!open.changed.includes('SampleKit.xcodeproj/project.pbxproj'), 'opening the folder changed project.pbxproj');
             expect.that(of(open, 'quickPick').length === 0, 'asked to overwrite after backing up');
             expect.that(SYNC_WATCHERS.every((glob) => syncWatchers(open).includes(glob)), `sync watchers not started (${syncWatchers(open)})`);
             expect.that(of(open, 'state').some((event) => event.key === 'buildTaskConfig'), 'build tasks not configured');

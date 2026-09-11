@@ -52,7 +52,7 @@ find . -maxdepth 1 -name "*.vsix" -delete && npm run compile && npm run package 
 
 VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.swift` manifests and build/debug task configurations for iOS simulator development. Requires macOS with Xcode installed. No runtime dependencies — only VS Code API and Node.js built-ins.
 
-**Data flow**: Read `project.pbxproj` (ASCII plist) → structured data (targets, target dependencies and build phases through a `plutil`-backed object index; everything else through regex-based parsers) → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` via string manipulation.
+**Data flow**: Read `project.pbxproj` (ASCII plist) → structured data (targets, target dependencies, build phases, groups and version groups through a `plutil`-backed object index; everything else through regex-based parsers) → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` via string manipulation.
 
 ### Entry Point
 
@@ -88,19 +88,20 @@ src/
 │   ├── base.ts                  — extractObjectBody (brace-matching), parsePackageRequirement, parseListValue
 │   ├── buildSettings.ts         — XCBuildConfiguration parsing, mergeWithInherited, project/target settings,
 │   │                              raw KEY=value capture for settings the typed fields don't name
-│   ├── projectIndex.ts          — plutil-backed object index (JSON graph, memoized per contents), definition
-│   │                              order from a one-pass tokenizer over the text, typed value helpers
+│   ├── projectIndex.ts          — plutil-backed object index (JSON graph, memoized per contents); definition
+│   │                              order and entry offsets (locateObject) from a one-pass tokenizer over the
+│   │                              text; typed value helpers
 │   ├── targets.ts               — targets, target dependencies and build phase IDs read from the project index;
 │   │                              isTestTarget
 │   ├── packages.ts              — XCRemoteSwiftPackageReference + XCLocalSwiftPackageReference + product deps
 │   ├── frameworks.ts            — PBXFrameworksBuildPhase parsing, framework name extraction
 │   ├── resources.ts             — PBXResourcesBuildPhase parsing, resource type classification,
 │   │                              scanForUnhandledFiles (filesystem scan for SPM compatibility)
-│   ├── groups.ts                — PBXGroup hierarchy parsing, path-to-group resolution
+│   ├── groups.ts                — PBXGroup hierarchy from the project index, path-to-group resolution
 │   ├── project.ts               — project-level fields: default localization, deployment targets,
 │   │                              synchronized-folder exclusions
-│   └── versionGroups.ts         — XCVersionGroup parsing (.xcdatamodeld bundles): children,
-│                                  currentVersion, section bounds, entry offsets
+│   └── versionGroups.ts         — XCVersionGroups (.xcdatamodeld bundles) from the project index: children,
+│                                  currentVersion, entry offsets; section bounds
 ├── generators/
 │   ├── packageSwift.ts          — Main Package.swift builder (platforms, products, deps, targets)
 │   ├── swiftSettings.ts         — swiftSettings entries from build settings: language mode, .define(),
@@ -149,8 +150,8 @@ src/
 - **Resource classification**: Files classified as `.process` (compilable: xcassets, storyboard, xib, strings, xcdatamodeld) or `.copy` (everything else)
 - **Filesystem scanning**: After pbxproj parsing, `scanForUnhandledFiles` walks target directories to auto-exclude Xcode-specific files (Info.plist, .entitlements, .pch) and auto-include bundle-like resource directories (.xcdatamodeld, .xcassets, .lproj, etc.) that SPM can't auto-categorize
 - **Auto-sync (pbxproj → Package.swift)**: FileSystemWatcher on `*.pbxproj` triggers silent Package.swift regeneration
-- **Auto-sync (Swift files → pbxproj)**: FileSystemWatcher on `*.swift` detects file create/delete in target directories and updates pbxproj (4 entries: PBXBuildFile, PBXFileReference, PBXGroup, PBXSourcesBuildPhase). Handles subdirectories via PBXGroup tree resolution. Debounced (300ms) with write serialization.
-- **Auto-sync (Core Data models → pbxproj)**: FileSystemWatcher on `*.xcdatamodeld` treats the bundle as one unit (the directory, not the files inside) and updates 5 structures: PBXBuildFile, a `wrapper.xcdatamodel` PBXFileReference per version, PBXGroup child, PBXSourcesBuildPhase entry (momc compiles models — Sources, not Resources), and the XCVersionGroup, whose section markers are created on the first model and dropped with the last. `children`/`currentVersion` come from the bundle's `.xccurrentversion`, falling back to the sole version; a bundle whose versions drift from what pbxproj records is re-registered, since a `currentVersion` pointing at a missing version is the same momc failure as no entry at all. Both events run the same routine and decide from disk rather than the event kind, so a rename or atomic replace settles correctly. Shares the swift sync's debounce and write queue.
+- **Auto-sync (Swift files → pbxproj)**: FileSystemWatcher on `*.swift` detects file create/delete in target directories and updates pbxproj (4 entries: PBXBuildFile, PBXFileReference, PBXGroup, PBXSourcesBuildPhase). Handles subdirectories via PBXGroup tree resolution. Debounced (300ms) with write serialization. Runs only when every object id has Xcode's 24-character hex form (`usesXcodeObjectIds`), the only form the writers match, so projects with other ids, such as SwiftPM-generated ones, are left alone.
+- **Auto-sync (Core Data models → pbxproj)**: FileSystemWatcher on `*.xcdatamodeld` treats the bundle as one unit (the directory, not the files inside) and updates 5 structures: PBXBuildFile, a `wrapper.xcdatamodel` PBXFileReference per version, PBXGroup child, PBXSourcesBuildPhase entry (momc compiles models — Sources, not Resources), and the XCVersionGroup, whose section markers are created on the first model and dropped with the last. `children`/`currentVersion` come from the bundle's `.xccurrentversion`, falling back to the sole version; a bundle whose versions drift from what pbxproj records is re-registered, since a `currentVersion` pointing at a missing version is the same momc failure as no entry at all. Both events run the same routine and decide from disk rather than the event kind, so a rename or atomic replace settles correctly. Shares the swift sync's debounce and write queue, and the same object-id check.
 - **Core Data codegen (SourceKit-LSP)**: models with class/category codegen get their NSManagedObject subclasses generated only by Xcode's build, so the SwiftPM-based LSP build can't resolve them. `generatePackageSwift` runs momc per target with a data model into `~/Library/Developer/VSCode/DerivedSources/<workspaceKey>/<Target>/` and folds the files into the module via an `.unsafeFlags` entry interpolating a `coreDataGenerated` preamble variable (`Context.environment["HOME"]` — documented PackageDescription API). SwiftPM folding positional source paths from unsafeFlags is undocumented behavior, accepted deliberately: the repository, the model file, and pbxproj stay untouched, so the Xcode build/archive pipeline can never be affected — the failure mode is LSP squiggles, never builds. momc failure → manifest emitted without flags. Regen triggers: activation, pbxproj changes, bundle create/delete, model-contents edits (`**/*.xcdatamodeld/**` watcher — entity edits never touch pbxproj), the manual Sync Files command, and Clean DerivedData (wipe + immediate regen). Manifest generation is serialized per workspace; codegen runs are serialized module-wide and land via staging-dir rename so the LSP never observes a half-populated directory. Each output dir carries a `manifest.json` recording what was emitted, and every generation pass garbage-collects stale outputs — a deleted/renamed input or disabled codegen removes its derived files (legacy all-`.swift` dirs included), an emptied tree is removed marker and all, and anything not recognizable as extension output is left in place and logged.
 - **Reconcile**: `vsxcode.syncProjectFiles` (and activation) catches up on changes the watchers missed. Swift files are add-only; Core Data models are also removed when the bundle is gone from disk, since a stale XCVersionGroup fails the build with momc's "No current version for model". Removal requires the model to be absent both at its resolved path and by name, so an unresolvable group tree is never read as a deletion.
 - **Auto-configure**: On activation, auto-detects first project/target/simulator and stores `BuildTaskConfig` to workspace state
