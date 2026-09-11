@@ -353,6 +353,13 @@ function scenarioContext(root, log) {
         fireRename: (from, to) => {
             deliverRename(at(from), at(to));
             context.lastEventAt = Date.now();
+        },
+        /** The catch-up repair, with the prompt's outcome written before it returns; the counts without the settled promise. */
+        repair: async (options = {}) => {
+            const result = await reconcileSwiftFiles(root, log, options);
+            await result.settled;
+            const { settled, ...counts } = result;
+            return counts;
         }
     };
     return context;
@@ -392,6 +399,26 @@ const moveEntry = async (s, from, to, order) => {
 
 // Rename.swift's entry, AA…0113, following its file to Renamed.swift in the same folder.
 const RENAME_KEPT = { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Renamed.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } };
+
+/** A repair result: every count 0 except the given ones. */
+const counts = (partial = {}) => ({ added: 0, rehomed: 0, repointed: 0, caseFixed: 0, asked: 0, ...partial });
+
+/** A confirmRemoval stub answering from a queue — a choice, or a function of the entries returning one — that records each call's entry ids. */
+const prompt = (answers) => {
+    const stub = async (entries) => {
+        stub.calls.push(entries.map((entry) => entry.id));
+        const next = answers.shift();
+        return typeof next === 'function' ? next(entries) : next;
+    };
+    stub.calls = [];
+    return stub;
+};
+
+/** An in-memory store of kept entry ids, standing in for workspace state. */
+const memory = (ids = []) => {
+    let kept = [...ids];
+    return { get: () => kept, set: async (next) => { kept = [...next]; } };
+};
 
 /** Rewrites the project text for a shape the fixture lacks, then lets the watcher record identities from it, as a project-file change would. */
 const rewriteProject = async (s, transform) => {
@@ -1024,32 +1051,237 @@ const SCENARIOS = [
         changes: { models: { [STORE]: null } }
     },
     {
-        name: 'reconcile registers a Swift file added without events',
+        name: 'repair registers a Swift file added without events',
         run: (s) => {
             s.write('MyKit/Unregistered.swift', 'struct Unregistered {}\n');
-            return reconcileSwiftFiles(s.root, s.log);
+            return s.repair();
         },
-        result: 1,
+        result: counts({ added: 1 }),
         changes: { swift: { 'MyKit/Unregistered.swift': { ids: NEW_ID, targets: ['MyKit'] } } }
     },
     {
-        name: 'reconcile registers a Swift file in a folder with no group',
+        name: 'repair registers a Swift file in a folder with no group',
         run: (s) => {
             s.write('MyKit/Sub/Unregistered.swift', 'struct Unregistered {}\n');
-            return reconcileSwiftFiles(s.root, s.log);
+            return s.repair();
         },
-        result: 1,
+        result: counts({ added: 1 }),
         changes: { swift: { 'MyKit/Sub/Unregistered.swift': { ids: NEW_ID, targets: ['MyKit'] } } }
     },
     {
-        name: 'reconcile leaves a file whose name a missing same-target entry holds',
+        name: 'repair re-homes a missing entry to the one unregistered file with its name',
         run: (s) => {
             s.remove('MyKit/Constants.swift');
             s.write('MyKit/Sub/Constants.swift', 'enum Constants {}\n');
-            return reconcileSwiftFiles(s.root, s.log);
+            return s.repair();
         },
-        result: 0,
+        result: counts({ rehomed: 1 }),
+        changes: { swift: { 'MyKit/Constants.swift': null, 'MyKit/Sub/Constants.swift': { ids: [fixtureId('0211')], targets: ['MyKit'] } } }
+    },
+    {
+        name: 'repair re-homes a file moved while closed',
+        run: (s) => {
+            s.move('MyApp/Views/Bar.swift', 'MyApp/Models/Bar.swift');
+            return s.repair();
+        },
+        result: counts({ rehomed: 1 }),
+        changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Models/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'repair re-homes a file moved while closed although another target has its name (S7)',
+        run: (s) => {
+            s.move('MyApp/Helpers.swift', 'MyApp/Services/Helpers.swift');
+            return s.repair();
+        },
+        changes: { swift: { 'MyApp/Helpers.swift': null, 'MyApp/Services/Helpers.swift': { ids: [fixtureId('0110')], targets: ['MyApp'] } } },
+        result: counts({ rehomed: 1 })
+    },
+    {
+        name: 'repair re-points a folder renamed while closed (S6)',
+        run: (s) => {
+            s.move('MyApp/Services', 'MyApp/Networking');
+            return s.repair();
+        },
+        result: counts({ repointed: 1 }),
+        changes: { swift: { 'MyApp/Services/Service.swift': null, 'MyApp/Networking/Service.swift': { ids: [fixtureId('0115')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'repair fixes a file renamed in letter case while closed',
+        run: (s) => {
+            s.move('MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift');
+            return s.repair();
+        },
+        result: counts({ caseFixed: 1 }),
+        changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Views/bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'repair fixes a folder renamed in letter case while closed',
+        run: (s) => {
+            s.move('MyApp/Views', 'MyApp/views');
+            return s.repair();
+        },
+        result: counts({ caseFixed: 1 }),
+        changes: { swift: viewsUnder('MyApp/views') }
+    },
+    {
+        name: 'repair leaves an entry whose name two unregistered files share, and adds neither',
+        run: (s) => {
+            s.remove('MyApp/Helpers.swift');
+            s.write('MyApp/Views/Helpers.swift', 'enum ViewHelpers {}\n');
+            s.write('MyApp/Models/Helpers.swift', 'enum ModelHelpers {}\n');
+            return s.repair();
+        },
+        result: counts(),
+        textUnchanged: true
+    },
+    {
+        name: 'repair asks about a gone entry, and Remove removes it',
+        run: async (s) => {
+            s.remove('MyApp/Views/Bar.swift');
+            const ask = prompt(['remove']);
+            const removed = [];
+            const result = await s.repair({ confirmRemoval: ask, onRemoved: (count) => removed.push(count) });
+            return { ...result, calls: ask.calls, removed };
+        },
+        result: { ...counts({ asked: 1 }), calls: [[fixtureId('0112')]], removed: [1] },
+        changes: { swift: { 'MyApp/Views/Bar.swift': null } }
+    },
+    {
+        name: 'repair asks about a gone entry, Keep is remembered, Sync Files asks again',
+        run: async (s) => {
+            s.remove('MyApp/Views/Bar.swift');
+            const kept = memory();
+            const first = prompt(['keep']);
+            const startup = await s.repair({ confirmRemoval: first, kept });
+            const second = prompt([]);
+            const nextStartup = await s.repair({ confirmRemoval: second, kept });
+            const third = prompt(['keep']);
+            const syncFiles = await s.repair({ confirmRemoval: third, kept, askAgain: true });
+            return { asked: [startup.asked, nextStartup.asked, syncFiles.asked], calls: [first.calls.length, second.calls.length, third.calls.length], kept: kept.get() };
+        },
+        result: { asked: [1, 0, 1], calls: [1, 0, 1], kept: [fixtureId('0112')] },
         changes: {}
+    },
+    {
+        name: 'repair asks again after a dismissed prompt',
+        run: async (s) => {
+            s.remove('MyApp/Views/Bar.swift');
+            const kept = memory();
+            const first = await s.repair({ confirmRemoval: prompt([undefined]), kept });
+            const second = await s.repair({ confirmRemoval: prompt([undefined]), kept });
+            return { asked: [first.asked, second.asked], kept: kept.get() };
+        },
+        result: { asked: [1, 1], kept: [] },
+        changes: {}
+    },
+    {
+        name: 'repair forgets a kept entry once its file is back',
+        run: async (s) => {
+            s.remove('MyApp/Views/Bar.swift');
+            const kept = memory();
+            await s.repair({ confirmRemoval: prompt(['keep']), kept });
+            s.write('MyApp/Views/Bar.swift', 'struct Bar {}\n');
+            const restored = await s.repair({ confirmRemoval: prompt([]), kept });
+            return { asked: restored.asked, kept: kept.get() };
+        },
+        result: { asked: 0, kept: [] },
+        changes: {}
+    },
+    {
+        name: 'repair doesn\'t remove an entry whose file is restored before the answer',
+        run: async (s) => {
+            s.remove('MyApp/Views/Bar.swift');
+            const removed = [];
+            const ask = prompt([() => {
+                s.write('MyApp/Views/Bar.swift', 'struct Bar {}\n');
+                return 'remove';
+            }]);
+            const result = await s.repair({ confirmRemoval: ask, onRemoved: (count) => removed.push(count) });
+            return { ...result, removed };
+        },
+        result: { ...counts({ asked: 1 }), removed: [] },
+        changes: {}
+    },
+    {
+        name: 'repair after a rename to a name another target uses while closed (S3)',
+        run: async (s) => {
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Constants.swift');
+            const ask = prompt(['keep']);
+            const result = await s.repair({ confirmRemoval: ask });
+            return { ...result, calls: ask.calls };
+        },
+        // Rename.swift's entry has no same-named file to follow, so it is asked about; Constants.swift is new to MyApp.
+        result: { ...counts({ asked: 1, added: 1 }), calls: [[fixtureId('0113')]] },
+        changes: { swift: { 'MyApp/Views/Constants.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: 'repair after one target\'s same-named file was deleted while closed (S4)',
+        run: async (s) => {
+            s.remove('MyKit/Helpers.swift');
+            const ask = prompt(['keep']);
+            const result = await s.repair({ confirmRemoval: ask });
+            return { ...result, calls: ask.calls };
+        },
+        // MyApp's Helpers.swift is registered, so it is no candidate for MyKit's entry.
+        result: { ...counts({ asked: 1 }), calls: [[fixtureId('0210')]] },
+        changes: {}
+    },
+    {
+        name: 'repair after a rename inside a folder that is no target\'s while closed (S5)',
+        run: async (s) => {
+            s.move('Shared/SharedUtil.swift', 'Shared/SharedHelpers.swift');
+            const ask = prompt(['keep']);
+            const result = await s.repair({ confirmRemoval: ask });
+            return { ...result, calls: ask.calls };
+        },
+        result: { ...counts({ asked: 1 }), calls: [[fixtureId('0310')]] },
+        changes: {}
+    },
+    {
+        name: 'repair asks about an entry whose folder is gone without a sibling',
+        run: async (s) => {
+            s.remove('MyApp/Services');
+            const ask = prompt(['keep']);
+            const result = await s.repair({ confirmRemoval: ask });
+            return { ...result, calls: ask.calls };
+        },
+        result: { ...counts({ asked: 1 }), calls: [[fixtureId('0115')]] },
+        changes: {}
+    },
+    {
+        name: 'repair leaves two missing entries that share a name and one candidate file',
+        run: async (s) => {
+            s.remove('MyApp/Helpers.swift');
+            s.remove('MyKit/Helpers.swift');
+            s.write('MyKit/Sub/Helpers.swift', 'enum KitHelpers {}\n');
+            const ask = prompt([]);
+            const result = await s.repair({ confirmRemoval: ask });
+            return { ...result, calls: ask.calls };
+        },
+        // Neither entry may take the file, and neither is asked about while a candidate exists; the same-target skip leaves the file.
+        result: { ...counts(), calls: [] },
+        textUnchanged: true
+    },
+    {
+        name: 'repair re-points one gone folder onto a merged sibling and re-homes the other\'s file',
+        run: (s) => {
+            s.remove('MyApp/Services');
+            s.remove('MyApp/Models');
+            s.write('MyApp/Merged/Service.swift', 'struct Service {}\n');
+            s.write('MyApp/Merged/Model.swift', 'struct Model {}\n');
+            return s.repair();
+        },
+        // The sibling is taken once, so the other folder's file is re-homed instead of a second group spelling Merged.
+        result: counts({ repointed: 1, rehomed: 1 }),
+        changes: (before) => ({
+            swift: {
+                'MyApp/Services/Service.swift': null,
+                'MyApp/Models/Model.swift': null,
+                'MyApp/Merged/Service.swift': { ids: [fixtureId('0115')], targets: ['MyApp'] },
+                'MyApp/Merged/Model.swift': { ids: [fixtureId('0114')], targets: ['MyApp'] }
+            },
+            models: { [STORE]: null, 'MyApp/Merged/Store.xcdatamodeld': before.models[STORE] }
+        })
     },
     {
         name: 'reconcile removes a Core Data model deleted without events',

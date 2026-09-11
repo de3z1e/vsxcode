@@ -6,7 +6,6 @@ import { promises as fsp } from 'fs';
 import {
     baseFolder,
     buildFilesFor,
-    displayName,
     folderSpellings,
     groupForFolder,
     phasesOf,
@@ -80,13 +79,15 @@ interface IdentityStore {
     folders: Map<string, RecordedIdentity>;
 }
 
+const emptyIdentities = (): IdentityStore => ({ files: new Map(), folders: new Map() });
+
 /** A rename VS Code reported, both paths in on-disk form. */
 interface Rename {
     from: string;
     to: string;
 }
 
-/** One read of the project for a batch or a reconcile, and the edits made on it. */
+/** One read of the project for a batch or a repair, and the edits made on it. */
 interface SyncPass {
     root: string;
     index: ProjectIndex;
@@ -105,10 +106,12 @@ interface SyncPass {
     groupFolders?: Set<string>;
     synchronizedFolders?: string[];
     unregistered?: Promise<string[]>;
+    unregisteredAnywhere?: Promise<string[]>;
 }
 
 const isSwiftPath = (target: string): boolean => target.endsWith('.swift');
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`;
+const plural = (count: number, noun: string): string =>
+    `${count} ${count === 1 ? noun : noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`}`;
 
 /** canonicalPath, remembered per path. */
 function canonicalForms(): (target: string) => string {
@@ -377,6 +380,19 @@ function renameChanges(pass: SyncPass, from: SpelledFolder, newName: string): El
     return [...changes.values()];
 }
 
+/** The changes that spell an existing folder the way the disk does, when only its last component differs in letter case; a difference above it is logged and left. */
+function folderCaseChanges(pass: SyncPass, entry: SpelledFolder): ElementPathChange[] {
+    if (entry.folder === entry.path) { return []; }
+    const spelledName = path.basename(entry.folder);
+    const actualName = path.basename(entry.path);
+    if (path.dirname(entry.folder) !== path.dirname(entry.path) || spelledName.toLowerCase() !== actualName.toLowerCase()) {
+        pass.log(`${LOG_PREFIX} ${relativeTo(pass, entry.path)} differs from the project in letter case above its own name, leaving it`);
+        return [];
+    }
+    pass.log(`${LOG_PREFIX} ${spelledName} renamed to ${actualName}, ${plural(entry.spellings.length, 'path')} rewritten`);
+    return renameChanges(pass, entry, actualName);
+}
+
 /** Moves a spelled folder's elements to `to`, under another parent: elements resolving to the folder move under the new parent's group, paths passing through it are recomputed, and descendants whose paths climb out of it keep resolving where they did. */
 function moveFolder(pass: SyncPass, { from, to }: FolderPair): number {
     const groupId = destinationGroup(pass, path.dirname(to));
@@ -468,15 +484,7 @@ function syncFolders(pass: SyncPass, folderPaths: string[], renames: Rename[]): 
     const caseChanges: ElementPathChange[] = [];
     for (const created of present) {
         for (const entry of byDisk.get(created) ?? []) {
-            if (entry.folder === created || paired.has(entry.folder)) { continue; }
-            const spelledName = path.basename(entry.folder);
-            const actualName = path.basename(created);
-            if (path.dirname(entry.folder) !== path.dirname(created) || spelledName.toLowerCase() !== actualName.toLowerCase()) {
-                pass.log(`${LOG_PREFIX} ${relativeTo(pass, created)} differs from the project in letter case above its own name, leaving it`);
-                continue;
-            }
-            caseChanges.push(...renameChanges(pass, entry, actualName));
-            pass.log(`${LOG_PREFIX} ${spelledName} renamed to ${actualName}, ${plural(entry.spellings.length, 'path')} rewritten`);
+            if (!paired.has(entry.folder)) { caseChanges.push(...folderCaseChanges(pass, entry)); }
         }
     }
     if (caseChanges.length > 0) { setElementPaths(pass.edit, caseChanges); }
@@ -498,32 +506,34 @@ function syncFolders(pass: SyncPass, folderPaths: string[], renames: Rename[]): 
 
 // ── Decisions ────────────────────────────────────────────
 
-/** Corrects a letter-case difference inside the reference's own `path`; one above it is left for repair. */
-function fixLetterCase(pass: SyncPass, reference: SwiftReference): void {
-    if (reference.recordedPath === reference.path) { return; }
+/** Corrects a letter-case difference inside the reference's own `path`; one above it is left for repair. Returns whether it changed anything. */
+function fixLetterCase(pass: SyncPass, reference: SwiftReference): boolean {
+    if (reference.recordedPath === reference.path) { return false; }
     const recorded = reference.recordedPath.split(path.sep);
     const actual = reference.path.split(path.sep);
     const own = reference.ownPath.split('/').filter(Boolean);
     if (recorded.length !== actual.length || reference.recordedPath.toLowerCase() !== reference.path.toLowerCase() ||
         own.includes('..') || own.includes('.')) {
-        return;
+        return false;
     }
     const firstOwn = recorded.length - own.length;
     const differing = recorded.map((part, position) => (part === actual[position] ? -1 : position)).filter((position) => position >= 0);
     if (differing.some((position) => position < firstOwn)) {
         pass.log(`${LOG_PREFIX} ${relativeTo(pass, reference.path)} differs from the project in letter case above its own path, leaving it`);
-        return;
+        return false;
     }
     // An <absolute> path keeps its leading "/", which the split above left as an empty first part.
     const ownPath = actual.slice(firstOwn).join('/');
     setFileReferencePath(pass.edit, reference.id, reference.ownPath.startsWith('/') ? `/${ownPath}` : ownPath);
     pass.log(`${LOG_PREFIX} ${reference.fileName} renamed to ${path.basename(reference.path)}, updated its path`);
+    return true;
 }
 
-/** Moves references whose file is gone to the file's new path, keeping their ids, build files and settings: renamed in place within the same folder, re-homed into the destination's group otherwise. */
-function moveReferences(pass: SyncPass, references: SwiftReference[], destination: string): void {
+/** Moves references whose file is gone to the file's new path, keeping their ids, build files and settings: renamed in place within the same folder, re-homed into the destination's group otherwise. Returns how many moved. */
+function moveReferences(pass: SyncPass, references: SwiftReference[], destination: string): number {
     const fileName = path.basename(destination);
     const folder = path.dirname(destination);
+    let moved = 0;
     for (const reference of references) {
         const oldName = reference.fileName;
         if (path.dirname(reference.path) === folder) {
@@ -531,6 +541,7 @@ function moveReferences(pass: SyncPass, references: SwiftReference[], destinatio
             pass.rehomed.add(reference.id);
             relist(pass, reference, destination, [...reference.ownPath.split('/').slice(0, -1), fileName].join('/'));
             pass.log(`${LOG_PREFIX} ${oldName} renamed to ${fileName}, kept its entry`);
+            moved++;
             continue;
         }
         const groupId = destinationGroup(pass, folder);
@@ -542,7 +553,9 @@ function moveReferences(pass: SyncPass, references: SwiftReference[], destinatio
         pass.rehomed.add(reference.id);
         relist(pass, reference, destination, fileName);
         pass.log(`${LOG_PREFIX} ${oldName} moved to ${relativeTo(pass, folder)}${oldName === fileName ? '' : ` as ${fileName}`}, kept its entry`);
+        moved++;
     }
+    return moved;
 }
 
 /** Whether a path can take over a gone file's entry: an existing Swift file that isn't registered and isn't under a synchronized root. */
@@ -765,7 +778,7 @@ export function createSwiftFileWatcher(
     }
 
     const root = canonicalPath(rootPath);
-    const identities: IdentityStore = { files: new Map(), folders: new Map() };
+    const identities = emptyIdentities();
     queueLogged(log, () => recordProjectIdentities(root, pbxprojPath, identities));
 
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.swift');
@@ -827,6 +840,8 @@ export function createSwiftFileWatcher(
     ];
 }
 
+// ── Repair ───────────────────────────────────────────────
+
 function walkSwiftFiles(dir: string): Promise<string[]> {
     return walkTargetDirectory(dir, (name, isDirectory) => !isDirectory && name.endsWith('.swift'));
 }
@@ -834,26 +849,247 @@ function walkSwiftFiles(dir: string): Promise<string[]> {
 /** Whether a Swift entry named `fileName` whose file is missing is compiled by the target. */
 function hasMissingEntryInTarget(pass: SyncPass, fileName: string, targetName: string): boolean {
     return pass.references.some((reference) => !reference.exists && reference.fileName === fileName &&
-        buildFilesFor(pass.index, reference.id).some((buildFileId) => phasesOf(pass.index, buildFileId).some((phaseId) => {
-            const targetId = targetOfPhase(pass.index, phaseId);
-            return targetId !== undefined && stringValue(pass.index.object(targetId)?.name) === targetName;
-        })));
+        targetsCompiling(pass, reference.id).includes(targetName));
 }
 
-/** Catch-up scan that registers on-disk Swift files the live watcher missed (added while VS Code was closed, or by git/external tooling), by path. Returns the count added. */
-export async function reconcileSwiftFiles(
-    rootPath: string,
-    log: (message: string) => void
-): Promise<number> {
-    const pbxprojPath = findPbxprojPath(rootPath);
-    if (!pbxprojPath) { return 0; }
-    const root = canonicalPath(rootPath);
+/** The names of the targets whose Sources phases compile a reference. */
+function targetsCompiling(pass: SyncPass, referenceId: string): string[] {
+    const names = new Set<string>();
+    for (const buildFileId of buildFilesFor(pass.index, referenceId)) {
+        for (const phaseId of phasesOf(pass.index, buildFileId)) {
+            const targetId = targetOfPhase(pass.index, phaseId);
+            const name = targetId === undefined ? undefined : stringValue(pass.index.object(targetId)?.name);
+            if (name) { names.add(name); }
+        }
+    }
+    return [...names];
+}
 
-    // Read pbxproj inside the lock so we pick up any adds the watcher just applied before computing what's missing.
+/** Re-points each spelled folder that is gone, with files listed directly in it, to the one sibling folder holding files with all those names; returns how many. */
+function repointMissingFolders(pass: SyncPass): number {
+    const spelled = spelledFolders(pass);
+    const spelledOnDisk = new Set([...spelled.values()].map((entry) => entry.path));
+    const childNames = new Map<string, string[]>();
+    for (const { id, object } of pass.index.objectsOfIsa('PBXFileReference')) {
+        if (!stringValue(object.path)) { continue; }
+        const resolved = resolvedPath(pass.index, id, pass.root);
+        if (resolved === undefined) { continue; }
+        const parent = path.dirname(resolved);
+        if (spelled.has(parent)) { childNames.set(parent, [...(childNames.get(parent) ?? []), path.basename(resolved)]); }
+    }
+
+    let repointed = 0;
+    const changes: ElementPathChange[] = [];
+    for (const entry of spelled.values()) {
+        const names = childNames.get(entry.folder);
+        if (entry.exists || !names) { continue; }
+        const parent = path.dirname(entry.folder);
+        let siblings: string[];
+        try {
+            siblings = fs.readdirSync(parent, { withFileTypes: true })
+                .filter((dirent) => dirent.isDirectory())
+                .map((dirent) => path.join(parent, dirent.name));
+        } catch {
+            continue;
+        }
+        // Compared in on-disk form, as the synchronized and spelled folders are.
+        const candidates = siblings.map((sibling) => pass.canonical(sibling)).filter((sibling) =>
+            !isFilteredFolder(pass.root, sibling) && !isInSynchronizedFolder(pass, sibling) &&
+            !spelledOnDisk.has(sibling) && names.every((name) => fs.existsSync(path.join(sibling, name))));
+        if (candidates.length === 1) {
+            changes.push(...renameChanges(pass, entry, path.basename(candidates[0])));
+            // Taken: another gone folder whose files it also holds finds no candidate, and its entries are re-homed one by one instead.
+            spelledOnDisk.add(candidates[0]);
+            repointed++;
+            pass.log(`${LOG_PREFIX} repair: ${relativeTo(pass, entry.folder)} is gone and ${relativeTo(pass, candidates[0])} holds its files, re-pointed its entries`);
+        } else if (candidates.length > 1) {
+            pass.log(`${LOG_PREFIX} repair: ${relativeTo(pass, entry.folder)} is gone and ${candidates.length} sibling folders hold its files, leaving it`);
+        }
+    }
+    if (changes.length > 0) { setElementPaths(pass.edit, changes); }
+    return repointed;
+}
+
+/** Every unregistered Swift file under the workspace root, outside filtered and synchronized folders, walked at most once per pass. */
+function unregisteredAnywhere(pass: SyncPass): Promise<string[]> {
+    if (!pass.unregisteredAnywhere) {
+        pass.unregisteredAnywhere = (async () => {
+            const found: string[] = [];
+            for (const candidate of await walkSwiftFiles(pass.root)) {
+                const filePath = pass.canonical(candidate);
+                if (!pass.byPath.has(filePath) && !isFilteredPath(pass.root, filePath) && !isInSynchronizedFolder(pass, filePath)) {
+                    found.push(filePath);
+                }
+            }
+            return found;
+        })();
+    }
+    return pass.unregisteredAnywhere;
+}
+
+/** Re-homes each registered file that is gone to the one unregistered Swift file anywhere with its name; those with none are gone, those with several or with no place to go are left. */
+async function rehomeStaleEntries(pass: SyncPass): Promise<{ rehomed: number; gone: SwiftReference[] }> {
+    const stale = pass.references.filter((reference) => !reference.exists && !pass.rehomed.has(reference.id));
+    const gone: SwiftReference[] = [];
+    let rehomed = 0;
+    if (stale.length === 0) { return { rehomed, gone }; }
+    const byName = new Map<string, string[]>();
+    for (const candidate of await unregisteredAnywhere(pass)) {
+        const name = path.basename(candidate);
+        byName.set(name, [...(byName.get(name) ?? []), candidate]);
+    }
+    // Ambiguity in either direction is never guessed: several files for one entry, or several entries for one file.
+    const staleNamed = new Map<string, number>();
+    for (const reference of stale) { staleNamed.set(reference.fileName, (staleNamed.get(reference.fileName) ?? 0) + 1); }
+    for (const reference of stale) {
+        if (pass.rehomed.has(reference.id)) { continue; }
+        const matches = (byName.get(reference.fileName) ?? []).filter((candidate) => !pass.byPath.has(candidate));
+        if (matches.length === 0) {
+            gone.push(reference);
+        } else if (matches.length > 1) {
+            pass.log(`${LOG_PREFIX} repair: ${relativeTo(pass, reference.recordedPath)} is gone and ${matches.length} unregistered files are named ${reference.fileName}, leaving it`);
+        } else if ((staleNamed.get(reference.fileName) ?? 0) > 1) {
+            pass.log(`${LOG_PREFIX} repair: ${relativeTo(pass, reference.recordedPath)} is gone but ${staleNamed.get(reference.fileName)} missing entries are named ${reference.fileName}, leaving it`);
+        } else if (moveReferences(pass, [reference], matches[0]) > 0) {
+            rehomed++;
+        }
+    }
+    return { rehomed, gone };
+}
+
+/** A registered Swift file whose file is gone, as the removal prompt shows it. */
+export interface StaleSwiftEntry {
+    id: string;
+    /** The recorded path, relative to the workspace root. */
+    path: string;
+    fileName: string;
+    /** The targets compiling it. */
+    targets: string[];
+}
+
+/** Remembers entries the user chose to keep, so startup doesn't ask about them again. */
+export interface KeptEntries {
+    get(): readonly string[];
+    set(ids: readonly string[]): Promise<void>;
+}
+
+export interface SwiftRepairOptions {
+    /** Asks whether to remove entries whose files are gone; absent, they are left. */
+    confirmRemoval?: (entries: readonly StaleSwiftEntry[]) => Promise<'remove' | 'keep' | undefined>;
+    kept?: KeptEntries;
+    /** Ask about kept entries too, as Sync Files does. */
+    askAgain?: boolean;
+    onRemoved?: (count: number) => void;
+}
+
+export interface SwiftReconcileResult {
+    added: number;
+    rehomed: number;
+    repointed: number;
+    caseFixed: number;
+    /** Entries put to the user. */
+    asked: number;
+    /** Resolves once the prompt, if any, has been answered and acted on; never rejects. */
+    settled: Promise<void>;
+}
+
+/** Removes the given references when they are still in the project and their files are still missing; returns how many. */
+export function removeMissingSwiftEntries(rootPath: string, ids: readonly string[], log: (message: string) => void): Promise<number> {
+    const pbxprojPath = findPbxprojPath(rootPath);
+    if (!pbxprojPath) { return Promise.resolve(0); }
+    const root = canonicalPath(rootPath);
     return enqueueWrite(async () => {
         const contents = await fsp.readFile(pbxprojPath, 'utf8');
-        const pass = openPass(root, pbxprojPath, contents, log, { files: new Map(), folders: new Map() });
-        if (!pass || pass.mappings.length === 0) { return 0; }
+        const pass = openPass(root, pbxprojPath, contents, log, emptyIdentities());
+        if (!pass) { return 0; }
+        let removed = 0;
+        for (const id of ids) {
+            const reference = pass.references.find((candidate) => candidate.id === id);
+            if (!reference || reference.exists) { continue; }
+            removeSwiftFile(pass.edit, id);
+            removed++;
+            log(`${LOG_PREFIX} repair: removed ${reference.fileName} from pbxproj`);
+        }
+        await writePass(pass, pbxprojPath, contents);
+        return removed;
+    });
+}
+
+/** Puts the gone entries to the user, not awaited by the repair: Remove drops those still missing, Keep remembers them. */
+async function settleGone(root: string, entries: StaleSwiftEntry[], options: SwiftRepairOptions, log: (message: string) => void): Promise<void> {
+    if (entries.length === 0 || !options.confirmRemoval) { return; }
+    try {
+        log(`${LOG_PREFIX} repair: asking about ${plural(entries.length, 'entry')} whose ${entries.length === 1 ? 'file is' : 'files are'} gone: ${entries.map((entry) => entry.fileName).join(', ')}`);
+        const choice = await options.confirmRemoval(entries);
+        if (choice === 'remove') {
+            const removed = await removeMissingSwiftEntries(root, entries.map((entry) => entry.id), log);
+            if (removed > 0) { options.onRemoved?.(removed); }
+        } else if (choice === 'keep' && options.kept) {
+            await options.kept.set([...new Set([...options.kept.get(), ...entries.map((entry) => entry.id)])]);
+            log(`${LOG_PREFIX} repair: keeping ${plural(entries.length, 'entry')}; startup won't ask again`);
+        }
+    } catch (error) {
+        const message = (error as { message?: string }).message || String(error);
+        log(`${LOG_PREFIX} Error: ${message}`);
+    }
+}
+
+/** Catch-up repair for what the watchers missed (VS Code closed, git checkout, external tooling). */
+export async function reconcileSwiftFiles(
+    rootPath: string,
+    log: (message: string) => void,
+    options: SwiftRepairOptions = {}
+): Promise<SwiftReconcileResult> {
+    const none = { added: 0, rehomed: 0, repointed: 0, caseFixed: 0, asked: 0, settled: Promise.resolve() };
+    const pbxprojPath = findPbxprojPath(rootPath);
+    if (!pbxprojPath) { return none; }
+    const root = canonicalPath(rootPath);
+
+    // Read pbxproj inside the lock so we pick up any edits the watcher just applied before deciding.
+    return enqueueWrite(async () => {
+        let contents = await fsp.readFile(pbxprojPath, 'utf8');
+        const identities = emptyIdentities();
+
+        // A re-pointed folder changes where its children resolve, so it gets a pass of its own.
+        const folderPass = openPass(root, pbxprojPath, contents, log, identities);
+        if (!folderPass) { return none; }
+        const repointed = repointMissingFolders(folderPass);
+        contents = await writePass(folderPass, pbxprojPath, contents);
+
+        const pass = openPass(root, pbxprojPath, contents, log, identities);
+        if (!pass) { return { ...none, repointed }; }
+
+        let caseFixed = 0;
+        for (const reference of pass.references) {
+            if (reference.exists && fixLetterCase(pass, reference)) { caseFixed++; }
+        }
+        const caseChanges: ElementPathChange[] = [];
+        for (const entry of spelledFolders(pass).values()) {
+            if (!entry.exists) { continue; }
+            const changes = folderCaseChanges(pass, entry);
+            if (changes.length > 0) {
+                caseChanges.push(...changes);
+                caseFixed++;
+            }
+        }
+        if (caseChanges.length > 0) { setElementPaths(pass.edit, caseChanges); }
+
+        const { rehomed, gone } = await rehomeStaleEntries(pass);
+
+        // The memory keeps only entries that are still gone: removed, re-homed or restored ones leave it.
+        const goneIds = new Set(gone.map((reference) => reference.id));
+        if (options.kept) {
+            const kept = options.kept.get();
+            const pruned = kept.filter((id) => goneIds.has(id));
+            if (pruned.length !== kept.length) { await options.kept.set(pruned); }
+        }
+        const remembered = new Set(options.askAgain ? [] : options.kept?.get() ?? []);
+        const toAsk = gone.filter((reference) => !remembered.has(reference.id)).map((reference): StaleSwiftEntry => ({
+            id: reference.id,
+            path: relativeTo(pass, reference.recordedPath),
+            fileName: reference.fileName,
+            targets: targetsCompiling(pass, reference.id)
+        }));
 
         // Assign each file to its most-specific (longest-prefix) target so nested-target files don't land in the enclosing target; dedup files reachable under multiple mappings.
         const seen = new Set<string>();
@@ -881,10 +1117,8 @@ export async function reconcileSwiftFiles(
             }
         }
 
-        if (added > 0) {
-            await fsp.writeFile(pbxprojPath, pass.edit.contents, 'utf8');
-            log(`${LOG_PREFIX} reconcile: added ${added} file(s) to the project`);
-        }
-        return added;
+        await writePass(pass, pbxprojPath, contents);
+        if (added > 0) { log(`${LOG_PREFIX} reconcile: added ${plural(added, 'file')} to the project`); }
+        return { added, rehomed, repointed, caseFixed, asked: toAsk.length, settled: settleGone(root, toAsk, options, log) };
     });
 }

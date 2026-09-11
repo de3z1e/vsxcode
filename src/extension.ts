@@ -1125,20 +1125,58 @@ export function activate(context: vscode.ExtensionContext): void {
         ];
     };
 
-    // Catch-up scan for files added or removed while the watchers weren't live (VS Code closed, git checkout, external tooling).
-    const reconcileProjectFiles = async (): Promise<string | null> => {
-        const swiftAdded = await reconcileSwiftFiles(projectRoot, log);
+    // Swift entries the user chose to keep although their files are gone; startup doesn't ask about them again.
+    const SWIFT_KEPT_ENTRIES_KEY = 'swiftSyncKeptEntries';
+
+    // Catch-up repair for what the watchers missed; the gone-entry notification isn't awaited, and Sync Files asks about kept ones again.
+    const reconcileProjectFiles = async (askAgain = false): Promise<string | null> => {
+        const swift = await reconcileSwiftFiles(projectRoot, log, {
+            askAgain,
+            kept: {
+                get: () => context.workspaceState.get<string[]>(SWIFT_KEPT_ENTRIES_KEY, []),
+                set: async (ids) => { await context.workspaceState.update(SWIFT_KEPT_ENTRIES_KEY, [...ids]); }
+            },
+            confirmRemoval: async (entries) => {
+                const names = entries.map((entry) => (entry.targets.length > 0 ? `${entry.fileName} (${entry.targets.join(', ')})` : entry.fileName));
+                const listed = names.length > 5 ? `${names.slice(0, 5).join(', ')} and ${names.length - 5} more` : names.join(', ');
+                const noun = entries.length === 1 ? 'Swift file the Xcode project lists no longer exists' : `Swift files the Xcode project lists no longer exist`;
+                const choice = await vscode.window.showWarningMessage(
+                    `VSXcode: ${entries.length === 1 ? 'A' : entries.length} ${noun}: ${listed}. Remove the project ${entries.length === 1 ? 'entry' : 'entries'}?`,
+                    'Remove',
+                    'Keep'
+                );
+                // The notification outlives a switch to "Keep it a SwiftPM package", which promised no more writes.
+                if (!workspaceManaged) {
+                    log('[project-sync] the workspace is no longer managed; ignoring the answer about stale Swift entries');
+                    return undefined;
+                }
+                return choice === 'Remove' ? 'remove' : choice === 'Keep' ? 'keep' : undefined;
+            },
+            onRemoved: (count) => {
+                log(`[project-sync] removed ${count} stale Swift entr${count === 1 ? 'y' : 'ies'}`);
+                regeneratePackageSwift('[project-sync]');
+                vscode.window.showInformationMessage(`VSXcode: removed ${count} stale Swift entr${count === 1 ? 'y' : 'ies'} from the Xcode project.`);
+            }
+        });
         const dataModels = await reconcileDataModels(projectRoot, log);
 
         const changes: string[] = [];
-        if (swiftAdded > 0) { changes.push(`added ${swiftAdded} Swift file(s)`); }
+        if (swift.repointed > 0) { changes.push(`re-pointed ${swift.repointed} renamed folder(s)`); }
+        if (swift.caseFixed > 0) { changes.push(`fixed the letter case of ${swift.caseFixed} Swift file(s) or folder(s)`); }
+        if (swift.rehomed > 0) { changes.push(`re-homed ${swift.rehomed} moved Swift file(s)`); }
+        if (swift.added > 0) { changes.push(`added ${swift.added} Swift file(s)`); }
         if (dataModels.added > 0) { changes.push(`added ${dataModels.added} Core Data model(s)`); }
         if (dataModels.updated > 0) { changes.push(`refreshed ${dataModels.updated} Core Data model(s)`); }
         if (dataModels.removed > 0) { changes.push(`removed ${dataModels.removed} stale Core Data model(s)`); }
-        if (changes.length === 0) { return null; }
+        // Sync Files reports entries put to the user, so it never claims everything is in sync while the notification shows.
+        const pending = askAgain && swift.asked > 0
+            ? `${swift.asked} Swift entr${swift.asked === 1 ? 'y points' : 'ies point'} at a missing file; see the notification.`
+            : null;
+        if (changes.length === 0) { return pending ? `VSXcode: ${pending}` : null; }
 
         regeneratePackageSwift('[project-sync]');
-        return `VSXcode: ${changes.join(', ')} in the Xcode project.`;
+        const summary = `VSXcode: ${changes.join(', ')} in the Xcode project.`;
+        return pending ? `${summary} ${pending}` : summary;
     };
 
     let projectFileSync: vscode.Disposable[] = [];
@@ -2432,7 +2470,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const syncProjectFilesCmd = vscode.commands.registerCommand('vsxcode.syncProjectFiles', async () => {
         try {
-            const summary = await reconcileProjectFiles();
+            const summary = await reconcileProjectFiles(true);
             vscode.window.showInformationMessage(
                 summary ?? 'VSXcode: project files are already in sync.'
             );
