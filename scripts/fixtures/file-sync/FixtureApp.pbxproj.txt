@@ -1,0 +1,403 @@
+// !$*UTF8*$!
+// Fixture for `npm run test:file-sync` (scripts/file-sync-check.js), materialized with sources.json into a
+// temp directory per scenario. Stored as .txt so the extension never activates on this repository.
+// Static libraries MyApp and MyKit each have a Helpers.swift and share Shared/SharedUtil.swift, with
+// per-file settings on MyKit's build file; SyncKit is a synchronized root; MyApp/Models holds a Core Data model.
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000150 /* Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000110 /* Helpers.swift */; };
+		AA0000000000000000000151 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000111 /* ContentView.swift */; };
+		AA0000000000000000000152 /* Bar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000112 /* Bar.swift */; };
+		AA0000000000000000000153 /* Rename.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000113 /* Rename.swift */; };
+		AA0000000000000000000154 /* Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000114 /* Model.swift */; };
+		AA0000000000000000000155 /* Service.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000115 /* Service.swift */; };
+		AA0000000000000000000156 /* SharedUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000310 /* SharedUtil.swift */; };
+		AA0000000000000000000157 /* Store.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000120 /* Store.xcdatamodeld */; };
+		AA0000000000000000000250 /* Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000210 /* Helpers.swift */; };
+		AA0000000000000000000251 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000211 /* Constants.swift */; };
+		AA0000000000000000000252 /* SharedUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000310 /* SharedUtil.swift */; settings = {COMPILER_FLAGS = "-DSHARED_UTIL"; }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000110 /* Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Helpers.swift; sourceTree = "<group>"; };
+		AA0000000000000000000111 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000112 /* Bar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bar.swift; sourceTree = "<group>"; };
+		AA0000000000000000000113 /* Rename.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rename.swift; sourceTree = "<group>"; };
+		AA0000000000000000000114 /* Model.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model.swift; sourceTree = "<group>"; };
+		AA0000000000000000000115 /* Service.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Service.swift; sourceTree = "<group>"; };
+		AA0000000000000000000116 /* Store.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Store.xcdatamodel; sourceTree = "<group>"; };
+		AA0000000000000000000190 /* libMyApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libMyApp.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000210 /* Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Helpers.swift; sourceTree = "<group>"; };
+		AA0000000000000000000211 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		AA0000000000000000000290 /* libMyKit.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libMyKit.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000310 /* SharedUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUtil.swift; sourceTree = "<group>"; };
+		AA0000000000000000000490 /* libSyncKit.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSyncKit.a; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		AA0000000000000000000400 /* SyncKit */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SyncKit;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000000182 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000282 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000482 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000100 /* MyApp */,
+				AA0000000000000000000200 /* MyKit */,
+				AA0000000000000000000300 /* Shared */,
+				AA0000000000000000000400 /* SyncKit */,
+				AA0000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000190 /* libMyApp.a */,
+				AA0000000000000000000290 /* libMyKit.a */,
+				AA0000000000000000000490 /* libSyncKit.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000100 /* MyApp */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000110 /* Helpers.swift */,
+				AA0000000000000000000102 /* Models */,
+				AA0000000000000000000103 /* Services */,
+				AA0000000000000000000101 /* Views */,
+			);
+			path = MyApp;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000101 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000112 /* Bar.swift */,
+				AA0000000000000000000111 /* ContentView.swift */,
+				AA0000000000000000000113 /* Rename.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000102 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000114 /* Model.swift */,
+				AA0000000000000000000120 /* Store.xcdatamodeld */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000103 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000115 /* Service.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000200 /* MyKit */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000211 /* Constants.swift */,
+				AA0000000000000000000210 /* Helpers.swift */,
+			);
+			path = MyKit;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000300 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000310 /* SharedUtil.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000180 /* MyApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000183 /* Build configuration list for PBXNativeTarget "MyApp" */;
+			buildPhases = (
+				AA0000000000000000000181 /* Sources */,
+				AA0000000000000000000182 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MyApp;
+			productName = MyApp;
+			productReference = AA0000000000000000000190 /* libMyApp.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		AA0000000000000000000280 /* MyKit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000283 /* Build configuration list for PBXNativeTarget "MyKit" */;
+			buildPhases = (
+				AA0000000000000000000281 /* Sources */,
+				AA0000000000000000000282 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MyKit;
+			productName = MyKit;
+			productReference = AA0000000000000000000290 /* libMyKit.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		AA0000000000000000000480 /* SyncKit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000483 /* Build configuration list for PBXNativeTarget "SyncKit" */;
+			buildPhases = (
+				AA0000000000000000000481 /* Sources */,
+				AA0000000000000000000482 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000400 /* SyncKit */,
+			);
+			name = SyncKit;
+			productName = SyncKit;
+			productReference = AA0000000000000000000490 /* libSyncKit.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					AA0000000000000000000180 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					AA0000000000000000000280 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					AA0000000000000000000480 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = AA0000000000000000000004 /* Build configuration list for PBXProject "FixtureApp" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0000000000000000000002;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = AA0000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000180 /* MyApp */,
+				AA0000000000000000000280 /* MyKit */,
+				AA0000000000000000000480 /* SyncKit */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000181 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000150 /* Helpers.swift in Sources */,
+				AA0000000000000000000151 /* ContentView.swift in Sources */,
+				AA0000000000000000000152 /* Bar.swift in Sources */,
+				AA0000000000000000000153 /* Rename.swift in Sources */,
+				AA0000000000000000000154 /* Model.swift in Sources */,
+				AA0000000000000000000155 /* Service.swift in Sources */,
+				AA0000000000000000000156 /* SharedUtil.swift in Sources */,
+				AA0000000000000000000157 /* Store.xcdatamodeld in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000281 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000250 /* Helpers.swift in Sources */,
+				AA0000000000000000000251 /* Constants.swift in Sources */,
+				AA0000000000000000000252 /* SharedUtil.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000481 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA0000000000000000000184 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000185 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		AA0000000000000000000284 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000285 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		AA0000000000000000000484 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000485 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0000000000000000000004 /* Build configuration list for PBXProject "FixtureApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000005 /* Debug */,
+				AA0000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000183 /* Build configuration list for PBXNativeTarget "MyApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000184 /* Debug */,
+				AA0000000000000000000185 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000283 /* Build configuration list for PBXNativeTarget "MyKit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000284 /* Debug */,
+				AA0000000000000000000285 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000483 /* Build configuration list for PBXNativeTarget "SyncKit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000484 /* Debug */,
+				AA0000000000000000000485 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCVersionGroup section */
+		AA0000000000000000000120 /* Store.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				AA0000000000000000000116 /* Store.xcdatamodel */,
+			);
+			currentVersion = AA0000000000000000000116 /* Store.xcdatamodel */;
+			path = Store.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
+	};
+	rootObject = AA0000000000000000000001 /* Project object */;
+}

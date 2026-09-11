@@ -22,8 +22,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   paths>` and `VSXCODE_PBXPROJ_CORPUS_GOLDENS=<directory outside the repo>` also runs the parsers
   and two writer edits over local projects, printing counts and list indexes only; those goldens
   hold private project data, so the script refuses a directory inside the repository.
+- `npm run test:file-sync` — Run the compiled Swift and Core Data sync watchers in plain Node, with
+  `vscode` stubbed, against the Xcode-format project in `scripts/fixtures/file-sync/`. Each scenario
+  lays the project and `sources.json` out in a temp directory, applies real file operations, fires
+  the watcher events VS Code would deliver (creates before deletes), and reads the result through
+  `plutil`: the entries a scenario names must change as stated, and every other Swift file reference
+  and Core Data model must stay unchanged, ids included.
 
-No test framework or linter is configured; both checks are plain Node scripts.
+No test framework or linter is configured; the checks are plain Node scripts.
 
 **Version bumps**: When bumping the version number, update it in **all** locations: `package.json`, `README.md`, and any other files that reference the version. Search the repo to ensure nothing is missed.
 

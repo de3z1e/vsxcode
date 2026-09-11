@@ -1,0 +1,16 @@
+{
+    "files": {
+        "MyApp/Helpers.swift": "enum AppHelpers {\n    static let greeting = \"Hello\"\n}\n",
+        "MyApp/Models/Model.swift": "struct Model {\n    let identifier: Int\n}\n",
+        "MyApp/Models/Store.xcdatamodeld/.xccurrentversion": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>_XCCurrentVersionName</key>\n\t<string>Store.xcdatamodel</string>\n</dict>\n</plist>\n",
+        "MyApp/Models/Store.xcdatamodeld/Store.xcdatamodel/contents": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<model type=\"com.apple.IDECoreDataModeler.DataModel\" documentVersion=\"1.0\" minimumToolsVersion=\"Automatic\" sourceLanguage=\"Swift\" userDefinedModelVersionIdentifier=\"\">\n    <elements/>\n</model>\n",
+        "MyApp/Services/Service.swift": "struct Service {\n    let greeting = AppHelpers.greeting\n}\n",
+        "MyApp/Views/Bar.swift": "struct Bar {}\n",
+        "MyApp/Views/ContentView.swift": "struct ContentView {\n    let title = AppHelpers.greeting\n}\n",
+        "MyApp/Views/Rename.swift": "struct Rename {}\n",
+        "MyKit/Constants.swift": "enum KitConstants {\n    static let name = \"MyKit\"\n}\n",
+        "MyKit/Helpers.swift": "enum KitHelpers {\n    static let shared = SharedUtil.value\n}\n",
+        "Shared/SharedUtil.swift": "enum SharedUtil {\n    static let value = 1\n}\n",
+        "SyncKit/SyncFeature.swift": "struct SyncFeature {}\n"
+    }
+}

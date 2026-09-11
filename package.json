@@ -276,7 +276,8 @@
         "prepublish": "npm run compile",
         "package": "vsce package",
         "test:flag-parity": "npm run compile && node scripts/flag-parity.js",
-        "test:pbxproj": "npm run compile && node scripts/pbxproj-check.js"
+        "test:pbxproj": "npm run compile && node scripts/pbxproj-check.js",
+        "test:file-sync": "npm run compile && node scripts/file-sync-check.js"
     },
     "files": [
         "out",
