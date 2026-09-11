@@ -28,7 +28,7 @@ const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'file-sync');
 const PROJECT_TEXT = fs.readFileSync(path.join(FIXTURE_DIR, 'FixtureApp.pbxproj.txt'), 'utf8');
 const SOURCES = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'sources.json'), 'utf8')).files;
 
-// Past the scheduler's 300 ms per-path debounce (DEBOUNCE_MS in src/sync/pbxprojSync.ts, not exported).
+// Past the 300 ms Swift batch quiet window and Core Data debounce in src/sync/pbxprojSync.ts (not exported).
 const SETTLE_MS = 500;
 
 // ── vscode stub ──────────────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ function canonical(value) {
 const same = (left, right) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 const show = (value) => (value === undefined ? '(absent)' : JSON.stringify(canonical(value)));
 
-/** Swift file references and XCVersionGroups keyed by Xcode-resolved path, plus dangling Sources entries and repeated group children. */
+/** Swift file references and XCVersionGroups keyed by Xcode-resolved path, plus dangling Sources entries, repeated group children, and folders several own-path groups resolve to. */
 function readState(text) {
     const { objects, rootObject } = JSON.parse(plutil(['-convert', 'json', '-o', '-', '-'], text));
     const parentOf = new Map();
@@ -168,6 +168,7 @@ function readState(text) {
         table[key] = entry;
     };
     const versionPath = (id) => (objects[id] ? objects[id].path : `(missing ${id})`);
+    const groupsByFolder = new Map();
     for (const [id, object] of Object.entries(objects)) {
         if (object.isa === 'PBXFileReference' && /\.swift$/.test(object.path || '')) {
             record(swift, id, {});
@@ -176,6 +177,10 @@ function readState(text) {
                 versions: (object.children || []).map(versionPath).sort(),
                 current: object.currentVersion ? versionPath(object.currentVersion) : null
             });
+        } else if (object.isa === 'PBXGroup' && object.path) {
+            const folder = resolve(id);
+            const key = folder === null ? `(unresolved ${id})` : folder;
+            groupsByFolder.set(key, (groupsByFolder.get(key) || 0) + 1);
         }
     }
     return {
@@ -183,6 +188,7 @@ function readState(text) {
         models,
         dangling: dangling.sort(),
         duplicateChildren: duplicateChildren.sort(),
+        duplicateGroupFolders: [...groupsByFolder].filter(([, count]) => count > 1).map(([folder, count]) => `${folder} (${count} groups)`).sort(),
         ids: new Set(Object.keys(objects))
     };
 }
@@ -192,6 +198,8 @@ function readState(text) {
 // Id placeholders for entries a scenario creates or re-registers.
 const NEW_ID = 'one id that was not in the project before';
 const ANY_ID = 'one id';
+// A fixture id (`AA`, 18 zeros, suffix), for entries that must keep theirs.
+const fixtureId = (suffix) => `AA${'0'.repeat(18)}${suffix}`;
 
 function entryMatches(actual, expected, idsBefore) {
     if (!actual || !expected) { return actual === expected; }
@@ -208,7 +216,8 @@ function withChanges(state, changes) {
         swift: { ...state.swift },
         models: { ...state.models },
         dangling: state.dangling,
-        duplicateChildren: state.duplicateChildren
+        duplicateChildren: state.duplicateChildren,
+        duplicateGroupFolders: state.duplicateGroupFolders
     };
     for (const section of ['swift', 'models']) {
         for (const [key, entry] of Object.entries(changes[section] || {})) {
@@ -228,7 +237,11 @@ function stateProblems(actual, expected, idsBefore) {
             }
         }
     }
-    for (const [list, label] of [['dangling', 'dangling Sources entries'], ['duplicateChildren', 'elements listed as a child more than once']]) {
+    for (const [list, label] of [
+        ['dangling', 'dangling Sources entries'],
+        ['duplicateChildren', 'elements listed as a child more than once'],
+        ['duplicateGroupFolders', 'folders more than one group with its own path resolves to']
+    ]) {
         if (!same(actual[list], expected[list])) {
             problems.push(`${label}\n            expected: ${show(expected[list])}\n            actual:   ${show(actual[list])}`);
         }
@@ -260,7 +273,8 @@ function baselineProblems() {
         swift: Object.fromEntries(Object.entries(BASELINE_SWIFT).map(([key, targets]) => [key, { ids: ANY_ID, targets }])),
         models: Object.fromEntries(Object.entries(BASELINE_MODELS).map(([key, entry]) => [key, { ids: ANY_ID, ...entry }])),
         dangling: [],
-        duplicateChildren: []
+        duplicateChildren: [],
+        duplicateGroupFolders: []
     };
     const problems = stateProblems(readState(PROJECT_TEXT), expected, new Set());
     for (const file of [...Object.keys(BASELINE_SWIFT), `${STORE}/.xccurrentversion`, `${STORE}/Store.xcdatamodel/contents`]) {
@@ -296,9 +310,13 @@ function scenarioContext(root, log) {
         log,
         lastEventAt: null,
         write,
-        move: (from, to) => fs.renameSync(at(from), at(to)),
+        move: (from, to) => {
+            fs.mkdirSync(path.dirname(at(to)), { recursive: true });
+            fs.renameSync(at(from), at(to));
+        },
         remove: (relative) => fs.rmSync(at(relative), { recursive: true }),
         wait: sleep,
+        projectText: () => fs.readFileSync(projectPath(root), 'utf8'),
         writeModel: (bundle, versionName) => {
             write(`${bundle}/.xccurrentversion`, SOURCES[`${STORE}/.xccurrentversion`].replace('Store.xcdatamodel', versionName));
             write(`${bundle}/${versionName}/contents`, SOURCES[`${STORE}/Store.xcdatamodel/contents`]);
@@ -330,6 +348,27 @@ const renameSwift = (s, order) => {
     } else {
         s.fire('delete', 'MyApp/Views/Rename.swift');
         s.fire('create', 'MyApp/Views/Renamed.swift');
+    }
+};
+
+const EVENT_ORDERS = ['creates first', 'deletes first', 'events twice'];
+
+/** A move on disk, then its events: creates first, deletes first, or creates-first delivered twice 100 ms apart. */
+const moveSwift = async (s, from, to, order) => {
+    s.move(from, to);
+    const fire = () => {
+        if (order === 'deletes first') {
+            s.fire('delete', from);
+            s.fire('create', to);
+        } else {
+            s.fire('create', to);
+            s.fire('delete', from);
+        }
+    };
+    fire();
+    if (order === 'events twice') {
+        await s.wait(100);
+        fire();
     }
 };
 
@@ -375,6 +414,173 @@ const SCENARIOS = [
         // Registered again under the new name; which ids it keeps is not asserted.
         changes: { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Renamed.swift': { ids: ANY_ID, targets: ['MyApp'] } } }
     })),
+    ...EVENT_ORDERS.map((order) => ({
+        name: `Swift file moved to another folder (S1), ${order}`,
+        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Models/Bar.swift', order),
+        changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Models/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    })),
+    {
+        name: 'Swift file moved to another folder (S1), create 500 ms after the delete',
+        run: async (s) => {
+            s.move('MyApp/Views/Bar.swift', 'MyApp/Models/Bar.swift');
+            s.fire('delete', 'MyApp/Views/Bar.swift');
+            await s.wait(500);
+            s.fire('create', 'MyApp/Models/Bar.swift');
+        },
+        changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Models/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    },
+    ...EVENT_ORDERS.map((order) => ({
+        name: `Swift file renamed to a name another target uses (S3), ${order}`,
+        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Constants.swift', order),
+        changes: { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Constants.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    })),
+    ...['once', 'twice'].map((times) => ({
+        name: `one target's same-named Swift file deleted (S4), delete delivered ${times}`,
+        run: async (s) => {
+            s.remove('MyKit/Helpers.swift');
+            s.fire('delete', 'MyKit/Helpers.swift');
+            if (times === 'twice') {
+                await s.wait(100);
+                s.fire('delete', 'MyKit/Helpers.swift');
+            }
+        },
+        changes: { swift: { 'MyKit/Helpers.swift': null } }
+    })),
+    ...EVENT_ORDERS.map((order) => ({
+        name: `Swift file moved while another target has its name (S7), ${order}`,
+        run: (s) => moveSwift(s, 'MyApp/Helpers.swift', 'MyApp/Services/Helpers.swift', order),
+        changes: { swift: { 'MyApp/Helpers.swift': null, 'MyApp/Services/Helpers.swift': { ids: [fixtureId('0110')], targets: ['MyApp'] } } }
+    })),
+    {
+        name: 'Swift file moved into new folders, groups created',
+        run: (s) => moveSwift(s, 'MyApp/Views/ContentView.swift', 'MyApp/Features/Home/ContentView.swift', 'creates first'),
+        changes: {
+            swift: {
+                'MyApp/Views/ContentView.swift': null,
+                'MyApp/Features/Home/ContentView.swift': { ids: [fixtureId('0111')], targets: ['MyApp'] }
+            }
+        }
+    },
+    {
+        name: 'new Swift file in a folder with no group',
+        run: (s) => {
+            s.write('MyApp/Features/NewFeature.swift', 'struct NewFeature {}\n');
+            s.fire('create', 'MyApp/Features/NewFeature.swift');
+        },
+        changes: { swift: { 'MyApp/Features/NewFeature.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: 'git checkout-style batch: new folder, deletion and move together',
+        run: (s) => {
+            s.write('MyApp/Features/First.swift', 'struct First {}\n');
+            s.write('MyApp/Features/Second.swift', 'struct Second {}\n');
+            s.remove('MyApp/Views/Bar.swift');
+            s.move('MyApp/Models/Model.swift', 'MyApp/Features/Model.swift');
+            for (const created of ['MyApp/Features/First.swift', 'MyApp/Features/Second.swift', 'MyApp/Features/Model.swift']) {
+                s.fire('create', created);
+            }
+            s.fire('delete', 'MyApp/Views/Bar.swift');
+            s.fire('delete', 'MyApp/Models/Model.swift');
+        },
+        // One Features group serves all three files: the duplicate-group-folder list stays empty.
+        changes: {
+            swift: {
+                'MyApp/Features/First.swift': { ids: NEW_ID, targets: ['MyApp'] },
+                'MyApp/Features/Second.swift': { ids: NEW_ID, targets: ['MyApp'] },
+                'MyApp/Views/Bar.swift': null,
+                'MyApp/Models/Model.swift': null,
+                'MyApp/Features/Model.swift': { ids: [fixtureId('0114')], targets: ['MyApp'] }
+            }
+        }
+    },
+    {
+        name: 'Swift file renamed in letter case only',
+        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift', 'creates first'),
+        changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Views/bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'Swift file with an absolute path renamed in letter case only',
+        run: (s) => {
+            // The fixture has no <absolute> reference, so Bar.swift's is pointed at its own file first.
+            const text = s.projectText().replace('path = Bar.swift; sourceTree = "<group>";',
+                `path = "${s.root}/MyApp/Views/Bar.swift"; sourceTree = "<absolute>";`);
+            fs.writeFileSync(projectPath(s.root), text);
+            return moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift', 'creates first');
+        },
+        // The oracle resolves only group-relative and SOURCE_ROOT paths, so the entry reads as unresolved, keyed by its path.
+        changes: (before, root) => ({
+            swift: {
+                'MyApp/Views/Bar.swift': null,
+                [`(unresolved ${fixtureId('0112')}) ${root}/MyApp/Views/bar.swift`]: { ids: [fixtureId('0112')], targets: ['MyApp'] }
+            }
+        })
+    },
+    {
+        name: 'Swift file moved under its name into a group folder that is no target\'s',
+        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'Shared/Bar.swift', 'creates first'),
+        changes: { swift: { 'MyApp/Views/Bar.swift': null, 'Shared/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'Swift file deleted with its folder',
+        run: (s) => {
+            s.remove('MyApp/Services');
+            s.fire('delete', 'MyApp/Services/Service.swift');
+        },
+        changes: { swift: { 'MyApp/Services/Service.swift': null } }
+    },
+    {
+        name: 'new Swift file while a registered file\'s folder is already gone',
+        run: (s) => {
+            s.remove('MyApp/Services');
+            s.write('MyApp/Views/NewView.swift', 'struct NewView {}\n');
+            s.fire('create', 'MyApp/Views/NewView.swift');
+        },
+        // Service.swift stays registered, stale, for repair.
+        changes: { swift: { 'MyApp/Views/NewView.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: '.build/ event storm doesn\'t hold back a real create',
+        run: async (s) => {
+            s.write('MyApp/Views/NewView.swift', 'struct NewView {}\n');
+            s.fire('create', 'MyApp/Views/NewView.swift');
+            const started = Date.now();
+            let registeredInTime = false;
+            for (let n = 0; Date.now() - started < 1500; n++) {
+                s.write(`.build/checkouts/Dep/Sources/Dep${n}.swift`, `enum Dep${n} {}\n`);
+                s.fire('create', `.build/checkouts/Dep/Sources/Dep${n}.swift`);
+                await s.wait(50);
+                if (!registeredInTime && Date.now() - started >= 800) {
+                    registeredInTime = s.projectText().includes('NewView.swift');
+                }
+            }
+            return registeredInTime;
+        },
+        result: true,
+        changes: { swift: { 'MyApp/Views/NewView.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: 'steady creates still write within the 2 s cap',
+        run: async (s) => {
+            const started = Date.now();
+            let registeredInTime = false;
+            for (let n = 0; Date.now() - started < 3000; n++) {
+                s.write(`MyApp/Views/Burst${n}.swift`, `struct Burst${n} {}\n`);
+                s.fire('create', `MyApp/Views/Burst${n}.swift`);
+                await s.wait(200);
+                if (!registeredInTime && Date.now() - started >= 2500) {
+                    registeredInTime = s.projectText().includes('Burst0.swift');
+                }
+            }
+            return registeredInTime;
+        },
+        result: true,
+        // Every burst file is registered in the end; the count depends on timing, so it's read back from disk.
+        changes: (before, root) => ({
+            swift: Object.fromEntries(fs.readdirSync(path.join(root, 'MyApp', 'Views'))
+                .filter((name) => /^Burst\d+\.swift$/.test(name))
+                .map((name) => [`MyApp/Views/${name}`, { ids: NEW_ID, targets: ['MyApp'] }]))
+        })
+    },
     {
         name: 'new Swift file under a synchronized root',
         run: (s) => {
@@ -432,6 +638,25 @@ const SCENARIOS = [
         changes: { swift: { 'MyKit/Unregistered.swift': { ids: NEW_ID, targets: ['MyKit'] } } }
     },
     {
+        name: 'reconcile registers a Swift file in a folder with no group',
+        run: (s) => {
+            s.write('MyKit/Sub/Unregistered.swift', 'struct Unregistered {}\n');
+            return reconcileSwiftFiles(s.root, s.log);
+        },
+        result: 1,
+        changes: { swift: { 'MyKit/Sub/Unregistered.swift': { ids: NEW_ID, targets: ['MyKit'] } } }
+    },
+    {
+        name: 'reconcile leaves a file whose name a missing same-target entry holds',
+        run: (s) => {
+            s.remove('MyKit/Constants.swift');
+            s.write('MyKit/Sub/Constants.swift', 'enum Constants {}\n');
+            return reconcileSwiftFiles(s.root, s.log);
+        },
+        result: 0,
+        changes: {}
+    },
+    {
         name: 'reconcile removes a Core Data model deleted without events',
         run: (s) => {
             s.remove(STORE);
@@ -478,7 +703,7 @@ async function runScenario(scenario) {
         if (scenario.result !== undefined && !same(result, scenario.result)) {
             problems.push(`returned ${show(result)}, expected ${show(scenario.result)}`);
         }
-        const changes = typeof scenario.changes === 'function' ? scenario.changes(before) : scenario.changes || {};
+        const changes = typeof scenario.changes === 'function' ? scenario.changes(before, root) : scenario.changes || {};
         problems.push(...stateProblems(readState(after), withChanges(before, changes), before.ids));
         return { problems, logs };
     } catch (error) {

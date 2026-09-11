@@ -4,6 +4,7 @@ import {
     buildFilesFor,
     displayName,
     locateDictionary,
+    locateKey,
     locateList,
     locateListEntry,
     locateObject,
@@ -50,31 +51,39 @@ function formatPath(fileName: string): string {
 /** An object id as written in the file: quoted when it needs it, as a path is. */
 const formatId = formatPath;
 
-/** One writer call: the text as it changes, and what was read from the call's input. */
-interface Edit {
+/** A run of edits on one read of the project: the text as it changes, and what was read from the input. */
+export interface ProjectEdit {
     contents: string;
-    /** Read once, on the call's input; offsets always come from `contents`. */
+    /** Read once, on the input; offsets always come from `contents`. */
     index: ProjectIndex;
     /** Whether the file uses section markers, in which case comments are written. */
     commented: boolean;
-    /** Display names of objects inserted during the call, which the index doesn't know. */
+    /** Display names of objects inserted during the run, which the index doesn't know. */
     insertedNames: Map<string, string>;
+    /** Groups created during the run, by `<parent id>/<folder name>`. */
+    createdGroups: Map<string, string>;
 }
 
 const SECTION_MARKER = /^\/\* Begin [A-Za-z]+ section \*\//m;
 
-/** Starts an edit; null when plutil can't read the text, which writers then leave unchanged. */
-function beginEdit(pbxContents: string): Edit | null {
+/** Starts a run of edits; null when plutil can't read the text, which writers then leave unchanged. */
+export function beginProjectEdit(pbxContents: string): ProjectEdit | null {
     const index = readProject(pbxContents);
     if (typeof index === 'string') { return null; }
-    return { contents: pbxContents, index, commented: SECTION_MARKER.test(pbxContents), insertedNames: new Map() };
+    return {
+        contents: pbxContents,
+        index,
+        commented: SECTION_MARKER.test(pbxContents),
+        insertedNames: new Map(),
+        createdGroups: new Map()
+    };
 }
 
-function comment(edit: Edit, text: string): string {
+function comment(edit: ProjectEdit, text: string): string {
     return edit.commented ? ` /* ${text} */` : '';
 }
 
-function splice(edit: Edit, start: number, end: number, insert: string): void {
+function splice(edit: ProjectEdit, start: number, end: number, insert: string): void {
     edit.contents = edit.contents.slice(0, start) + insert + edit.contents.slice(end);
 }
 
@@ -128,11 +137,11 @@ function findLastSectionEnd(pbxContents: string): number {
 }
 
 /** In its isa's section by id order; else a new section in isa order, in Xcode's blank-line layout; else before `objects` closes. */
-function insertObject(edit: Edit, isa: string, id: string, entry: string): void {
+function insertObject(edit: ProjectEdit, isa: string, id: string, entry: string): void {
     const contents = edit.contents;
     const section = findSection(contents, isa);
     if (section) {
-        // The section's entries as the text holds them now, so earlier edits in this call are accounted for.
+        // The section's entries as the text holds them now, so earlier edits in this run are accounted for.
         const next = locateObjects(contents).find(({ id: other, location }) =>
             location.startIndex > section.beginIndex && location.startIndex < section.bodyEnd && other > id);
         const at = next ? next.location.startIndex : section.bodyEnd;
@@ -159,8 +168,32 @@ function insertObject(edit: Edit, isa: string, id: string, entry: string): void 
 }
 
 /** Removes an object definition, whole. */
-function removeObject(edit: Edit, id: string): void {
+function removeObject(edit: ProjectEdit, id: string): void {
     const location = locateObject(edit.contents, id);
+    if (location) { splice(edit, location.startIndex, location.endIndex, ''); }
+}
+
+/** Sets an object's top-level `key` to `value`, as written; an absent key goes before the object's closing brace. */
+function setKey(edit: ProjectEdit, ownerId: string, key: string, value: string): void {
+    const existing = locateKey(edit.contents, ownerId, key);
+    if (existing) {
+        splice(edit, existing.valueStart, existing.valueEnd, value);
+        return;
+    }
+    const location = locateObject(edit.contents, ownerId);
+    if (!location) { return; }
+    const close = edit.contents.lastIndexOf('}', location.endIndex);
+    const closeLine = lineStartIfBlank(edit.contents, close);
+    if (closeLine !== close) {
+        splice(edit, closeLine, closeLine, `${indentAt(edit.contents, location.startIndex)}\t${key} = ${value};\n`);
+    } else {
+        splice(edit, close, close, `${key} = ${value}; `);
+    }
+}
+
+/** Removes an object's top-level `key`, when present. */
+function removeKey(edit: ProjectEdit, ownerId: string, key: string): void {
+    const location = locateKey(edit.contents, ownerId, key);
     if (location) { splice(edit, location.startIndex, location.endIndex, ''); }
 }
 
@@ -176,7 +209,7 @@ export function anyEntry(): boolean {
 
 /** With `comparable`, sorts case-insensitively by display name among accepted, named entries; otherwise, or when none are, appends. */
 function insertListEntry(
-    edit: Edit,
+    edit: ProjectEdit,
     ownerId: string,
     key: string,
     entryId: string,
@@ -215,8 +248,8 @@ function insertListEntry(
 
 type ListKey = 'children' | 'files';
 
-/** Removes `id` from every `children` list, or every build phase's `files` list, that holds it per the call's index. */
-function removeFromLists(edit: Edit, id: string, key: ListKey): void {
+/** Removes `id` from every `children` list, or every build phase's `files` list, that holds it per the input's index. */
+function removeFromLists(edit: ProjectEdit, id: string, key: ListKey): void {
     const owners = key === 'files'
         ? phasesOf(edit.index, id)
         : edit.index.ids.filter((ownerId) => stringList(edit.index.objects[ownerId].children).includes(id));
@@ -231,21 +264,16 @@ function removeFromLists(edit: Edit, id: string, key: ListKey): void {
     }
 }
 
-/** The first PBXFileReference, in definition order, whose display name is `fileName`. */
-function fileReferenceNamed(index: ProjectIndex, fileName: string): string | undefined {
-    return index.objectsOfIsa('PBXFileReference').find(({ object }) => displayName(object) === fileName)?.id;
-}
-
 // ── Adding a File ────────────────────────────────────────
 
-function addFileReferenceTo(edit: Edit, fileRefId: string, fileName: string, lastKnownFileType: string): void {
+function addFileReferenceTo(edit: ProjectEdit, fileRefId: string, fileName: string, lastKnownFileType: string): void {
     const indent = objectIndent(edit.contents, 'PBXFileReference');
     const entry = `${indent}${formatId(fileRefId)}${comment(edit, fileName)} = {isa = PBXFileReference; lastKnownFileType = ${lastKnownFileType}; path = ${formatPath(fileName)}; sourceTree = "<group>"; };\n`;
     insertObject(edit, 'PBXFileReference', fileRefId, entry);
     edit.insertedNames.set(fileRefId, fileName);
 }
 
-function addBuildFileTo(edit: Edit, buildFileId: string, fileRefId: string, fileName: string): void {
+function addBuildFileTo(edit: ProjectEdit, buildFileId: string, fileRefId: string, fileName: string): void {
     const indent = objectIndent(edit.contents, 'PBXBuildFile');
     const entry = `${indent}${formatId(buildFileId)}${comment(edit, `${fileName} in Sources`)} = {isa = PBXBuildFile; fileRef = ${formatId(fileRefId)}${comment(edit, fileName)}; };\n`;
     insertObject(edit, 'PBXBuildFile', buildFileId, entry);
@@ -257,7 +285,7 @@ export function addFileReference(
     fileName: string,
     lastKnownFileType: string = 'sourcecode.swift'
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     addFileReferenceTo(edit, fileRefId, fileName, lastKnownFileType);
     return edit.contents;
@@ -269,7 +297,7 @@ export function addBuildFile(
     fileRefId: string,
     fileName: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     addBuildFileTo(edit, buildFileId, fileRefId, fileName);
     return edit.contents;
@@ -282,7 +310,7 @@ export function addToGroup(
     fileName: string,
     comparable: (name: string) => boolean = isSwiftEntry
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     insertListEntry(edit, groupId, 'children', fileRefId, fileName, fileName, comparable);
     return edit.contents;
@@ -294,7 +322,7 @@ export function addToSourcesBuildPhase(
     buildFileId: string,
     fileName: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     insertListEntry(edit, sourcesBuildPhaseId, 'files', buildFileId, `${fileName} in Sources`, fileName, null);
     return edit.contents;
@@ -306,9 +334,15 @@ export function addSwiftFileToPbxproj(
     groupId: string,
     sourcesBuildPhaseId: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
-    const existingIds = collectExistingIds(pbxContents);
+    addSwiftFile(edit, fileName, groupId, sourcesBuildPhaseId);
+    return edit.contents;
+}
+
+/** Registers a Swift file in a group and a Sources phase; returns the new file reference's id. */
+export function addSwiftFile(edit: ProjectEdit, fileName: string, groupId: string, sourcesBuildPhaseId: string): string {
+    const existingIds = collectExistingIds(edit.contents);
     const buildFileId = generateUniqueId(existingIds);
     existingIds.add(buildFileId);
     const fileRefId = generateUniqueId(existingIds);
@@ -317,19 +351,57 @@ export function addSwiftFileToPbxproj(
     addFileReferenceTo(edit, fileRefId, fileName, 'sourcecode.swift');
     insertListEntry(edit, groupId, 'children', fileRefId, fileName, fileName, isSwiftEntry);
     insertListEntry(edit, sourcesBuildPhaseId, 'files', buildFileId, `${fileName} in Sources`, fileName, null);
-    return edit.contents;
+    return fileRefId;
+}
+
+// ── Moving a File ────────────────────────────────────────
+
+/** Moves a file reference into a group under its file name: `path` becomes the name, in the group's tree. Ids, build files and settings stay. */
+export function rehomeSwiftFile(edit: ProjectEdit, fileReferenceId: string, groupId: string, fileName: string): void {
+    const recordedName = stringValue(edit.index.object(fileReferenceId)?.name);
+    const shownName = recordedName ?? fileName;
+    removeFromLists(edit, fileReferenceId, 'children');
+    insertListEntry(edit, groupId, 'children', fileReferenceId, shownName, shownName, isSwiftEntry);
+    if (recordedName === fileName) { removeKey(edit, fileReferenceId, 'name'); }
+    setKey(edit, fileReferenceId, 'path', formatPath(fileName));
+    setKey(edit, fileReferenceId, 'sourceTree', formatPath('<group>'));
+}
+
+/** Replaces a file reference's `path`. */
+export function setFileReferencePath(edit: ProjectEdit, fileReferenceId: string, newPath: string): void {
+    setKey(edit, fileReferenceId, 'path', formatPath(newPath));
+}
+
+/** Creates nested groups for folders under a group, reusing any created earlier in the run; returns the deepest group's id. */
+export function addGroupPath(edit: ProjectEdit, parentGroupId: string, folderNames: string[]): string {
+    let parentId = parentGroupId;
+    for (const name of folderNames) {
+        const key = `${parentId}/${name}`;
+        let groupId = edit.createdGroups.get(key);
+        if (!groupId) {
+            groupId = generateUniqueId(collectExistingIds(edit.contents));
+            const indent = objectIndent(edit.contents, 'PBXGroup');
+            const inner = `${indent}\t`;
+            const entry = [
+                `${indent}${formatId(groupId)}${comment(edit, name)} = {`,
+                `${inner}isa = PBXGroup;`,
+                `${inner}children = (`,
+                `${inner});`,
+                `${inner}path = ${formatPath(name)};`,
+                `${inner}sourceTree = ${formatPath('<group>')};`,
+                `${indent}};`
+            ].join('\n') + '\n';
+            insertObject(edit, 'PBXGroup', groupId, entry);
+            edit.insertedNames.set(groupId, name);
+            insertListEntry(edit, parentId, 'children', groupId, name, name, anyEntry);
+            edit.createdGroups.set(key, groupId);
+        }
+        parentId = groupId;
+    }
+    return parentId;
 }
 
 // ── Finding entries for removal ──────────────────────────
-
-/** The first PBXFileReference, in definition order, whose display name (`name`, else the path's last component) is `fileName`. */
-export function findFileReferenceId(
-    pbxContents: string,
-    fileName: string
-): string | null {
-    const index = readProject(pbxContents);
-    return typeof index === 'string' ? null : fileReferenceNamed(index, fileName) ?? null;
-}
 
 /** The `path` of a PBXFileReference, for checking a recorded entry against disk. */
 export function findFileReferencePath(
@@ -354,7 +426,7 @@ export function removeFileReference(
     pbxContents: string,
     fileRefId: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     removeObject(edit, fileRefId);
     return edit.contents;
@@ -364,7 +436,7 @@ export function removeBuildFile(
     pbxContents: string,
     buildFileId: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     removeObject(edit, buildFileId);
     return edit.contents;
@@ -374,7 +446,7 @@ export function removeFromGroup(
     pbxContents: string,
     fileRefId: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     removeFromLists(edit, fileRefId, 'children');
     return edit.contents;
@@ -384,7 +456,7 @@ export function removeFromSourcesBuildPhase(
     pbxContents: string,
     buildFileId: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     removeFromLists(edit, buildFileId, 'files');
     return edit.contents;
@@ -423,23 +495,15 @@ export function updateBuildSetting(
     return pbxContents.slice(0, block.openIndex) + newSettings + pbxContents.slice(block.closeIndex);
 }
 
-export function removeSwiftFileFromPbxproj(
-    pbxContents: string,
-    fileName: string
-): string | null {
-    const edit = beginEdit(pbxContents);
-    if (!edit) { return null; }
-    const fileRefId = fileReferenceNamed(edit.index, fileName);
-    if (!fileRefId) { return null; }
-
+/** Unregisters a file reference: every build file with its phase entries, every group child entry, and the reference. */
+export function removeSwiftFile(edit: ProjectEdit, fileReferenceId: string): void {
     // A file compiled by several targets has one build file per target, so drain them all.
-    for (const buildFileId of buildFilesFor(edit.index, fileRefId)) {
+    for (const buildFileId of buildFilesFor(edit.index, fileReferenceId)) {
         removeFromLists(edit, buildFileId, 'files');
         removeObject(edit, buildFileId);
     }
-    removeFromLists(edit, fileRefId, 'children');
-    removeObject(edit, fileRefId);
-    return edit.contents;
+    removeFromLists(edit, fileReferenceId, 'children');
+    removeObject(edit, fileReferenceId);
 }
 
 // ── Core Data Models (XCVersionGroup) ────────────────────
@@ -464,7 +528,7 @@ const EMPTY_VERSION_GROUP_SECTION = new RegExp(
 );
 
 function formatVersionGroupEntry(
-    edit: Edit,
+    edit: ProjectEdit,
     versionGroupId: string,
     bundleName: string,
     versions: DataModelVersion[],
@@ -500,7 +564,7 @@ function formatVersionGroupEntry(
 }
 
 function addVersionGroupTo(
-    edit: Edit,
+    edit: ProjectEdit,
     versionGroupId: string,
     bundleName: string,
     versions: DataModelVersion[],
@@ -514,7 +578,7 @@ function addVersionGroupTo(
 }
 
 /** Removes an XCVersionGroup entry, and its section markers once the last entry is gone. False when it isn't one. */
-function removeVersionGroupFrom(edit: Edit, versionGroupId: string): boolean {
+function removeVersionGroupFrom(edit: ProjectEdit, versionGroupId: string): boolean {
     if (edit.index.object(versionGroupId)?.isa !== 'XCVersionGroup') { return false; }
     const location = locateObject(edit.contents, versionGroupId);
     if (!location) { return false; }
@@ -531,7 +595,7 @@ export function addVersionGroup(
     versions: DataModelVersion[],
     currentVersionId: string | undefined
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     addVersionGroupTo(edit, versionGroupId, bundleName, versions, currentVersionId);
     return edit.contents;
@@ -539,7 +603,7 @@ export function addVersionGroup(
 
 /** Remove an XCVersionGroup entry, dropping the section markers once the last entry is gone. */
 export function removeVersionGroup(pbxContents: string, versionGroupId: string): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     removeVersionGroupFrom(edit, versionGroupId);
     return edit.contents;
@@ -553,7 +617,7 @@ export function updateVersionGroupVersions(
     currentVersionName: string | undefined
 ): string | null {
     if (versionNames.length === 0) { return null; }
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     const group = edit?.index.object(versionGroupId);
     if (!edit || group?.isa !== 'XCVersionGroup' || !locateObject(pbxContents, versionGroupId)) { return null; }
 
@@ -593,7 +657,7 @@ export function moveVersionGroupToGroup(
     newGroupId: string,
     bundleName: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     removeFromLists(edit, versionGroupId, 'children');
     insertListEntry(edit, newGroupId, 'children', versionGroupId, bundleName, bundleName, anyEntry);
@@ -620,7 +684,7 @@ export function addDataModelToPbxproj(
     groupId: string,
     sourcesBuildPhaseId: string
 ): string {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     if (!edit) { return pbxContents; }
     const existingIds = collectExistingIds(pbxContents);
     const takeId = (): string => {
@@ -651,7 +715,7 @@ export function removeDataModelFromPbxproj(
     pbxContents: string,
     versionGroupId: string
 ): string | null {
-    const edit = beginEdit(pbxContents);
+    const edit = beginProjectEdit(pbxContents);
     const group = edit?.index.object(versionGroupId);
     if (!edit || group?.isa !== 'XCVersionGroup' || !locateObject(pbxContents, versionGroupId)) { return null; }
 

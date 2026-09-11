@@ -165,10 +165,6 @@
       [
         "OBJ_8",
         "/project/Sources/SampleKit"
-      ],
-      [
-        "OBJ_10",
-        "/project"
       ]
     ],
     "resolveGroupForPath Sources": "OBJ_7",
@@ -186,8 +182,6 @@
     "usesSwiftPMObjectIds": true,
     "parseFrameworksBuildPhase OBJ_17": [],
     "parseLinkedFrameworksForTarget OBJ_17": [],
-    "findFileReferenceId SampleKit.swift": "OBJ_9",
-    "findFileReferenceId Package.swift": "OBJ_6",
     "findFileReferencePath OBJ_9": "SampleKit.swift",
     "findBuildFileId OBJ_9": "OBJ_16",
     "findFileReferencePath OBJ_6": "Package.swift",
@@ -255,6 +249,30 @@
       "startIndex": 1271,
       "endIndex": 1334
     },
+    "parentOf OBJ_5": null,
+    "resolvedPath OBJ_5": "/project",
+    "parentOf OBJ_7": "OBJ_5",
+    "resolvedPath OBJ_7": "/project",
+    "parentOf OBJ_8": "OBJ_7",
+    "resolvedPath OBJ_8": "/project/Sources/SampleKit",
+    "parentOf OBJ_9": "OBJ_8",
+    "resolvedPath OBJ_9": "/project/Sources/SampleKit/SampleKit.swift",
+    "parentOf OBJ_10": "OBJ_5",
+    "resolvedPath OBJ_10": null,
+    "parentOf SampleKit::SampleKit::Product": "OBJ_10",
+    "resolvedPath SampleKit::SampleKit::Product": null,
+    "targetOfPhase OBJ_15": "SampleKit::SampleKit",
+    "targetOfPhase OBJ_17": "SampleKit::SampleKit",
+    "groupForFolder .": "OBJ_5",
+    "groupForFolder Sources": null,
+    "groupForFolder Sources/SampleKit": "OBJ_8",
+    "groupForFolder SampleKit": null,
+    "locateKey OBJ_8 path": {
+      "startIndex": 1865,
+      "endIndex": 1894,
+      "valueStart": 1875,
+      "valueEnd": 1892
+    },
     "writer addSwiftFileToPbxproj Added.swift": {
       "lint": "OK",
       "diff": [
@@ -264,13 +282,33 @@
         "+117: \t\t\t\t800000000000000000000001 /* Added.swift in Sources */,"
       ]
     },
-    "writer removeSwiftFileFromPbxproj SampleKit.swift": {
+    "writer removeSwiftFile OBJ_9": {
       "lint": "OK",
       "diff": [
         "-12: \t\tOBJ_16 /* SampleKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_9 /* SampleKit.swift */; };",
         "-17: \t\tOBJ_9 /* SampleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleKit.swift; sourceTree = \"<group>\"; };",
         "-62: \t\t\t\tOBJ_9 /* SampleKit.swift */,",
         "-116: \t\t\t\tOBJ_16 /* SampleKit.swift in Sources */,"
+      ]
+    },
+    "writer setFileReferencePath OBJ_9 samplekit.swift": {
+      "lint": "OK",
+      "diff": [
+        "-17: \t\tOBJ_9 /* SampleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleKit.swift; sourceTree = \"<group>\"; };",
+        "+18: \t\tOBJ_9 /* SampleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = samplekit.swift; sourceTree = \"<group>\"; };"
+      ]
+    },
+    "writer addGroupPath Sources/SampleKit/Feature": {
+      "lint": "OK",
+      "diff": [
+        "+32: \t\t800000000000000000000001 /* Feature */ = {",
+        "+32: \t\t\tisa = PBXGroup;",
+        "+32: \t\t\tchildren = (",
+        "+32: \t\t\t);",
+        "+32: \t\t\tpath = Feature;",
+        "+32: \t\t\tsourceTree = \"<group>\";",
+        "+32: \t\t};",
+        "+62: \t\t\t\t800000000000000000000001 /* Feature */,"
       ]
     },
     "writer updateBuildSetting SWIFT_VERSION": {

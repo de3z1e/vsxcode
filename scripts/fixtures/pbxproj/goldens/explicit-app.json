@@ -646,7 +646,7 @@
       ],
       [
         "C30000000000000000000014",
-        "/project/SampleApp/Shared"
+        "/project/Shared"
       ],
       [
         "5A0000000000000000000015",
@@ -747,11 +747,6 @@
     ],
     "parseResourcesBuildPhase C30000000000000000000706": [],
     "parseResourcesForTarget C30000000000000000000706": [],
-    "findFileReferenceId ContentView.swift": "C30000000000000000000102",
-    "findFileReferenceId SharedModels.swift": "C30000000000000000000108",
-    "findFileReferenceId Badge.swift": "5A0000000000000000000105",
-    "findFileReferenceId Legacy.swift": "5A0000000000000000000107",
-    "findFileReferenceId Missing.swift": null,
     "findFileReferencePath C30000000000000000000102": "ContentView.swift",
     "findBuildFileId C30000000000000000000102": "C30000000000000000000202",
     "findFileReferencePath 5A0000000000000000000105": "Components/Badge.swift",
@@ -894,6 +889,54 @@
       "startIndex": 16803,
       "endIndex": 16868
     },
+    "parentOf 5A0000000000000000000002": null,
+    "resolvedPath 5A0000000000000000000002": "/project",
+    "parentOf 5A0000000000000000000010": "5A0000000000000000000002",
+    "resolvedPath 5A0000000000000000000010": "/project/SampleApp",
+    "parentOf C30000000000000000000013": "5A0000000000000000000010",
+    "resolvedPath C30000000000000000000013": "/project/SampleApp",
+    "parentOf C30000000000000000000014": "5A0000000000000000000010",
+    "resolvedPath C30000000000000000000014": "/project/Shared",
+    "parentOf C30000000000000000000108": "C30000000000000000000014",
+    "resolvedPath C30000000000000000000108": "/project/Shared/SharedModels.swift",
+    "parentOf 5A0000000000000000000107": "C30000000000000000000013",
+    "resolvedPath 5A0000000000000000000107": "/project/Legacy/Legacy.swift",
+    "parentOf 5A000000000000000000010E": "5A0000000000000000000302",
+    "resolvedPath 5A000000000000000000010E": "/project/SampleApp/en.lproj/Localizable.strings",
+    "parentOf C30000000000000000000115": "5A0000000000000000000004",
+    "resolvedPath C30000000000000000000115": null,
+    "parentOf 5A0000000000000000000501": "5A0000000000000000000003",
+    "resolvedPath 5A0000000000000000000501": null,
+    "targetOfPhase 5A0000000000000000000701": "5A0000000000000000000601",
+    "targetOfPhase C30000000000000000000704": "C30000000000000000000602",
+    "targetOfPhase 5A0000000000000000000707": "5A0000000000000000000603",
+    "groupForFolder .": "5A0000000000000000000002",
+    "groupForFolder SampleApp": "5A0000000000000000000010",
+    "groupForFolder SampleApp/Views": "5A0000000000000000000011",
+    "groupForFolder SampleApp/Views/Rows": "C30000000000000000000012",
+    "groupForFolder Shared": "C30000000000000000000014",
+    "groupForFolder SampleApp/Shared": null,
+    "groupForFolder Support": null,
+    "groupForFolder SampleApp/Missing": null,
+    "locateKey 5A0000000000000000000107 name": {
+      "startIndex": 4686,
+      "endIndex": 4707,
+      "valueStart": 4693,
+      "valueEnd": 4705
+    },
+    "locateKey 5A0000000000000000000107 path": {
+      "startIndex": 4707,
+      "endIndex": 4738,
+      "valueStart": 4714,
+      "valueEnd": 4736
+    },
+    "locateKey C30000000000000000000014 sourceTree": {
+      "startIndex": 12013,
+      "endIndex": 12042,
+      "valueStart": 12029,
+      "valueEnd": 12040
+    },
+    "locateKey 5A0000000000000000000107 explicitFileType": null,
     "writer addSwiftFileToPbxproj AddedView.swift": {
       "lint": "OK",
       "diff": [
@@ -903,7 +946,7 @@
         "+357: \t\t\t\t800000000000000000000001 /* AddedView.swift in Sources */,"
       ]
     },
-    "writer removeSwiftFileFromPbxproj SharedModels.swift": {
+    "writer removeSwiftFile C30000000000000000000108": {
       "lint": "OK",
       "diff": [
         "-18: \t\t5A0000000000000000000209 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; };",
@@ -912,6 +955,36 @@
         "-195: \t\t\t\tC30000000000000000000108 /* SharedModels.swift */,",
         "-354: \t\t\t\tC30000000000000000000208 /* SharedModels.swift in Sources */,",
         "-373: \t\t\t\t5A0000000000000000000209 /* SharedModels.swift in Sources */,"
+      ]
+    },
+    "writer rehomeSwiftFile Legacy.swift into Views": {
+      "lint": "OK",
+      "diff": [
+        "-56: \t\t5A0000000000000000000107 /* Legacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Legacy.swift; path = ../Legacy/Legacy.swift; sourceTree = \"<group>\"; };",
+        "+57: \t\t5A0000000000000000000107 /* Legacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Legacy.swift; sourceTree = \"<group>\"; };",
+        "+159: \t\t\t\t5A0000000000000000000107 /* Legacy.swift */,",
+        "-186: \t\t\t\t5A0000000000000000000107 /* Legacy.swift */,"
+      ]
+    },
+    "writer addGroupPath SampleApp/Views/Cells/Compact": {
+      "lint": "OK",
+      "diff": [
+        "+159: \t\t\t\t800000000000000000000001 /* Cells */,",
+        "+175: \t\t800000000000000000000001 /* Cells */ = {",
+        "+175: \t\t\tisa = PBXGroup;",
+        "+175: \t\t\tchildren = (",
+        "+175: \t\t\t\t800000000000000000000002 /* Compact */,",
+        "+175: \t\t\t);",
+        "+175: \t\t\tpath = Cells;",
+        "+175: \t\t\tsourceTree = \"<group>\";",
+        "+175: \t\t};",
+        "+175: \t\t800000000000000000000002 /* Compact */ = {",
+        "+175: \t\t\tisa = PBXGroup;",
+        "+175: \t\t\tchildren = (",
+        "+175: \t\t\t);",
+        "+175: \t\t\tpath = Compact;",
+        "+175: \t\t\tsourceTree = \"<group>\";",
+        "+175: \t\t};"
       ]
     },
     "writer addDataModelToPbxproj Added.xcdatamodeld": {

@@ -3,11 +3,11 @@ import * as path from 'path';
 import { promises as fsp } from 'fs';
 
 import { parseGroups, findMainGroupId, buildGroupDirectories } from '../parsers/groups';
+import { groupForFolder, readProject, resolvedPath } from '../parsers/projectIndex';
 import { parseVersionGroups, versionGroupBaseName, versionGroupBundleName } from '../parsers/versionGroups';
 import type { XCVersionGroupInfo } from '../parsers/versionGroups';
 import {
     addDataModelToPbxproj,
-    findFileReferenceId,
     findFileReferencePath,
     moveVersionGroupToGroup,
     removeDataModelFromPbxproj,
@@ -15,12 +15,12 @@ import {
 } from '../writers/pbxproj';
 import {
     buildTargetMappings,
+    canonicalPath,
     createOperationScheduler,
     enqueueWrite,
     findMappingForFile,
     findPbxprojPath,
     isUnderSynchronizedRoot,
-    resolveGroupForFile,
     walkTargetDirectory
 } from './pbxprojSync';
 import type { TargetDirectoryMapping } from './pbxprojSync';
@@ -114,7 +114,7 @@ function resolveVersionGroupPaths(
     const mainGroupId = findMainGroupId(pbxContents);
     if (!mainGroupId) { return resolved; }
 
-    const groupDirs = buildGroupDirectories(groups, mainGroupId, rootPath);
+    const groupDirs = buildGroupDirectories(pbxContents, rootPath);
     const parentOf = new Map<string, string>();
     for (const [groupId, group] of groups) {
         for (const childId of group.childIds) {
@@ -185,6 +185,23 @@ function registrationMatchesDisk(
         registered.names.every((name) => bundle.versionNames.includes(name));
 }
 
+/** The group standing for the bundle's folder; undefined when there's none or the project can't be read. */
+function groupForBundle(pbxContents: string, rootPath: string, bundlePath: string): string | undefined {
+    const index = readProject(pbxContents);
+    return typeof index === 'string' ? undefined : groupForFolder(index, path.dirname(bundlePath), rootPath, canonicalPath);
+}
+
+/** Whether a plain PBXFileReference, instead of an XCVersionGroup, already stands for the bundle's path. */
+function plainReferenceAt(pbxContents: string, rootPath: string, bundlePath: string): boolean {
+    const index = readProject(pbxContents);
+    if (typeof index === 'string') { return false; }
+    const bundle = canonicalPath(bundlePath);
+    return index.objectsOfIsa('PBXFileReference').some(({ id }) => {
+        const resolved = resolvedPath(index, id, rootPath);
+        return resolved !== undefined && path.basename(resolved) === path.basename(bundlePath) && canonicalPath(resolved) === bundle;
+    });
+}
+
 interface RegisterOutcome {
     pbxContents: string;
     result: 'added' | 'updated' | 'unchanged';
@@ -241,7 +258,7 @@ async function registerBundle(
 
         // The group child determines the bundle's on-disk directory, so a moved bundle is re-homed in place.
         if (isRelocation) {
-            const groupId = resolveGroupForFile(bundlePath, mapping, parseGroups(contents), mainGroupId);
+            const groupId = groupForBundle(contents, rootPath, bundlePath);
             if (groupId) {
                 contents = moveVersionGroupToGroup(contents, versionGroup.id, groupId, bundle.name);
                 changed = true;
@@ -259,12 +276,12 @@ async function registerBundle(
         return unchanged;
     }
     // An XCVersionGroup beside a legacy plain PBXFileReference would register the model twice.
-    if (findFileReferenceId(contents, bundleName)) {
+    if (plainReferenceAt(contents, rootPath, bundlePath)) {
         log(`${LOG_PREFIX} ${bundleName} is already referenced as a plain file reference, skipping`);
         return unchanged;
     }
 
-    const groupId = resolveGroupForFile(bundlePath, mapping, parseGroups(contents), mainGroupId);
+    const groupId = groupForBundle(contents, rootPath, bundlePath);
     if (!groupId) {
         log(`${LOG_PREFIX} No matching PBXGroup for ${path.relative(rootPath, bundlePath)}, skipping`);
         return unchanged;

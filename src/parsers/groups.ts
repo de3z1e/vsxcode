@@ -1,5 +1,4 @@
-import * as path from 'path';
-import { readProject, stringList, stringValue } from './projectIndex';
+import { readProject, resolvedPath, stringList, stringValue } from './projectIndex';
 
 export interface PBXGroupInfo {
     id: string;
@@ -34,28 +33,26 @@ export function findMainGroupId(pbxContents: string): string | null {
     return typeof index === 'string' ? null : index.mainGroupId ?? null;
 }
 
-/** Map every group reachable from mainGroup to its absolute on-disk dir. A group adds a path segment only if it has a `path`; name-only "virtual" groups inherit the parent dir. */
-export function buildGroupDirectories(
-    groups: Map<string, PBXGroupInfo>,
-    mainGroupId: string,
-    rootPath: string
-): Map<string, string> {
+/** Each PBXGroup and synchronized root reachable from the main group with its `resolvedPath` folder; groups with none (build products) are left out. */
+export function buildGroupDirectories(pbxContents: string, projectDir: string): Map<string, string> {
     const dirs = new Map<string, string>();
+    const index = readProject(pbxContents);
+    if (typeof index === 'string' || !index.mainGroupId) { return dirs; }
     const visited = new Set<string>();
 
-    const visit = (groupId: string, parentDir: string): void => {
+    const visit = (groupId: string): void => {
         if (visited.has(groupId)) { return; } // guard against malformed cyclic trees
         visited.add(groupId);
-        const group = groups.get(groupId);
-        if (!group) { return; }
-        const dir = group.path ? path.join(parentDir, group.path) : parentDir;
-        dirs.set(groupId, dir);
-        for (const childId of group.childIds) {
-            visit(childId, dir);
+        const object = index.object(groupId);
+        if (!object || (object.isa !== 'PBXGroup' && object.isa !== 'PBXFileSystemSynchronizedRootGroup')) { return; }
+        const dir = resolvedPath(index, groupId, projectDir);
+        if (dir !== undefined) { dirs.set(groupId, dir); }
+        for (const childId of stringList(object.children)) {
+            visit(childId);
         }
     };
 
-    visit(mainGroupId, rootPath);
+    visit(index.mainGroupId);
     return dirs;
 }
 

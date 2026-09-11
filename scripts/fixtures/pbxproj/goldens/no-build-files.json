@@ -204,7 +204,6 @@
     "usesSwiftPMObjectIds": false,
     "parseFrameworksBuildPhase B20000000000000000000702": [],
     "parseLinkedFrameworksForTarget B20000000000000000000702": [],
-    "findFileReferenceId README.md": "B20000000000000000000101",
     "findFileReferencePath B20000000000000000000101": "README.md",
     "findBuildFileId B20000000000000000000101": null,
     "displayName B20000000000000000000101": "README.md",
@@ -233,6 +232,13 @@
       "multiLine": true,
       "entries": []
     },
+    "parentOf 7F0000000000000000000010": "7F0000000000000000000002",
+    "resolvedPath 7F0000000000000000000010": "/project/EmptyKit",
+    "parentOf B20000000000000000000101": "7F0000000000000000000010",
+    "resolvedPath B20000000000000000000101": "/project/EmptyKit/README.md",
+    "targetOfPhase 7F0000000000000000000701": "B20000000000000000000601",
+    "groupForFolder .": "7F0000000000000000000002",
+    "groupForFolder EmptyKit": "7F0000000000000000000010",
     "writer addSwiftFileToPbxproj First.swift": {
       "lint": "OK",
       "diff": [
@@ -243,6 +249,19 @@
         "+12: \t\t800000000000000000000002 /* First.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = First.swift; sourceTree = \"<group>\"; };",
         "+38: \t\t\t\t800000000000000000000002 /* First.swift */,",
         "+106: \t\t\t\t800000000000000000000001 /* First.swift in Sources */,"
+      ]
+    },
+    "writer addGroupPath EmptyKit/Sub": {
+      "lint": "OK",
+      "diff": [
+        "+38: \t\t\t\t800000000000000000000001 /* Sub */,",
+        "+42: \t\t800000000000000000000001 /* Sub */ = {",
+        "+42: \t\t\tisa = PBXGroup;",
+        "+42: \t\t\tchildren = (",
+        "+42: \t\t\t);",
+        "+42: \t\t\tpath = Sub;",
+        "+42: \t\t\tsourceTree = \"<group>\";",
+        "+42: \t\t};"
       ]
     },
     "writer updateBuildSetting SKIP_INSTALL": {

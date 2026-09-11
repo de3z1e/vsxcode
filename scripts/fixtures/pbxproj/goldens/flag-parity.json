@@ -289,8 +289,6 @@
     "parseLinkedFrameworksForTarget AA0000000000000000000004": [],
     "parseFrameworksBuildPhase AA0000000000000000000014": [],
     "parseLinkedFrameworksForTarget AA0000000000000000000014": [],
-    "findFileReferenceId Covered.swift": "AA0000000000000000000002",
-    "findFileReferenceId Inherited.swift": "AA0000000000000000000012",
     "findFileReferencePath AA0000000000000000000002": "Covered.swift",
     "findBuildFileId AA0000000000000000000002": "AA0000000000000000000001",
     "findFileReferencePath AA0000000000000000000012": "Inherited.swift",
@@ -353,6 +351,21 @@
       "multiLine": false,
       "entries": []
     },
+    "parentOf AA0000000000000000000006": "AA0000000000000000000005",
+    "resolvedPath AA0000000000000000000006": "/project/FlagParityTarget",
+    "parentOf AA0000000000000000000002": "AA0000000000000000000006",
+    "resolvedPath AA0000000000000000000002": "/project/FlagParityTarget/Covered.swift",
+    "targetOfPhase AA000000000000000000000A": "AA0000000000000000000008",
+    "targetOfPhase AA0000000000000000000018": "AA0000000000000000000016",
+    "groupForFolder .": "AA0000000000000000000005",
+    "groupForFolder FlagParityTarget": "AA0000000000000000000006",
+    "groupForFolder FlagParityInherited": "AA0000000000000000000015",
+    "locateKey AA0000000000000000000006 path": {
+      "startIndex": 3331,
+      "endIndex": 3356,
+      "valueStart": 3338,
+      "valueEnd": 3354
+    },
     "writer addSwiftFileToPbxproj Added.swift": {
       "lint": "OK",
       "diff": [
@@ -375,7 +388,7 @@
         "+93: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, 800000000000000000000001 /* Zed.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };"
       ]
     },
-    "writer removeSwiftFileFromPbxproj Covered.swift": {
+    "writer removeSwiftFile AA0000000000000000000002": {
       "lint": "OK",
       "diff": [
         "-25: \t\tAA0000000000000000000001 /* Covered.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* Covered.swift */; };",
@@ -384,6 +397,20 @@
         "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (); path = FlagParityTarget; sourceTree = \"<group>\"; };",
         "-92: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };",
         "+93: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };"
+      ]
+    },
+    "writer addGroupPath FlagParityTarget/Nested": {
+      "lint": "OK",
+      "diff": [
+        "+43: \t\t800000000000000000000001 /* Nested */ = {",
+        "+43: \t\t\tisa = PBXGroup;",
+        "+43: \t\t\tchildren = (",
+        "+43: \t\t\t);",
+        "+43: \t\t\tpath = Nested;",
+        "+43: \t\t\tsourceTree = \"<group>\";",
+        "+43: \t\t};",
+        "-44: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, 800000000000000000000001 /* Nested */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };"
       ]
     },
     "writer updateBuildSetting SWIFT_VERSION": {

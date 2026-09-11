@@ -5,7 +5,6 @@ import * as fs from 'fs';
 
 import { parseNativeTargets, isTestTarget, parseBuildPhaseIds } from '../parsers/targets';
 import { parseGroups, findMainGroupId, resolveGroupForPath, buildGroupDirectories } from '../parsers/groups';
-import type { PBXGroupInfo } from '../parsers/groups';
 import { SPM_RESOURCE_DIR_EXTENSIONS } from '../types/constants';
 import { determineTargetPath } from '../utils/path';
 
@@ -13,7 +12,6 @@ export interface TargetDirectoryMapping {
     absolutePath: string;
     targetName: string;
     sourcesBuildPhaseId: string;
-    groupId: string;
     pbxprojPath: string;
     /** Relative path from workspace root to target directory (e.g., "MyApp" or "Sources/MyApp") */
     relativePath: string;
@@ -31,7 +29,7 @@ export function buildTargetMappings(
     const groups = parseGroups(pbxContents);
     const mainGroupId = findMainGroupId(pbxContents);
     if (!mainGroupId) { return mappings; }
-    const groupDirs = buildGroupDirectories(groups, mainGroupId, rootPath);
+    const groupDirs = buildGroupDirectories(pbxContents, rootPath);
 
     for (const target of targets) {
         const isTest = isTestTarget(target.productType);
@@ -55,14 +53,13 @@ export function buildTargetMappings(
             }
         }
 
-        const groupId = resolveGroupForPath(groups, mainGroupId, relativePath);
-        if (!groupId) { continue; }
+        // This name-segment match decides which targets sync; files are placed with groupForFolder.
+        if (!resolveGroupForPath(groups, mainGroupId, relativePath)) { continue; }
 
         mappings.push({
             absolutePath,
             targetName: target.name,
             sourcesBuildPhaseId: buildPhases.sourcesBuildPhaseId,
-            groupId,
             pbxprojPath,
             relativePath,
             synchronizedRoots
@@ -94,22 +91,20 @@ export function findMappingForFile(
     return bestMatch;
 }
 
-export function resolveGroupForFile(
-    filePath: string,
-    mapping: TargetDirectoryMapping,
-    groups: Map<string, PBXGroupInfo>,
-    mainGroupId: string
-): string | null {
-    const relativeToTarget = path.relative(mapping.absolutePath, path.dirname(filePath));
-
-    // File is directly in the target root directory
-    if (relativeToTarget === '' || relativeToTarget === '.') {
-        return mapping.groupId;
+/** `target` in on-disk letter case with symlinks resolved, through its longest existing ancestor, so a path whose folders are gone still has one form. */
+export function canonicalPath(target: string): string {
+    const absolute = path.resolve(target);
+    const missing: string[] = [];
+    for (let existing = absolute; ;) {
+        try {
+            return path.join(fs.realpathSync.native(existing), ...missing);
+        } catch {
+            const parent = path.dirname(existing);
+            if (parent === existing) { return absolute; }
+            missing.unshift(path.basename(existing));
+            existing = parent;
+        }
     }
-
-    // File is in a subdirectory — try to resolve the subgroup
-    const subgroupPath = mapping.relativePath + '/' + relativeToTarget.split(path.sep).join('/');
-    return resolveGroupForPath(groups, mainGroupId, subgroupPath);
 }
 
 export function findPbxprojPath(rootPath: string): string | null {
@@ -165,6 +160,68 @@ export function createOperationScheduler(log: (message: string) => void, logPref
         dispose() {
             for (const timer of pendingOps.values()) { clearTimeout(timer); }
             pendingOps.clear();
+        }
+    };
+}
+
+export interface BatchScheduler extends vscode.Disposable {
+    /** Queues a path for the next batch, unless it is filtered out. */
+    add(filePath: string): void;
+}
+
+// A batch runs after DEBOUNCE_MS without a new path, but no later than this after its first.
+const BATCH_CAP_MS = 2000;
+
+/** Whether sync never looks at a path: outside `root`, or in a skip folder, a dot-folder or an `.xcodeproj`, judged by its folders relative to `root`. */
+export function isFilteredPath(root: string, filePath: string): boolean {
+    const relative = path.relative(root, filePath);
+    if (relative === '' || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) { return true; }
+    return relative.split(path.sep).slice(0, -1).some((folder) =>
+        folder.startsWith('.') || RECONCILE_SKIP_DIRS.has(folder) || folder.endsWith('.xcodeproj'));
+}
+
+/** Collects event paths into batches, dropping filtered ones before any timing, and runs each batch on the shared write queue. */
+export function createBatchScheduler(
+    root: string,
+    log: (message: string) => void,
+    logPrefix: string,
+    run: (paths: string[]) => Promise<void>
+): BatchScheduler {
+    let pending = new Set<string>();
+    let quietTimer: ReturnType<typeof setTimeout> | undefined;
+    let capTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const clearTimers = (): void => {
+        if (quietTimer) { clearTimeout(quietTimer); }
+        if (capTimer) { clearTimeout(capTimer); }
+        quietTimer = undefined;
+        capTimer = undefined;
+    };
+    const flush = (): void => {
+        clearTimers();
+        const paths = [...pending];
+        pending = new Set();
+        enqueueWrite(async () => {
+            try {
+                await run(paths);
+            } catch (error) {
+                const message = (error as { message?: string }).message || String(error);
+                log(`${logPrefix} Error: ${message}`);
+            }
+        });
+    };
+
+    return {
+        add(filePath) {
+            if (isFilteredPath(root, filePath)) { return; }
+            pending.add(filePath);
+            if (quietTimer) { clearTimeout(quietTimer); }
+            quietTimer = setTimeout(flush, DEBOUNCE_MS);
+            if (!capTimer) { capTimer = setTimeout(flush, BATCH_CAP_MS); }
+        },
+        dispose() {
+            clearTimers();
+            pending.clear();
         }
     };
 }

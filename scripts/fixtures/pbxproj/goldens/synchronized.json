@@ -237,7 +237,6 @@
     "parseLinkedFrameworksForTarget A10000000000000000000702": [],
     "parseResourcesBuildPhase E70000000000000000000703": [],
     "parseResourcesForTarget E70000000000000000000703": [],
-    "findFileReferenceId Helper.swift": "E70000000000000000000101",
     "findFileReferencePath E70000000000000000000101": "Helper.swift",
     "findBuildFileId E70000000000000000000101": "A10000000000000000000201",
     "displayName E70000000000000000000101": "Helper.swift",
@@ -283,6 +282,18 @@
       "startIndex": 4641,
       "endIndex": 4701
     },
+    "parentOf A10000000000000000000002": null,
+    "resolvedPath A10000000000000000000002": "/project",
+    "parentOf A10000000000000000000010": "A10000000000000000000002",
+    "resolvedPath A10000000000000000000010": "/project/SyncApp",
+    "parentOf A10000000000000000000012": "A10000000000000000000002",
+    "resolvedPath A10000000000000000000012": "/project/Extras",
+    "parentOf E70000000000000000000101": "A10000000000000000000012",
+    "resolvedPath E70000000000000000000101": "/project/Extras/Helper.swift",
+    "targetOfPhase E70000000000000000000701": "A10000000000000000000601",
+    "groupForFolder .": "A10000000000000000000002",
+    "groupForFolder SyncApp": null,
+    "groupForFolder Extras": "A10000000000000000000012",
     "writer addSwiftFileToPbxproj Added.swift": {
       "lint": "OK",
       "diff": [
@@ -292,7 +303,7 @@
         "+153: \t\t\t\t800000000000000000000001 /* Added.swift in Sources */,"
       ]
     },
-    "writer removeSwiftFileFromPbxproj Helper.swift": {
+    "writer removeSwiftFile E70000000000000000000101": {
       "lint": "OK",
       "diff": [
         "-12: \t\tA10000000000000000000201 /* Helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70000000000000000000101 /* Helper.swift */; };",

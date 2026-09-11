@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import * as path from 'path';
 
 /** One entry of a project's `objects` dictionary as plutil renders it: strings, lists and dictionaries. */
 export interface ProjectObject {
@@ -109,6 +110,116 @@ export function phasesOf(index: ProjectIndex, buildFileId: string): string[] {
         const object = index.objects[id];
         return (object.isa ?? '').endsWith('BuildPhase') && stringList(object.files).includes(buildFileId);
     });
+}
+
+/** The target whose `buildPhases` lists the phase. */
+export function targetOfPhase(index: ProjectIndex, phaseId: string): string | undefined {
+    return index.ids.find((id) => stringList(index.objects[id].buildPhases).includes(phaseId));
+}
+
+// ── Element paths ────────────────────────────────────────
+
+interface Relations {
+    /** Each listed element's parent: the first object, in definition order, whose `children` holds it. */
+    parents: Map<string, string>;
+    /** Resolved paths by project folder, then by id. */
+    resolved: Map<string, Map<string, string | undefined>>;
+}
+
+const relationsByIndex = new WeakMap<ProjectIndex, Relations>();
+
+function relationsOf(index: ProjectIndex): Relations {
+    let relations = relationsByIndex.get(index);
+    if (!relations) {
+        const parents = new Map<string, string>();
+        for (const id of index.ids) {
+            for (const child of stringList(index.objects[id].children)) {
+                if (!parents.has(child)) { parents.set(child, id); }
+            }
+        }
+        relations = { parents, resolved: new Map() };
+        relationsByIndex.set(index, relations);
+    }
+    return relations;
+}
+
+/** The object whose `children` lists the id; undefined for the main group and for anything no list holds. */
+export function parentOf(index: ProjectIndex, id: string): string | undefined {
+    return relationsOf(index).parents.get(id);
+}
+
+/** The elements from `id` up to the main group, or undefined when the chain doesn't reach it. */
+function lineageOf(index: ProjectIndex, id: string): string[] | undefined {
+    const { parents } = relationsOf(index);
+    const lineage: string[] = [];
+    for (let current: string | undefined = id; current !== undefined; current = parents.get(current)) {
+        if (lineage.includes(current)) { return undefined; }
+        lineage.push(current);
+        if (current === index.mainGroupId) { return lineage; }
+    }
+    return undefined;
+}
+
+/**
+ * The folder or file an element stands for, per Xcode's source trees: `<group>` joins the parent's folder and `path` (no
+ * `path`, or "", keeps the parent's), SOURCE_ROOT joins the project folder, `<absolute>` takes `path`. The main group's
+ * parent folder is the project folder. Undefined outside the main group's tree, in any other tree (build products,
+ * SDKs), and under an undefined parent.
+ */
+export function resolvedPath(index: ProjectIndex, id: string, projectDir: string): string | undefined {
+    const relations = relationsOf(index);
+    let byId = relations.resolved.get(projectDir);
+    if (!byId) {
+        byId = new Map();
+        relations.resolved.set(projectDir, byId);
+    }
+    if (byId.has(id)) { return byId.get(id); }
+
+    const lineage = lineageOf(index, id);
+    let folder: string | undefined = lineage ? projectDir : undefined;
+    for (const current of (lineage ?? []).reverse()) {
+        const object = index.objects[current];
+        const own = stringValue(object.path);
+        switch (stringValue(object.sourceTree)) {
+            case '<group>':
+                folder = folder === undefined ? undefined : own ? path.join(folder, own) : folder;
+                break;
+            case 'SOURCE_ROOT':
+                folder = own ? path.join(projectDir, own) : projectDir;
+                break;
+            case '<absolute>':
+                folder = own ? path.normalize(own) : undefined;
+                break;
+            default:
+                folder = undefined;
+        }
+    }
+    byId.set(id, folder);
+    return folder;
+}
+
+/**
+ * The PBXGroup standing for a folder: among the groups whose resolved folder equals it, both passed through `canonical`,
+ * the one with its own non-empty `path`, else the one fewest steps below the main group, then the first defined.
+ */
+export function groupForFolder(
+    index: ProjectIndex,
+    folder: string,
+    projectDir: string,
+    canonical: (target: string) => string = (target) => target
+): string | undefined {
+    const wanted = canonical(folder);
+    let best: { id: string; ownPath: boolean; depth: number } | undefined;
+    for (const { id, object } of index.objectsOfIsa('PBXGroup')) {
+        const resolved = resolvedPath(index, id, projectDir);
+        if (resolved === undefined || canonical(resolved) !== wanted) { continue; }
+        const candidate = { id, ownPath: Boolean(stringValue(object.path)), depth: lineageOf(index, id)?.length ?? 0 };
+        if (!best || (candidate.ownPath && !best.ownPath) ||
+            (candidate.ownPath === best.ownPath && candidate.depth < best.depth)) {
+            best = candidate;
+        }
+    }
+    return best?.id;
 }
 
 // ── Text locators ────────────────────────────────────────
@@ -246,6 +357,18 @@ export interface DictionaryLocation {
     closeIndex: number;
 }
 
+/** Where one top-level `key = value;` of an object sits in the project text. */
+export interface KeyLocation {
+    /** The start of the key's line when the key starts it; otherwise the key itself. */
+    startIndex: number;
+    /** Just past the `;`, any spaces or tabs, and one line break when the key starts its line; otherwise the next token. */
+    endIndex: number;
+    /** The value's first token. */
+    valueStart: number;
+    /** Just past the value's last token. */
+    valueEnd: number;
+}
+
 /**
  * The keys of the root `objects` dictionary, in the order the OpenStep text defines them. Values are skipped by nesting
  * depth, so ids that reappear as keys further down (a project's TargetAttributes) are never counted.
@@ -304,6 +427,25 @@ export function locateDictionary(contents: string, ownerId: string, key: string)
     if (!value || value.first.type !== '{') { return undefined; }
     try {
         return { openIndex: value.first.end, closeIndex: value.tokens.skipValue(value.first).start };
+    } catch {
+        return undefined;
+    }
+}
+
+/** The owner's top-level `key = value;`, with the span that removes it; undefined when there's none. */
+export function locateKey(contents: string, ownerId: string, key: string): KeyLocation | undefined {
+    const value = valueOf(contents, ownerId, key);
+    if (!value) { return undefined; }
+    try {
+        const last = value.tokens.skipValue(value.first);
+        const semicolon = value.tokens.expect(';');
+        const start = lineStart(contents, value.key.start);
+        const span = { valueStart: value.first.start, valueEnd: last.end };
+        if (start === 0 || contents[start - 1] === '\n') {
+            return { startIndex: start, endIndex: pastLineBreak(contents, semicolon.end), ...span };
+        }
+        const following = value.tokens.next();
+        return { startIndex: value.key.start, endIndex: following ? following.start : semicolon.end, ...span };
     } catch {
         return undefined;
     }
@@ -372,8 +514,8 @@ function walkObjects(contents: string): { entries: WalkedObject[]; objectsClose:
     }
 }
 
-/** A tokenizer just past the first token of the owner's top-level `key` value, and that token; undefined when there's none. */
-function valueOf(contents: string, ownerId: string, key: string): { tokens: Tokenizer; first: Token } | undefined {
+/** A tokenizer just past the first token of the owner's top-level `key` value, with the key's token and that first token; undefined when there's none. */
+function valueOf(contents: string, ownerId: string, key: string): { tokens: Tokenizer; key: Token; first: Token } | undefined {
     const owner = walked(contents).byId.get(ownerId);
     if (!owner) { return undefined; }
     const tokens = tokenizer(contents, owner.valueStart);
@@ -384,7 +526,7 @@ function valueOf(contents: string, ownerId: string, key: string): { tokens: Toke
             if (!keyToken || keyToken.type === '}') { return undefined; }
             tokens.expect('=');
             const first = tokens.value();
-            if (keyToken.type === 'string' && keyToken.value === key) { return { tokens, first }; }
+            if (keyToken.type === 'string' && keyToken.value === key) { return { tokens, key: keyToken, first }; }
             tokens.skipValue(first);
             tokens.expect(';');
         }

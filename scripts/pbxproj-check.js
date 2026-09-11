@@ -50,30 +50,44 @@ const writers = load('writers/pbxproj.js');
 const COMMENT_FREE = new Set([
     'parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds',
     'parseGroups', 'findMainGroupId', 'buildGroupDirectories', 'resolveGroupForPath', 'parseVersionGroups',
-    'findFileReferenceId', 'findFileReferencePath', 'findBuildFileId',
+    'findFileReferencePath', 'findBuildFileId',
     'displayName', 'buildFilesFor', 'phasesOf', 'locateList', 'locateListEntry',
-    'writer addSwiftFileToPbxproj', 'writer removeSwiftFileFromPbxproj', 'writer addDataModelToPbxproj',
-    'writer updateVersionGroupVersions', 'writer moveVersionGroupToGroup', 'writer removeDataModelFromPbxproj',
-    'writer updateBuildSetting'
+    'parentOf', 'resolvedPath', 'groupForFolder', 'targetOfPhase', 'locateKey',
+    'writer addSwiftFileToPbxproj', 'writer removeSwiftFile', 'writer rehomeSwiftFile', 'writer setFileReferencePath',
+    'writer addGroupPath', 'writer addDataModelToPbxproj', 'writer updateVersionGroupVersions',
+    'writer moveVersionGroupToGroup', 'writer removeDataModelFromPbxproj', 'writer updateBuildSetting'
 ]);
 
 // Families whose entries carry text offsets, each with how they map back from the stripped fixture before comparing.
 const TEXT_OFFSET_FAMILIES = new Map([
     ['parseVersionGroups', offsetsInOriginal],
     ['locateList', listOffsetsInOriginal],
-    ['locateListEntry', entryOffsetsInOriginal]
+    ['locateListEntry', entryOffsetsInOriginal],
+    ['locateKey', keyOffsetsInOriginal]
 ]);
 
 const CONFIGURATIONS = ['Debug', 'Release'];
 const MAX_DIFF_LINES = 500;
+// Where resolvedPath and groupForFolder place a fixture project.
+const PROJECT_DIR = '/project';
 
 // ── Fixture table ────────────────────────────────────────────────────────────────────
 // Ids are written out rather than read back through a parser, so a parser change moves only its own goldens
 // and those of outputs that compose it internally (buildGroupDirectories, the version-group writers).
-// `helpers.lists` names `[ownerId, key, entryId]` lists for the list locators: the group and Sources phase the add
-// edit targets, plus special cases, each with its first entry as written (none when the list is empty).
+// `helpers` names literal inputs for the index helpers: `lists` as `[ownerId, key, entryId]` for the list locators (the
+// group and Sources phase the add edit targets, plus special cases, each with its first entry as written, none when the
+// list is empty); `elements` for parentOf and resolvedPath; `phases` for targetOfPhase; project-relative `folders` for
+// groupForFolder; and `keys` as `[ownerId, key]` for locateKey.
 
 const hexId = (prefix, suffix) => prefix + '0'.repeat(18) + suffix;
+
+/** Runs session steps on a text; the edited text, or null when the text can't be read. */
+const inSession = (text, steps) => {
+    const edit = writers.beginProjectEdit(text);
+    if (!edit) { return null; }
+    steps(edit);
+    return edit.contents;
+};
 
 const FIXTURES = [
     {
@@ -84,14 +98,26 @@ const FIXTURES = [
         frameworksPhases: [hexId('C3', '0702'), hexId('5A', '0705')],
         resourcesPhases: [hexId('5A', '0703'), hexId('C3', '0706')],
         groupPaths: ['SampleApp', 'SampleApp/Views', 'SampleApp/Views/Rows', 'Shared', 'SampleApp/Shared', 'Support', 'SampleApp/Missing'],
-        fileNames: ['ContentView.swift', 'SharedModels.swift', 'Badge.swift', 'Legacy.swift', 'Missing.swift'],
         fileReferenceIds: [hexId('C3', '0102'), hexId('5A', '0105'), hexId('5A', '0107'), hexId('C3', '0108')],
-        helpers: { lists: [[hexId('5A', '0011'), 'children', hexId('5A', '0103')], [hexId('5A', '0701'), 'files', hexId('5A', '0201')]] },
+        helpers: {
+            lists: [[hexId('5A', '0011'), 'children', hexId('5A', '0103')], [hexId('5A', '0701'), 'files', hexId('5A', '0201')]],
+            elements: [hexId('5A', '0002'), hexId('5A', '0010'), hexId('C3', '0013'), hexId('C3', '0014'), hexId('C3', '0108'),
+                hexId('5A', '0107'), hexId('5A', '010E'), hexId('C3', '0115'), hexId('5A', '0501')],
+            phases: [hexId('5A', '0701'), hexId('C3', '0704'), hexId('5A', '0707')],
+            folders: ['', 'SampleApp', 'SampleApp/Views', 'SampleApp/Views/Rows', 'Shared', 'SampleApp/Shared', 'Support', 'SampleApp/Missing'],
+            // Keys inline in a single-line reference, one at line start in a multi-line group, and an absent one.
+            keys: [[hexId('5A', '0107'), 'name'], [hexId('5A', '0107'), 'path'], [hexId('C3', '0014'), 'sourceTree'],
+                [hexId('5A', '0107'), 'explicitFileType']]
+        },
         writers: {
             'addSwiftFileToPbxproj AddedView.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'AddedView.swift', hexId('5A', '0011'), hexId('5A', '0701')),
-            'removeSwiftFileFromPbxproj SharedModels.swift': (text) =>
-                writers.removeSwiftFileFromPbxproj(text, 'SharedModels.swift'),
+            [`removeSwiftFile ${hexId('C3', '0108')}`]: (text) =>
+                inSession(text, (edit) => writers.removeSwiftFile(edit, hexId('C3', '0108'))),
+            'rehomeSwiftFile Legacy.swift into Views': (text) =>
+                inSession(text, (edit) => writers.rehomeSwiftFile(edit, hexId('5A', '0107'), hexId('5A', '0011'), 'Legacy.swift')),
+            'addGroupPath SampleApp/Views/Cells/Compact': (text) =>
+                inSession(text, (edit) => writers.addGroupPath(edit, hexId('5A', '0011'), ['Cells', 'Compact'])),
             'addDataModelToPbxproj Added.xcdatamodeld': (text) =>
                 writers.addDataModelToPbxproj(text, 'Added.xcdatamodeld', ['Added.xcdatamodel'], 'Added.xcdatamodel',
                     hexId('5A', '0010'), hexId('5A', '0701')),
@@ -116,14 +142,19 @@ const FIXTURES = [
         frameworksPhases: [hexId('A1', '0702')],
         resourcesPhases: [hexId('E7', '0703')],
         groupPaths: ['SyncApp', 'Extras'],
-        fileNames: ['Helper.swift'],
         fileReferenceIds: [hexId('E7', '0101')],
-        helpers: { lists: [[hexId('A1', '0012'), 'children', hexId('E7', '0101')], [hexId('E7', '0701'), 'files', hexId('A1', '0201')]] },
+        helpers: {
+            lists: [[hexId('A1', '0012'), 'children', hexId('E7', '0101')], [hexId('E7', '0701'), 'files', hexId('A1', '0201')]],
+            // A10…0010 is the synchronized root.
+            elements: [hexId('A1', '0002'), hexId('A1', '0010'), hexId('A1', '0012'), hexId('E7', '0101')],
+            phases: [hexId('E7', '0701')],
+            folders: ['', 'SyncApp', 'Extras']
+        },
         writers: {
             'addSwiftFileToPbxproj Added.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'Added.swift', hexId('A1', '0012'), hexId('E7', '0701')),
-            'removeSwiftFileFromPbxproj Helper.swift': (text) =>
-                writers.removeSwiftFileFromPbxproj(text, 'Helper.swift'),
+            [`removeSwiftFile ${hexId('E7', '0101')}`]: (text) =>
+                inSession(text, (edit) => writers.removeSwiftFile(edit, hexId('E7', '0101'))),
             'addDataModelToPbxproj Store.xcdatamodeld': (text) =>
                 writers.addDataModelToPbxproj(text, 'Store.xcdatamodeld', ['Store.xcdatamodel'], 'Store.xcdatamodel',
                     hexId('A1', '0012'), hexId('E7', '0701')),
@@ -139,15 +170,24 @@ const FIXTURES = [
         frameworksPhases: ['OBJ_17'],
         resourcesPhases: [],
         groupPaths: ['Sources', 'SampleKit'],
-        fileNames: ['SampleKit.swift', 'Package.swift'],
         fileReferenceIds: ['OBJ_9', 'OBJ_6'],
-        // OBJ_10's first child is a quoted id.
-        helpers: { lists: [['OBJ_8', 'children', 'OBJ_9'], ['OBJ_15', 'files', 'OBJ_16'], ['OBJ_10', 'children', 'SampleKit::SampleKit::Product']] },
+        // OBJ_10's first child is a quoted id; OBJ_7 has `path = ""`, and OBJ_8 is a SOURCE_ROOT group.
+        helpers: {
+            lists: [['OBJ_8', 'children', 'OBJ_9'], ['OBJ_15', 'files', 'OBJ_16'], ['OBJ_10', 'children', 'SampleKit::SampleKit::Product']],
+            elements: ['OBJ_5', 'OBJ_7', 'OBJ_8', 'OBJ_9', 'OBJ_10', 'SampleKit::SampleKit::Product'],
+            phases: ['OBJ_15', 'OBJ_17'],
+            folders: ['', 'Sources', 'Sources/SampleKit', 'SampleKit'],
+            keys: [['OBJ_8', 'path']]
+        },
         writers: {
             'addSwiftFileToPbxproj Added.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'Added.swift', 'OBJ_8', 'OBJ_15'),
-            'removeSwiftFileFromPbxproj SampleKit.swift': (text) =>
-                writers.removeSwiftFileFromPbxproj(text, 'SampleKit.swift'),
+            'removeSwiftFile OBJ_9': (text) =>
+                inSession(text, (edit) => writers.removeSwiftFile(edit, 'OBJ_9')),
+            'setFileReferencePath OBJ_9 samplekit.swift': (text) =>
+                inSession(text, (edit) => writers.setFileReferencePath(edit, 'OBJ_9', 'samplekit.swift')),
+            'addGroupPath Sources/SampleKit/Feature': (text) =>
+                inSession(text, (edit) => writers.addGroupPath(edit, 'OBJ_8', ['Feature'])),
             'updateBuildSetting SWIFT_VERSION': (text) =>
                 writers.updateBuildSetting(text, 'OBJ_13', 'SWIFT_VERSION', '5.9')
         }
@@ -160,13 +200,19 @@ const FIXTURES = [
         frameworksPhases: [hexId('B2', '0702')],
         resourcesPhases: [],
         groupPaths: ['EmptyKit'],
-        fileNames: ['README.md'],
         fileReferenceIds: [hexId('B2', '0101')],
         // The Sources phase's list is empty and multi-line.
-        helpers: { lists: [[hexId('7F', '0010'), 'children', hexId('B2', '0101')], [hexId('7F', '0701'), 'files']] },
+        helpers: {
+            lists: [[hexId('7F', '0010'), 'children', hexId('B2', '0101')], [hexId('7F', '0701'), 'files']],
+            elements: [hexId('7F', '0010'), hexId('B2', '0101')],
+            phases: [hexId('7F', '0701')],
+            folders: ['', 'EmptyKit']
+        },
         writers: {
             'addSwiftFileToPbxproj First.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'First.swift', hexId('7F', '0010'), hexId('7F', '0701')),
+            'addGroupPath EmptyKit/Sub': (text) =>
+                inSession(text, (edit) => writers.addGroupPath(edit, hexId('7F', '0010'), ['Sub'])),
             'updateBuildSetting SKIP_INSTALL': (text) =>
                 writers.updateBuildSetting(text, hexId('7F', '0A05'), 'SKIP_INSTALL', 'NO')
         }
@@ -179,19 +225,24 @@ const FIXTURES = [
         frameworksPhases: [hexId('AA', '0004'), hexId('AA', '0014')],
         resourcesPhases: [],
         groupPaths: ['FlagParityTarget', 'FlagParityInherited'],
-        fileNames: ['Covered.swift', 'Inherited.swift'],
         fileReferenceIds: [hexId('AA', '0002'), hexId('AA', '0012')],
-        // Single-line lists; the Frameworks phase's is empty.
+        // Single-line lists and objects; the Frameworks phase's list is empty.
         helpers: {
-            lists: [[hexId('AA', '0006'), 'children', hexId('AA', '0002')], [hexId('AA', '000A'), 'files', hexId('AA', '0001')], [hexId('AA', '0004'), 'files']]
+            lists: [[hexId('AA', '0006'), 'children', hexId('AA', '0002')], [hexId('AA', '000A'), 'files', hexId('AA', '0001')], [hexId('AA', '0004'), 'files']],
+            elements: [hexId('AA', '0006'), hexId('AA', '0002')],
+            phases: [hexId('AA', '000A'), hexId('AA', '0018')],
+            folders: ['', 'FlagParityTarget', 'FlagParityInherited'],
+            keys: [[hexId('AA', '0006'), 'path']]
         },
         writers: {
             'addSwiftFileToPbxproj Added.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'Added.swift', hexId('AA', '0006'), hexId('AA', '000A')),
             'addSwiftFileToPbxproj Zed.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'Zed.swift', hexId('AA', '0006'), hexId('AA', '000A')),
-            'removeSwiftFileFromPbxproj Covered.swift': (text) =>
-                writers.removeSwiftFileFromPbxproj(text, 'Covered.swift'),
+            [`removeSwiftFile ${hexId('AA', '0002')}`]: (text) =>
+                inSession(text, (edit) => writers.removeSwiftFile(edit, hexId('AA', '0002'))),
+            'addGroupPath FlagParityTarget/Nested': (text) =>
+                inSession(text, (edit) => writers.addGroupPath(edit, hexId('AA', '0006'), ['Nested'])),
             'updateBuildSetting SWIFT_VERSION': (text) =>
                 writers.updateBuildSetting(text, hexId('AA', '000F'), 'SWIFT_VERSION', '5.0')
         }
@@ -303,6 +354,18 @@ function listOffsetsInOriginal(list, origin) {
     };
 }
 
+/** A located key mapped back: `startIndex` and `valueStart` as starts, `endIndex` and `valueEnd` as ends. */
+function keyOffsetsInOriginal(location, origin) {
+    if (!location || typeof location !== 'object') { return location; }
+    return {
+        ...location,
+        startIndex: startInOriginal(location.startIndex, origin),
+        endIndex: endInOriginal(location.endIndex, origin),
+        valueStart: startInOriginal(location.valueStart, origin),
+        valueEnd: endInOriginal(location.valueEnd, origin)
+    };
+}
+
 /**
  * Writers draw object ids from crypto.randomBytes; pinning it makes their output reproducible. The 0x80 lead
  * byte sorts new ids between explicit-app's 5A- and C3-prefixed ids, so its insertions land between existing entries.
@@ -393,8 +456,7 @@ function parserEntries(text, inputs) {
     record('parseSwiftPackageProductDependencies', () => mapEntries(packages.parseSwiftPackageProductDependencies(text)));
     record('parseGroups', () => mapEntries(groups.parseGroups(text)));
     record('findMainGroupId', () => groups.findMainGroupId(text));
-    record('buildGroupDirectories', () =>
-        withGroups((groupMap, mainGroupId) => mapEntries(groups.buildGroupDirectories(groupMap, mainGroupId, '/project'))));
+    record('buildGroupDirectories', () => mapEntries(groups.buildGroupDirectories(text, PROJECT_DIR)));
     for (const relativePath of inputs.groupPaths) {
         record(`resolveGroupForPath ${relativePath}`, () =>
             withGroups((groupMap, mainGroupId) => groups.resolveGroupForPath(groupMap, mainGroupId, relativePath)));
@@ -412,9 +474,6 @@ function parserEntries(text, inputs) {
     for (const phaseId of inputs.resourcesPhases) {
         record(`parseResourcesBuildPhase ${phaseId}`, () => resources.parseResourcesBuildPhase(text, phaseId));
         record(`parseResourcesForTarget ${phaseId}`, () => resources.parseResourcesForTarget(text, phaseId));
-    }
-    for (const fileName of inputs.fileNames) {
-        record(`findFileReferenceId ${fileName}`, () => writers.findFileReferenceId(text, fileName));
     }
     for (const fileReferenceId of inputs.fileReferenceIds) {
         record(`findFileReferencePath ${fileReferenceId}`, () => writers.findFileReferencePath(text, fileReferenceId));
@@ -435,6 +494,20 @@ function parserEntries(text, inputs) {
             if (entryId !== undefined) {
                 record(`locateListEntry ${ownerId} ${key} ${entryId}`, () => projectIndex.locateListEntry(text, ownerId, key, entryId));
             }
+        }
+        for (const id of inputs.helpers.elements) {
+            record(`parentOf ${id}`, withIndex((index) => projectIndex.parentOf(index, id)));
+            record(`resolvedPath ${id}`, withIndex((index) => projectIndex.resolvedPath(index, id, PROJECT_DIR)));
+        }
+        for (const phaseId of inputs.helpers.phases) {
+            record(`targetOfPhase ${phaseId}`, withIndex((index) => projectIndex.targetOfPhase(index, phaseId)));
+        }
+        for (const folder of inputs.helpers.folders) {
+            record(`groupForFolder ${folder || '.'}`,
+                withIndex((index) => projectIndex.groupForFolder(index, path.posix.join(PROJECT_DIR, folder), PROJECT_DIR)));
+        }
+        for (const [ownerId, key] of inputs.helpers.keys || []) {
+            record(`locateKey ${ownerId} ${key}`, () => projectIndex.locateKey(text, ownerId, key));
         }
     }
     return entries;
@@ -564,7 +637,6 @@ function corpusInputs(text) {
     const phasesOf = (isa) => nativeTargets.flatMap((target) =>
         (target.buildPhases || []).filter((phase) => objects[phase] && objects[phase].isa === isa));
     const swiftReferences = idsOf('PBXFileReference').filter((key) => /\.swift$/.test(objects[key].path || '')).slice(0, 3);
-    const displayName = (key) => objects[key].name ?? String(objects[key].path).split('/').pop();
     const root = objects[rootObject] || {};
     const firstSources = phasesOf('PBXSourcesBuildPhase')[0];
     const edits = {};
@@ -573,8 +645,8 @@ function corpusInputs(text) {
             writers.addSwiftFileToPbxproj(input, 'CorpusProbe.swift', root.mainGroup, firstSources);
     }
     if (swiftReferences.length > 0) {
-        const fileName = displayName(swiftReferences[0]);
-        edits['removeSwiftFileFromPbxproj first Swift file'] = (input) => writers.removeSwiftFileFromPbxproj(input, fileName);
+        edits['removeSwiftFile first Swift file'] = (input) =>
+            inSession(input, (edit) => writers.removeSwiftFile(edit, swiftReferences[0]));
     }
     return {
         targets: nativeTargets.map((target) => target.name),
@@ -582,7 +654,6 @@ function corpusInputs(text) {
         frameworksPhases: phasesOf('PBXFrameworksBuildPhase'),
         resourcesPhases: phasesOf('PBXResourcesBuildPhase'),
         groupPaths: [],
-        fileNames: swiftReferences.map(displayName),
         fileReferenceIds: swiftReferences,
         writers: edits
     };
