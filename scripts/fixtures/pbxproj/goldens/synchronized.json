@@ -1,0 +1,289 @@
+{
+  "fixture": "scripts/fixtures/pbxproj/synchronized.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "SyncApp",
+        "productName": "SyncApp",
+        "productType": "com.apple.product-type.application",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "E70000000000000000000A04",
+        "fileSystemSynchronizedGroupIds": [
+          "A10000000000000000000010"
+        ]
+      }
+    ],
+    "parseTargetDependencies": [],
+    "parseBuildPhaseIds SyncApp": {
+      "sourcesBuildPhaseId": "E70000000000000000000701",
+      "frameworksBuildPhaseId": "A10000000000000000000702",
+      "resourcesBuildPhaseId": "E70000000000000000000703"
+    },
+    "parseExcludedFiles SyncApp": [
+      "Info.plist",
+      "Supporting Files/Notes.txt"
+    ],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "A10000000000000000000A03",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "6.0"
+          },
+          "swiftVersion": "6.0",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "A10000000000000000000A05",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+          },
+          "bundleIdentifier": "com.example.SyncApp",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "E70000000000000000000A02",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "6.0"
+          },
+          "swiftVersion": "6.0",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "E70000000000000000000A06",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+          },
+          "bundleIdentifier": "com.example.SyncApp",
+          "productName": "$(TARGET_NAME)"
+        }
+      ]
+    ],
+    "resolveConfigurationListId A10000000000000000000A01": [
+      "E70000000000000000000A02",
+      "A10000000000000000000A03"
+    ],
+    "getBuildSettingsForTarget A10000000000000000000A01 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget A10000000000000000000A01 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "resolveConfigurationListId E70000000000000000000A04": [
+      "A10000000000000000000A05",
+      "E70000000000000000000A06"
+    ],
+    "getBuildSettingsForTarget E70000000000000000000A04 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+      },
+      "bundleIdentifier": "com.example.SyncApp",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget E70000000000000000000A04 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+      },
+      "bundleIdentifier": "com.example.SyncApp",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "A10000000000000000000002",
+        {
+          "id": "A10000000000000000000002",
+          "childIds": [
+            "A10000000000000000000010",
+            "A10000000000000000000012",
+            "E70000000000000000000003"
+          ]
+        }
+      ],
+      [
+        "A10000000000000000000012",
+        {
+          "id": "A10000000000000000000012",
+          "path": "Extras",
+          "childIds": [
+            "E70000000000000000000101"
+          ]
+        }
+      ],
+      [
+        "E70000000000000000000003",
+        {
+          "id": "E70000000000000000000003",
+          "name": "Products",
+          "childIds": [
+            "E70000000000000000000501"
+          ]
+        }
+      ],
+      [
+        "A10000000000000000000010",
+        {
+          "id": "A10000000000000000000010",
+          "name": "SyncApp",
+          "path": "SyncApp",
+          "childIds": []
+        }
+      ]
+    ],
+    "findMainGroupId": "A10000000000000000000002",
+    "buildGroupDirectories": [
+      [
+        "A10000000000000000000002",
+        "/project"
+      ],
+      [
+        "A10000000000000000000010",
+        "/project/SyncApp"
+      ],
+      [
+        "A10000000000000000000012",
+        "/project/Extras"
+      ],
+      [
+        "E70000000000000000000003",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath SyncApp": "A10000000000000000000010",
+    "resolveGroupForPath Extras": "A10000000000000000000012",
+    "parseVersionGroups": [],
+    "findVersionGroupSection": null,
+    "parseSwiftVersion": "6.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "18.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "parseFrameworksBuildPhase A10000000000000000000702": [],
+    "parseLinkedFrameworksForTarget A10000000000000000000702": [],
+    "parseResourcesBuildPhase E70000000000000000000703": [],
+    "parseResourcesForTarget E70000000000000000000703": [],
+    "findFileReferenceId Helper.swift": "E70000000000000000000101",
+    "findFileReferencePath E70000000000000000000101": "Helper.swift",
+    "findBuildFileId E70000000000000000000101": "A10000000000000000000201",
+    "writer addSwiftFileToPbxproj Added.swift": {
+      "lint": "OK",
+      "diff": [
+        "+12: \t\t800000000000000000000001 /* Added.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Added.swift */; };",
+        "+16: \t\t800000000000000000000002 /* Added.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Added.swift; sourceTree = \"<group>\"; };",
+        "+65: \t\t\t\t800000000000000000000002 /* Added.swift */,",
+        "+153: \t\t\t\t800000000000000000000001 /* Added.swift in Sources */,"
+      ]
+    },
+    "writer removeSwiftFileFromPbxproj Helper.swift": {
+      "lint": "OK",
+      "diff": [
+        "-12: \t\tA10000000000000000000201 /* Helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70000000000000000000101 /* Helper.swift */; };",
+        "-16: \t\tE70000000000000000000101 /* Helper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Helper.swift; sourceTree = \"<group>\"; };",
+        "-65: \t\t\t\tE70000000000000000000101 /* Helper.swift */,",
+        "-152: \t\t\t\tA10000000000000000000201 /* Helper.swift in Sources */,"
+      ]
+    },
+    "writer addDataModelToPbxproj Store.xcdatamodeld": {
+      "lint": "OK",
+      "diff": [
+        "+12: \t\t800000000000000000000001 /* Store.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Store.xcdatamodeld */; };",
+        "+16: \t\t800000000000000000000003 /* Store.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Store.xcdatamodel; sourceTree = \"<group>\"; };",
+        "+66: \t\t\t\t800000000000000000000002 /* Store.xcdatamodeld */,",
+        "+153: \t\t\t\t800000000000000000000001 /* Store.xcdatamodeld in Sources */,",
+        "+217: ",
+        "+217: /* Begin XCVersionGroup section */",
+        "+217: \t\t800000000000000000000002 /* Store.xcdatamodeld */ = {",
+        "+217: \t\t\tisa = XCVersionGroup;",
+        "+217: \t\t\tchildren = (",
+        "+217: \t\t\t\t800000000000000000000003 /* Store.xcdatamodel */,",
+        "+217: \t\t\t);",
+        "+217: \t\t\tcurrentVersion = 800000000000000000000003 /* Store.xcdatamodel */;",
+        "+217: \t\t\tpath = Store.xcdatamodeld;",
+        "+217: \t\t\tsourceTree = \"<group>\";",
+        "+217: \t\t\tversionGroupType = wrapper.xcdatamodel;",
+        "+217: \t\t};",
+        "+217: /* End XCVersionGroup section */"
+      ]
+    },
+    "writer updateBuildSetting SWIFT_VERSION": {
+      "lint": "OK",
+      "diff": [
+        "+174: \t\t\t\tSWIFT_VERSION = 5.0;"
+      ]
+    }
+  }
+}

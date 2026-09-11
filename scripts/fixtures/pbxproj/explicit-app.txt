@@ -1,0 +1,620 @@
+// !$*UTF8*$!
+// Fixture for `npm run test:pbxproj` (scripts/pbxproj-check.js). Stored as .txt so the extension never
+// activates on this repository. An explicit-group app with unit and UI test targets: nested, name-only,
+// SOURCE_ROOT and `..` groups, a file shared by two targets, variant groups, two Core Data models, SDK
+// frameworks, remote and local Swift packages, and xcconfig-backed, SDK-conditional and escaped-quote settings.
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5A0000000000000000000201 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000101 /* AppDelegate.swift */; };
+		5A0000000000000000000203 /* ListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000103 /* ListView.swift */; };
+		5A0000000000000000000205 /* Badge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000105 /* Badge.swift */; };
+		5A0000000000000000000207 /* Legacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000107 /* Legacy.swift */; };
+		5A0000000000000000000209 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; };
+		5A000000000000000000020A /* SampleAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A000000000000000000010A /* SampleAppTests.swift */; };
+		5A000000000000000000020C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5A000000000000000000010C /* Assets.xcassets */; };
+		5A000000000000000000020E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000302 /* Localizable.strings */; };
+		5A000000000000000000020F /* Model.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 3B0000000000000000000401 /* Model.xcdatamodeld */; };
+		5A0000000000000000000216 /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000116 /* libz.tbd */; };
+		C30000000000000000000202 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000102 /* ContentView.swift */; };
+		C30000000000000000000204 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000104 /* DetailView.swift */; };
+		C30000000000000000000206 /* RowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000106 /* RowView.swift */; };
+		C30000000000000000000208 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; settings = {COMPILER_FLAGS = "-DSHARED_MODELS"; }; };
+		C3000000000000000000020B /* SampleAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3000000000000000000010B /* SampleAppUITests.swift */; };
+		C3000000000000000000020D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000301 /* Main.storyboard */; };
+		C30000000000000000000210 /* Archive.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000402 /* Archive.xcdatamodeld */; };
+		C30000000000000000000215 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C30000000000000000000115 /* UIKit.framework */; };
+		C30000000000000000000217 /* Collections in Frameworks */ = {isa = PBXBuildFile; productRef = 5A0000000000000000000903 /* Collections */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5A0000000000000000000801 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5A0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A0000000000000000000601;
+			remoteInfo = SampleApp;
+		};
+		C30000000000000000000803 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5A0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A0000000000000000000601;
+			remoteInfo = SampleApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		5A0000000000000000000101 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		5A0000000000000000000103 /* ListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListView.swift; sourceTree = "<group>"; };
+		5A0000000000000000000105 /* Badge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Badge.swift; path = Components/Badge.swift; sourceTree = "<group>"; };
+		5A0000000000000000000107 /* Legacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Legacy.swift; path = ../Legacy/Legacy.swift; sourceTree = "<group>"; };
+		5A000000000000000000010A /* SampleAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleAppTests.swift; sourceTree = "<group>"; };
+		5A000000000000000000010C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5A000000000000000000010E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		5A000000000000000000010F /* Model.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Model.xcdatamodel; sourceTree = "<group>"; };
+		5A0000000000000000000112 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5A0000000000000000000114 /* SampleApp.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = SampleApp.xcconfig; sourceTree = "<group>"; };
+		5A0000000000000000000116 /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
+		5A0000000000000000000501 /* SampleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SampleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A0000000000000000000503 /* SampleAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SampleAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C30000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		C30000000000000000000104 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
+		C30000000000000000000106 /* RowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RowView.swift; sourceTree = "<group>"; };
+		C30000000000000000000108 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
+		C3000000000000000000010B /* SampleAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleAppUITests.swift; sourceTree = "<group>"; };
+		C3000000000000000000010D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		C30000000000000000000110 /* Archive.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Archive.xcdatamodel; sourceTree = "<group>"; };
+		C30000000000000000000111 /* Archive 2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "Archive 2.xcdatamodel"; sourceTree = "<group>"; };
+		C30000000000000000000113 /* SampleApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SampleApp.entitlements; sourceTree = "<group>"; };
+		C30000000000000000000115 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		C30000000000000000000502 /* SampleAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SampleAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5A0000000000000000000705 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C30000000000000000000702 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C30000000000000000000215 /* UIKit.framework in Frameworks */,
+				5A0000000000000000000216 /* libz.tbd in Frameworks */,
+				C30000000000000000000217 /* Collections in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C30000000000000000000708 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5A0000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				5A0000000000000000000010 /* SampleApp */,
+				5A0000000000000000000015 /* SampleAppTests */,
+				C30000000000000000000016 /* SampleAppUITests */,
+				5A0000000000000000000004 /* Frameworks */,
+				5A0000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5A0000000000000000000501 /* SampleApp.app */,
+				C30000000000000000000502 /* SampleAppTests.xctest */,
+				5A0000000000000000000503 /* SampleAppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000004 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000115 /* UIKit.framework */,
+				5A0000000000000000000116 /* libz.tbd */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000010 /* SampleApp */ = {
+			isa = PBXGroup;
+			children = (
+				5A0000000000000000000101 /* AppDelegate.swift */,
+				C30000000000000000000102 /* ContentView.swift */,
+				5A0000000000000000000011 /* Views */,
+				C30000000000000000000013 /* Support */,
+				C30000000000000000000014 /* Shared */,
+				5A000000000000000000010C /* Assets.xcassets */,
+				C30000000000000000000301 /* Main.storyboard */,
+				5A0000000000000000000302 /* Localizable.strings */,
+				3B0000000000000000000401 /* Model.xcdatamodeld */,
+				5A0000000000000000000112 /* Info.plist */,
+				C30000000000000000000113 /* SampleApp.entitlements */,
+				5A0000000000000000000114 /* SampleApp.xcconfig */,
+			);
+			path = SampleApp;
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000011 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				5A0000000000000000000103 /* ListView.swift */,
+				C30000000000000000000104 /* DetailView.swift */,
+				5A0000000000000000000105 /* Badge.swift */,
+				C30000000000000000000012 /* Rows */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000015 /* SampleAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				5A000000000000000000010A /* SampleAppTests.swift */,
+			);
+			path = SampleAppTests;
+			sourceTree = "<group>";
+		};
+		C30000000000000000000012 /* Rows */ = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000106 /* RowView.swift */,
+			);
+			path = Rows;
+			sourceTree = "<group>";
+		};
+		C30000000000000000000013 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				5A0000000000000000000107 /* Legacy.swift */,
+				D10000000000000000000402 /* Archive.xcdatamodeld */,
+			);
+			name = Support;
+			sourceTree = "<group>";
+		};
+		C30000000000000000000014 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000108 /* SharedModels.swift */,
+			);
+			path = Shared;
+			sourceTree = SOURCE_ROOT;
+		};
+		C30000000000000000000016 /* SampleAppUITests */ = {
+			isa = PBXGroup;
+			children = (
+				C3000000000000000000010B /* SampleAppUITests.swift */,
+			);
+			path = SampleAppUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5A0000000000000000000601 /* SampleApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C30000000000000000000A04 /* Build configuration list for PBXNativeTarget "SampleApp" */;
+			buildPhases = (
+				5A0000000000000000000701 /* Sources */,
+				C30000000000000000000702 /* Frameworks */,
+				5A0000000000000000000703 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SampleApp;
+			packageProductDependencies = (
+				5A0000000000000000000903 /* Collections */,
+				C30000000000000000000904 /* LocalKit */,
+			);
+			productName = SampleApp;
+			productReference = 5A0000000000000000000501 /* SampleApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5A0000000000000000000603 /* SampleAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C30000000000000000000A0A /* Build configuration list for PBXNativeTarget "SampleAppUITests" */;
+			buildPhases = (
+				5A0000000000000000000707 /* Sources */,
+				C30000000000000000000708 /* Frameworks */,
+				5A0000000000000000000709 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5A0000000000000000000804 /* PBXTargetDependency */,
+			);
+			name = SampleAppUITests;
+			productName = SampleAppUITests;
+			productReference = 5A0000000000000000000503 /* SampleAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		C30000000000000000000602 /* SampleAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A0000000000000000000A07 /* Build configuration list for PBXNativeTarget "SampleAppTests" */;
+			buildPhases = (
+				C30000000000000000000704 /* Sources */,
+				5A0000000000000000000705 /* Frameworks */,
+				C30000000000000000000706 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C30000000000000000000802 /* PBXTargetDependency */,
+			);
+			name = SampleAppTests;
+			productName = SampleAppTests;
+			productReference = C30000000000000000000502 /* SampleAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5A0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					5A0000000000000000000601 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					5A0000000000000000000603 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 5A0000000000000000000601;
+					};
+					C30000000000000000000602 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 5A0000000000000000000601;
+					};
+				};
+			};
+			buildConfigurationList = 5A0000000000000000000A01 /* Build configuration list for PBXProject "SampleApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 5A0000000000000000000002;
+			packageReferences = (
+				C30000000000000000000901 /* XCRemoteSwiftPackageReference "swift-collections" */,
+				5A0000000000000000000902 /* XCLocalSwiftPackageReference "../LocalKit" */,
+			);
+			productRefGroup = 5A0000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5A0000000000000000000601 /* SampleApp */,
+				C30000000000000000000602 /* SampleAppTests */,
+				5A0000000000000000000603 /* SampleAppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5A0000000000000000000703 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A000000000000000000020C /* Assets.xcassets in Resources */,
+				C3000000000000000000020D /* Main.storyboard in Resources */,
+				5A000000000000000000020E /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A0000000000000000000709 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C30000000000000000000706 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5A0000000000000000000701 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A0000000000000000000201 /* AppDelegate.swift in Sources */,
+				C30000000000000000000202 /* ContentView.swift in Sources */,
+				5A0000000000000000000203 /* ListView.swift in Sources */,
+				C30000000000000000000204 /* DetailView.swift in Sources */,
+				5A0000000000000000000205 /* Badge.swift in Sources */,
+				C30000000000000000000206 /* RowView.swift in Sources */,
+				5A0000000000000000000207 /* Legacy.swift in Sources */,
+				C30000000000000000000208 /* SharedModels.swift in Sources */,
+				5A000000000000000000020F /* Model.xcdatamodeld in Sources */,
+				C30000000000000000000210 /* Archive.xcdatamodeld in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A0000000000000000000707 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C3000000000000000000020B /* SampleAppUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C30000000000000000000704 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A000000000000000000020A /* SampleAppTests.swift in Sources */,
+				5A0000000000000000000209 /* SharedModels.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5A0000000000000000000804 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A0000000000000000000601 /* SampleApp */;
+			targetProxy = C30000000000000000000803 /* PBXContainerItemProxy */;
+		};
+		C30000000000000000000802 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A0000000000000000000601 /* SampleApp */;
+			targetProxy = 5A0000000000000000000801 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		5A0000000000000000000302 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				5A000000000000000000010E /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		C30000000000000000000301 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C3000000000000000000010D /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		5A0000000000000000000A03 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		5A0000000000000000000A05 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5A0000000000000000000114 /* SampleApp.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SampleApp/SampleApp.entitlements;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/include",
+				);
+				INFOPLIST_FILE = SampleApp/Info.plist;
+				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"SAMPLE_FLAG\"";
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.SampleApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_STRICT_CONCURRENCY = targeted;
+			};
+			name = Debug;
+		};
+		5A0000000000000000000A09 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.SampleAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp";
+			};
+			name = Release;
+		};
+		5A0000000000000000000A0B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.SampleAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = SampleApp;
+			};
+			name = Debug;
+		};
+		C30000000000000000000A02 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		C30000000000000000000A06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5A0000000000000000000114 /* SampleApp.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SampleApp/SampleApp.entitlements;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/include",
+				);
+				INFOPLIST_FILE = SampleApp/Info.plist;
+				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"SAMPLE_FLAG\"";
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.SampleApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+			};
+			name = Release;
+		};
+		C30000000000000000000A08 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.SampleAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp";
+			};
+			name = Debug;
+		};
+		C30000000000000000000A0C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.SampleAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = SampleApp;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5A0000000000000000000A01 /* Build configuration list for PBXProject "SampleApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C30000000000000000000A02 /* Debug */,
+				5A0000000000000000000A03 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5A0000000000000000000A07 /* Build configuration list for PBXNativeTarget "SampleAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C30000000000000000000A08 /* Debug */,
+				5A0000000000000000000A09 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C30000000000000000000A04 /* Build configuration list for PBXNativeTarget "SampleApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A0000000000000000000A05 /* Debug */,
+				C30000000000000000000A06 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C30000000000000000000A0A /* Build configuration list for PBXNativeTarget "SampleAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A0000000000000000000A0B /* Debug */,
+				C30000000000000000000A0C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		5A0000000000000000000902 /* XCLocalSwiftPackageReference "../LocalKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../LocalKit";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C30000000000000000000901 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5A0000000000000000000903 /* Collections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C30000000000000000000901 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = Collections;
+		};
+		C30000000000000000000904 /* LocalKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A0000000000000000000902 /* XCLocalSwiftPackageReference "../LocalKit" */;
+			productName = LocalKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin XCVersionGroup section */
+		3B0000000000000000000401 /* Model.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				5A000000000000000000010F /* Model.xcdatamodel */,
+			);
+			currentVersion = 5A000000000000000000010F /* Model.xcdatamodel */;
+			path = Model.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+		D10000000000000000000402 /* Archive.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				C30000000000000000000110 /* Archive.xcdatamodel */,
+				C30000000000000000000111 /* Archive 2.xcdatamodel */,
+			);
+			currentVersion = C30000000000000000000111 /* Archive 2.xcdatamodel */;
+			path = Archive.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
+	};
+	rootObject = 5A0000000000000000000001 /* Project object */;
+}

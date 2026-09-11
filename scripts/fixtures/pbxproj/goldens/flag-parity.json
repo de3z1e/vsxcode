@@ -1,0 +1,334 @@
+{
+  "fixture": "scripts/fixtures/flag-parity-pbxproj.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "FlagParityTarget",
+        "productName": "FlagParityTarget",
+        "productType": "com.apple.product-type.library.static",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "AA0000000000000000000009",
+        "fileSystemSynchronizedGroupIds": []
+      },
+      {
+        "name": "FlagParityInherited",
+        "productName": "FlagParityInherited",
+        "productType": "com.apple.product-type.library.static",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "AA0000000000000000000017",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [],
+    "parseBuildPhaseIds FlagParityTarget": {
+      "sourcesBuildPhaseId": "AA000000000000000000000A",
+      "frameworksBuildPhaseId": "AA0000000000000000000004"
+    },
+    "parseExcludedFiles FlagParityTarget": [],
+    "parseBuildPhaseIds FlagParityInherited": {
+      "sourcesBuildPhaseId": "AA0000000000000000000018",
+      "frameworksBuildPhaseId": "AA0000000000000000000014"
+    },
+    "parseExcludedFiles FlagParityInherited": [],
+    "parseBuildConfigurations": [
+      [
+        "AA000000000000000000000D",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+            "SDKROOT": "iphoneos",
+            "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG FEATURE_X $(inherited)",
+            "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+            "SWIFT_VERSION": "6.0",
+            "SWIFT_WARNINGS_AS_ERRORS_GROUPS": "PreconcurrencyImport"
+          },
+          "swiftVersion": "6.0",
+          "swiftActiveCompilationConditions": [
+            "DEBUG",
+            "FEATURE_X",
+            "$(inherited)"
+          ],
+          "supportedPlatforms": "iphoneos iphonesimulator",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "AA000000000000000000000F",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "FlagParityTarget",
+            "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+            "SWIFT_OBJC_INTEROP_MODE": "objcxx",
+            "SWIFT_STRICT_CONCURRENCY": "targeted",
+            "SWIFT_STRICT_MEMORY_SAFETY": "YES",
+            "SWIFT_TREAT_WARNINGS_AS_ERRORS": "NO",
+            "SWIFT_UPCOMING_FEATURE_CONCISE_MAGIC_FILE": "YES",
+            "SWIFT_UPCOMING_FEATURE_DEPRECATE_APPLICATION_MAIN": "YES",
+            "SWIFT_UPCOMING_FEATURE_DISABLE_OUTWARD_ACTOR_ISOLATION": "YES",
+            "SWIFT_UPCOMING_FEATURE_DYNAMIC_ACTOR_ISOLATION": "YES",
+            "SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY": "MIGRATE",
+            "SWIFT_UPCOMING_FEATURE_FORWARD_TRAILING_CLOSURES": "YES",
+            "SWIFT_UPCOMING_FEATURE_GLOBAL_ACTOR_ISOLATED_TYPES_USABILITY": "YES",
+            "SWIFT_UPCOMING_FEATURE_GLOBAL_CONCURRENCY": "YES",
+            "SWIFT_UPCOMING_FEATURE_IMPLICIT_OPEN_EXISTENTIALS": "YES",
+            "SWIFT_UPCOMING_FEATURE_IMPORT_OBJC_FORWARD_DECLS": "YES",
+            "SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES": "YES",
+            "SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES": "YES",
+            "SWIFT_UPCOMING_FEATURE_INTERNAL_IMPORTS_BY_DEFAULT": "YES",
+            "SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES": "YES",
+            "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "MIGRATE",
+            "SWIFT_UPCOMING_FEATURE_NONFROZEN_ENUM_EXHAUSTIVITY": "YES",
+            "SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT": "YES",
+            "SWIFT_UPCOMING_FEATURE_REGION_BASED_ISOLATION": "YES",
+            "SWIFT_VERSION": "6.0"
+          },
+          "swiftVersion": "6.0",
+          "strictConcurrency": "targeted",
+          "productName": "FlagParityTarget"
+        }
+      ],
+      [
+        "AA0000000000000000000019",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "FlagParityInherited",
+            "SWIFT_WARNINGS_AS_ERRORS_GROUPS": "$(inherited) DeprecatedDeclaration",
+            "SWIFT_WARNINGS_AS_WARNINGS_GROUPS": "StrictMemorySafety"
+          },
+          "productName": "FlagParityInherited"
+        }
+      ]
+    ],
+    "resolveConfigurationListId AA000000000000000000000C": [
+      "AA000000000000000000000D"
+    ],
+    "getBuildSettingsForTarget AA000000000000000000000C Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "SDKROOT": "iphoneos",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG FEATURE_X $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+        "SWIFT_VERSION": "6.0",
+        "SWIFT_WARNINGS_AS_ERRORS_GROUPS": "PreconcurrencyImport"
+      },
+      "swiftVersion": "6.0",
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "FEATURE_X",
+        "$(inherited)"
+      ],
+      "supportedPlatforms": "iphoneos iphonesimulator",
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget AA000000000000000000000C Release": null,
+    "resolveConfigurationListId AA0000000000000000000009": [
+      "AA000000000000000000000F"
+    ],
+    "getBuildSettingsForTarget AA0000000000000000000009 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "FlagParityTarget",
+        "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+        "SWIFT_OBJC_INTEROP_MODE": "objcxx",
+        "SWIFT_STRICT_CONCURRENCY": "targeted",
+        "SWIFT_STRICT_MEMORY_SAFETY": "YES",
+        "SWIFT_TREAT_WARNINGS_AS_ERRORS": "NO",
+        "SWIFT_UPCOMING_FEATURE_CONCISE_MAGIC_FILE": "YES",
+        "SWIFT_UPCOMING_FEATURE_DEPRECATE_APPLICATION_MAIN": "YES",
+        "SWIFT_UPCOMING_FEATURE_DISABLE_OUTWARD_ACTOR_ISOLATION": "YES",
+        "SWIFT_UPCOMING_FEATURE_DYNAMIC_ACTOR_ISOLATION": "YES",
+        "SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY": "MIGRATE",
+        "SWIFT_UPCOMING_FEATURE_FORWARD_TRAILING_CLOSURES": "YES",
+        "SWIFT_UPCOMING_FEATURE_GLOBAL_ACTOR_ISOLATED_TYPES_USABILITY": "YES",
+        "SWIFT_UPCOMING_FEATURE_GLOBAL_CONCURRENCY": "YES",
+        "SWIFT_UPCOMING_FEATURE_IMPLICIT_OPEN_EXISTENTIALS": "YES",
+        "SWIFT_UPCOMING_FEATURE_IMPORT_OBJC_FORWARD_DECLS": "YES",
+        "SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES": "YES",
+        "SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES": "YES",
+        "SWIFT_UPCOMING_FEATURE_INTERNAL_IMPORTS_BY_DEFAULT": "YES",
+        "SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES": "YES",
+        "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "MIGRATE",
+        "SWIFT_UPCOMING_FEATURE_NONFROZEN_ENUM_EXHAUSTIVITY": "YES",
+        "SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT": "YES",
+        "SWIFT_UPCOMING_FEATURE_REGION_BASED_ISOLATION": "YES",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "strictConcurrency": "targeted",
+      "productName": "FlagParityTarget"
+    },
+    "getBuildSettingsForTarget AA0000000000000000000009 Release": null,
+    "resolveConfigurationListId AA0000000000000000000017": [
+      "AA0000000000000000000019"
+    ],
+    "getBuildSettingsForTarget AA0000000000000000000017 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "FlagParityInherited",
+        "SWIFT_WARNINGS_AS_ERRORS_GROUPS": "$(inherited) DeprecatedDeclaration",
+        "SWIFT_WARNINGS_AS_WARNINGS_GROUPS": "StrictMemorySafety"
+      },
+      "productName": "FlagParityInherited"
+    },
+    "getBuildSettingsForTarget AA0000000000000000000017 Release": null,
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "SDKROOT": "iphoneos",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG FEATURE_X $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+        "SWIFT_VERSION": "6.0",
+        "SWIFT_WARNINGS_AS_ERRORS_GROUPS": "PreconcurrencyImport"
+      },
+      "swiftVersion": "6.0",
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "FEATURE_X",
+        "$(inherited)"
+      ],
+      "supportedPlatforms": "iphoneos iphonesimulator",
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Release": null,
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "AA0000000000000000000005",
+        {
+          "id": "AA0000000000000000000005",
+          "childIds": [
+            "AA0000000000000000000006",
+            "AA0000000000000000000015",
+            "AA0000000000000000000007"
+          ]
+        }
+      ],
+      [
+        "AA0000000000000000000006",
+        {
+          "id": "AA0000000000000000000006",
+          "path": "FlagParityTarget",
+          "childIds": [
+            "AA0000000000000000000002"
+          ]
+        }
+      ],
+      [
+        "AA0000000000000000000015",
+        {
+          "id": "AA0000000000000000000015",
+          "path": "FlagParityInherited",
+          "childIds": [
+            "AA0000000000000000000012"
+          ]
+        }
+      ],
+      [
+        "AA0000000000000000000007",
+        {
+          "id": "AA0000000000000000000007",
+          "name": "Products",
+          "childIds": [
+            "AA0000000000000000000003",
+            "AA0000000000000000000013"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "AA0000000000000000000005",
+    "buildGroupDirectories": [
+      [
+        "AA0000000000000000000005",
+        "/project"
+      ],
+      [
+        "AA0000000000000000000006",
+        "/project/FlagParityTarget"
+      ],
+      [
+        "AA0000000000000000000015",
+        "/project/FlagParityInherited"
+      ],
+      [
+        "AA0000000000000000000007",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath FlagParityTarget": "AA0000000000000000000006",
+    "resolveGroupForPath FlagParityInherited": "AA0000000000000000000015",
+    "parseVersionGroups": [],
+    "findVersionGroupSection": null,
+    "parseSwiftVersion": "6.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "17.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "parseFrameworksBuildPhase AA0000000000000000000004": [],
+    "parseLinkedFrameworksForTarget AA0000000000000000000004": [],
+    "parseFrameworksBuildPhase AA0000000000000000000014": [],
+    "parseLinkedFrameworksForTarget AA0000000000000000000014": [],
+    "findFileReferenceId Covered.swift": "AA0000000000000000000002",
+    "findFileReferenceId Inherited.swift": "AA0000000000000000000012",
+    "findFileReferencePath AA0000000000000000000002": "Covered.swift",
+    "findBuildFileId AA0000000000000000000002": "AA0000000000000000000001",
+    "findFileReferencePath AA0000000000000000000012": "Inherited.swift",
+    "findBuildFileId AA0000000000000000000012": "AA0000000000000000000011",
+    "writer addSwiftFileToPbxproj Added.swift": {
+      "lint": "FAIL",
+      "diff": [
+        "+25: \t\t800000000000000000000001 /* Added.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Added.swift */; };",
+        "+30: \t\t800000000000000000000002 /* Added.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Added.swift; sourceTree = \"<group>\"; };",
+        "-44: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (\t\t\t\t800000000000000000000002 /* Added.swift */,",
+        "+45: AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "+92: \t\t\t\t800000000000000000000001 /* Added.swift in Sources */,"
+      ]
+    },
+    "writer addSwiftFileToPbxproj Zed.swift": {
+      "lint": "FAIL",
+      "diff": [
+        "+25: \t\t800000000000000000000001 /* Zed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Zed.swift */; };",
+        "+30: \t\t800000000000000000000002 /* Zed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Zed.swift; sourceTree = \"<group>\"; };",
+        "-44: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, )\t\t\t\t800000000000000000000002 /* Zed.swift */,",
+        "+45: ; path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "+92: \t\t\t\t800000000000000000000001 /* Zed.swift in Sources */,"
+      ]
+    },
+    "writer removeSwiftFileFromPbxproj Covered.swift": {
+      "lint": "OK",
+      "diff": [
+        "-25: \t\tAA0000000000000000000001 /* Covered.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* Covered.swift */; };",
+        "-30: \t\tAA0000000000000000000002 /* Covered.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Covered.swift; sourceTree = \"<group>\"; };"
+      ]
+    },
+    "writer updateBuildSetting SWIFT_VERSION": {
+      "lint": "OK",
+      "diff": [
+        "-138: \t\t\t\tSWIFT_VERSION = 6.0;",
+        "+139: \t\t\t\tSWIFT_VERSION = 5.0;"
+      ]
+    }
+  }
+}

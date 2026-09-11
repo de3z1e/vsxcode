@@ -1,0 +1,170 @@
+// !$*UTF8*$!
+// Fixture for `npm run test:pbxproj`: a project with no PBXBuildFile section yet.
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXFileReference section */
+		7F0000000000000000000501 /* libEmptyKit.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libEmptyKit.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000101 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B20000000000000000000702 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		7F0000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				7F0000000000000000000010 /* EmptyKit */,
+				B20000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7F0000000000000000000010 /* EmptyKit */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000101 /* README.md */,
+			);
+			path = EmptyKit;
+			sourceTree = "<group>";
+		};
+		B20000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7F0000000000000000000501 /* libEmptyKit.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B20000000000000000000601 /* EmptyKit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B20000000000000000000A04 /* Build configuration list for PBXNativeTarget "EmptyKit" */;
+			buildPhases = (
+				7F0000000000000000000701 /* Sources */,
+				B20000000000000000000702 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EmptyKit;
+			productName = EmptyKit;
+			productReference = 7F0000000000000000000501 /* libEmptyKit.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		7F0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					B20000000000000000000601 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 7F0000000000000000000A01 /* Build configuration list for PBXProject "EmptyKit" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 7F0000000000000000000002;
+			productRefGroup = B20000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B20000000000000000000601 /* EmptyKit */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7F0000000000000000000701 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		7F0000000000000000000A03 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		7F0000000000000000000A05 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		B20000000000000000000A02 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B20000000000000000000A06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7F0000000000000000000A01 /* Build configuration list for PBXProject "EmptyKit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20000000000000000000A02 /* Debug */,
+				7F0000000000000000000A03 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B20000000000000000000A04 /* Build configuration list for PBXNativeTarget "EmptyKit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7F0000000000000000000A05 /* Debug */,
+				B20000000000000000000A06 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 7F0000000000000000000001 /* Project object */;
+}

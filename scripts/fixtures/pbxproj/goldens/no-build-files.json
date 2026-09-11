@@ -1,0 +1,225 @@
+{
+  "fixture": "scripts/fixtures/pbxproj/no-build-files.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "EmptyKit",
+        "productName": "EmptyKit",
+        "productType": "com.apple.product-type.library.static",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "B20000000000000000000A04",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [],
+    "parseBuildPhaseIds EmptyKit": {
+      "sourcesBuildPhaseId": "7F0000000000000000000701",
+      "frameworksBuildPhaseId": "B20000000000000000000702"
+    },
+    "parseExcludedFiles EmptyKit": [],
+    "parseBuildConfigurations": [
+      [
+        "7F0000000000000000000A03",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "7F0000000000000000000A05",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SKIP_INSTALL": "YES"
+          },
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "B20000000000000000000A02",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "B20000000000000000000A06",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SKIP_INSTALL": "YES"
+          },
+          "productName": "$(TARGET_NAME)"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 7F0000000000000000000A01": [
+      "B20000000000000000000A02",
+      "7F0000000000000000000A03"
+    ],
+    "getBuildSettingsForTarget 7F0000000000000000000A01 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget 7F0000000000000000000A01 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "resolveConfigurationListId B20000000000000000000A04": [
+      "7F0000000000000000000A05",
+      "B20000000000000000000A06"
+    ],
+    "getBuildSettingsForTarget B20000000000000000000A04 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES"
+      },
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget B20000000000000000000A04 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES"
+      },
+      "productName": "$(TARGET_NAME)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "7F0000000000000000000002",
+        {
+          "id": "7F0000000000000000000002",
+          "childIds": [
+            "7F0000000000000000000010",
+            "B20000000000000000000003"
+          ]
+        }
+      ],
+      [
+        "7F0000000000000000000010",
+        {
+          "id": "7F0000000000000000000010",
+          "path": "EmptyKit",
+          "childIds": [
+            "B20000000000000000000101"
+          ]
+        }
+      ],
+      [
+        "B20000000000000000000003",
+        {
+          "id": "B20000000000000000000003",
+          "name": "Products",
+          "childIds": [
+            "7F0000000000000000000501"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "7F0000000000000000000002",
+    "buildGroupDirectories": [
+      [
+        "7F0000000000000000000002",
+        "/project"
+      ],
+      [
+        "7F0000000000000000000010",
+        "/project/EmptyKit"
+      ],
+      [
+        "B20000000000000000000003",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath EmptyKit": "7F0000000000000000000010",
+    "parseVersionGroups": [],
+    "findVersionGroupSection": null,
+    "parseSwiftVersion": "5.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "16.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "parseFrameworksBuildPhase B20000000000000000000702": [],
+    "parseLinkedFrameworksForTarget B20000000000000000000702": [],
+    "findFileReferenceId README.md": "B20000000000000000000101",
+    "findFileReferencePath B20000000000000000000101": "README.md",
+    "findBuildFileId B20000000000000000000101": null,
+    "writer addSwiftFileToPbxproj First.swift": {
+      "lint": "OK",
+      "diff": [
+        "+12: \t\t800000000000000000000002 /* First.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = First.swift; sourceTree = \"<group>\"; };",
+        "+38: \t\t\t\t800000000000000000000002 /* First.swift */,",
+        "+106: \t\t\t\t800000000000000000000001 /* First.swift in Sources */,"
+      ]
+    },
+    "writer updateBuildSetting SKIP_INSTALL": {
+      "lint": "OK",
+      "diff": [
+        "-125: \t\t\t\tSKIP_INSTALL = YES;",
+        "+126: \t\t\t\tSKIP_INSTALL = NO;"
+      ]
+    }
+  }
+}

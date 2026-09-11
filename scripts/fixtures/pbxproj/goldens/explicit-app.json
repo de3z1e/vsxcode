@@ -1,0 +1,858 @@
+{
+  "fixture": "scripts/fixtures/pbxproj/explicit-app.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "SampleApp",
+        "productName": "SampleApp",
+        "productType": "com.apple.product-type.application",
+        "packageProductDependencyIds": [
+          "5A0000000000000000000903",
+          "C30000000000000000000904"
+        ],
+        "buildConfigurationListId": "C30000000000000000000A04",
+        "fileSystemSynchronizedGroupIds": []
+      },
+      {
+        "name": "SampleAppUITests",
+        "productName": "SampleAppUITests",
+        "productType": "com.apple.product-type.bundle.ui-testing",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "C30000000000000000000A0A",
+        "fileSystemSynchronizedGroupIds": []
+      },
+      {
+        "name": "SampleAppTests",
+        "productName": "SampleAppTests",
+        "productType": "com.apple.product-type.bundle.unit-test",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "5A0000000000000000000A07",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [
+      [
+        "SampleAppUITests",
+        [
+          {
+            "targetId": "5A0000000000000000000804",
+            "targetName": "SampleApp"
+          }
+        ]
+      ],
+      [
+        "SampleAppTests",
+        [
+          {
+            "targetId": "C30000000000000000000802",
+            "targetName": "SampleApp"
+          }
+        ]
+      ]
+    ],
+    "parseBuildPhaseIds SampleApp": {
+      "sourcesBuildPhaseId": "5A0000000000000000000701",
+      "frameworksBuildPhaseId": "C30000000000000000000702",
+      "resourcesBuildPhaseId": "5A0000000000000000000703"
+    },
+    "parseExcludedFiles SampleApp": [],
+    "parseBuildPhaseIds SampleAppTests": {
+      "sourcesBuildPhaseId": "C30000000000000000000704",
+      "frameworksBuildPhaseId": "5A0000000000000000000705",
+      "resourcesBuildPhaseId": "C30000000000000000000706"
+    },
+    "parseExcludedFiles SampleAppTests": [],
+    "parseBuildPhaseIds SampleAppUITests": {
+      "sourcesBuildPhaseId": "5A0000000000000000000707",
+      "frameworksBuildPhaseId": "C30000000000000000000708",
+      "resourcesBuildPhaseId": "5A0000000000000000000709"
+    },
+    "parseExcludedFiles SampleAppUITests": [],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "5A0000000000000000000A03",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "ALWAYS_SEARCH_USER_PATHS": "NO",
+            "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+            "MACOSX_DEPLOYMENT_TARGET": "14.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_COMPILATION_MODE": "wholemodule",
+            "SWIFT_VERSION": "5.0",
+            "VALIDATE_PRODUCT": "YES"
+          },
+          "swiftVersion": "5.0",
+          "sdkRoot": "iphoneos",
+          "macosxDeploymentTarget": "14.0"
+        }
+      ],
+      [
+        "5A0000000000000000000A05",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+            "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+            "INFOPLIST_FILE": "SampleApp/Info.plist",
+            "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+            "SWIFT_STRICT_CONCURRENCY": "targeted"
+          },
+          "strictConcurrency": "targeted",
+          "otherSwiftFlags": [
+            "$(inherited)",
+            "\\\"-D\\\"",
+            "\\\"SAMPLE_FLAG\\"
+          ],
+          "headerSearchPaths": [
+            "$(inherited)",
+            "$(SRCROOT)/Vendor/include"
+          ],
+          "bundleIdentifier": "com.example.SampleApp",
+          "productName": "$(TARGET_NAME)",
+          "supportedPlatforms": "iphoneos iphonesimulator"
+        }
+      ],
+      [
+        "5A0000000000000000000A09",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "BUNDLE_LOADER": "$(TEST_HOST)",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_VERSION": "6.0",
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+          },
+          "swiftVersion": "6.0",
+          "bundleIdentifier": "com.example.SampleAppTests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "5A0000000000000000000A0B",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "TEST_TARGET_NAME": "SampleApp"
+          },
+          "bundleIdentifier": "com.example.SampleAppUITests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "C30000000000000000000A02",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "ALWAYS_SEARCH_USER_PATHS": "NO",
+            "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
+            "DEBUG_INFORMATION_FORMAT": "dwarf",
+            "GCC_PREPROCESSOR_DEFINITIONS": "(\n\t\t\t\t\t\"DEBUG=1\",\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t)",
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+            "MACOSX_DEPLOYMENT_TARGET": "14.0",
+            "ONLY_ACTIVE_ARCH": "YES",
+            "SDKROOT": "iphoneos",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+            "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "swiftActiveCompilationConditions": [
+            "DEBUG",
+            "$(inherited)"
+          ],
+          "gccPreprocessorDefinitions": [
+            "DEBUG=1",
+            "$(inherited)"
+          ],
+          "sdkRoot": "iphoneos",
+          "macosxDeploymentTarget": "14.0"
+        }
+      ],
+      [
+        "C30000000000000000000A06",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+            "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+            "INFOPLIST_FILE": "SampleApp/Info.plist",
+            "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator"
+          },
+          "otherSwiftFlags": [
+            "$(inherited)",
+            "\\\"-D\\\"",
+            "\\\"SAMPLE_FLAG\\"
+          ],
+          "headerSearchPaths": [
+            "$(inherited)",
+            "$(SRCROOT)/Vendor/include"
+          ],
+          "bundleIdentifier": "com.example.SampleApp",
+          "productName": "$(TARGET_NAME)",
+          "supportedPlatforms": "iphoneos iphonesimulator"
+        }
+      ],
+      [
+        "C30000000000000000000A08",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "BUNDLE_LOADER": "$(TEST_HOST)",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_VERSION": "6.0",
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+          },
+          "swiftVersion": "6.0",
+          "bundleIdentifier": "com.example.SampleAppTests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "C30000000000000000000A0C",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "TEST_TARGET_NAME": "SampleApp"
+          },
+          "bundleIdentifier": "com.example.SampleAppUITests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 5A0000000000000000000A01": [
+      "C30000000000000000000A02",
+      "5A0000000000000000000A03"
+    ],
+    "getBuildSettingsForTarget 5A0000000000000000000A01 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "GCC_PREPROCESSOR_DEFINITIONS": "(\n\t\t\t\t\t\"DEBUG=1\",\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t)",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "ONLY_ACTIVE_ARCH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "$(inherited)"
+      ],
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "getBuildSettingsForTarget 5A0000000000000000000A01 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_COMPILATION_MODE": "wholemodule",
+        "SWIFT_VERSION": "5.0",
+        "VALIDATE_PRODUCT": "YES"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "resolveConfigurationListId C30000000000000000000A04": [
+      "5A0000000000000000000A05",
+      "C30000000000000000000A06"
+    ],
+    "getBuildSettingsForTarget C30000000000000000000A04 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+        "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+        "INFOPLIST_FILE": "SampleApp/Info.plist",
+        "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+        "SWIFT_STRICT_CONCURRENCY": "targeted"
+      },
+      "strictConcurrency": "targeted",
+      "otherSwiftFlags": [
+        "$(inherited)",
+        "\\\"-D\\\"",
+        "\\\"SAMPLE_FLAG\\"
+      ],
+      "headerSearchPaths": [
+        "$(inherited)",
+        "$(SRCROOT)/Vendor/include"
+      ],
+      "bundleIdentifier": "com.example.SampleApp",
+      "productName": "$(TARGET_NAME)",
+      "supportedPlatforms": "iphoneos iphonesimulator"
+    },
+    "getBuildSettingsForTarget C30000000000000000000A04 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+        "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+        "INFOPLIST_FILE": "SampleApp/Info.plist",
+        "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator"
+      },
+      "otherSwiftFlags": [
+        "$(inherited)",
+        "\\\"-D\\\"",
+        "\\\"SAMPLE_FLAG\\"
+      ],
+      "headerSearchPaths": [
+        "$(inherited)",
+        "$(SRCROOT)/Vendor/include"
+      ],
+      "bundleIdentifier": "com.example.SampleApp",
+      "productName": "$(TARGET_NAME)",
+      "supportedPlatforms": "iphoneos iphonesimulator"
+    },
+    "resolveConfigurationListId 5A0000000000000000000A07": [
+      "C30000000000000000000A08",
+      "5A0000000000000000000A09"
+    ],
+    "getBuildSettingsForTarget 5A0000000000000000000A07 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "BUNDLE_LOADER": "$(TEST_HOST)",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_VERSION": "6.0",
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+      },
+      "swiftVersion": "6.0",
+      "bundleIdentifier": "com.example.SampleAppTests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget 5A0000000000000000000A07 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "BUNDLE_LOADER": "$(TEST_HOST)",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_VERSION": "6.0",
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+      },
+      "swiftVersion": "6.0",
+      "bundleIdentifier": "com.example.SampleAppTests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "resolveConfigurationListId C30000000000000000000A0A": [
+      "5A0000000000000000000A0B",
+      "C30000000000000000000A0C"
+    ],
+    "getBuildSettingsForTarget C30000000000000000000A0A Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "TEST_TARGET_NAME": "SampleApp"
+      },
+      "bundleIdentifier": "com.example.SampleAppUITests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget C30000000000000000000A0A Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "TEST_TARGET_NAME": "SampleApp"
+      },
+      "bundleIdentifier": "com.example.SampleAppUITests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "GCC_PREPROCESSOR_DEFINITIONS": "(\n\t\t\t\t\t\"DEBUG=1\",\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t)",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "ONLY_ACTIVE_ARCH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "$(inherited)"
+      ],
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_COMPILATION_MODE": "wholemodule",
+        "SWIFT_VERSION": "5.0",
+        "VALIDATE_PRODUCT": "YES"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "parseSwiftPackageReferences": [
+      [
+        "C30000000000000000000901",
+        {
+          "id": "C30000000000000000000901",
+          "name": "swift-collections",
+          "type": "remote",
+          "url": "https://github.com/apple/swift-collections.git",
+          "requirement": {
+            "kind": "upToNextMajorVersion",
+            "minimumVersion": "1.1.0"
+          }
+        }
+      ],
+      [
+        "5A0000000000000000000902",
+        {
+          "id": "5A0000000000000000000902",
+          "name": "../LocalKit",
+          "type": "local",
+          "path": "../LocalKit"
+        }
+      ]
+    ],
+    "parseSwiftPackageProductDependencies": [
+      [
+        "5A0000000000000000000903",
+        {
+          "id": "5A0000000000000000000903",
+          "productName": "Collections",
+          "packageRef": "C30000000000000000000901",
+          "packageName": "swift-collections"
+        }
+      ],
+      [
+        "C30000000000000000000904",
+        {
+          "id": "C30000000000000000000904",
+          "productName": "LocalKit",
+          "packageRef": "5A0000000000000000000902",
+          "packageName": "../LocalKit"
+        }
+      ]
+    ],
+    "parseGroups": [
+      [
+        "5A0000000000000000000002",
+        {
+          "id": "5A0000000000000000000002",
+          "childIds": [
+            "5A0000000000000000000010",
+            "5A0000000000000000000015",
+            "C30000000000000000000016",
+            "5A0000000000000000000004",
+            "5A0000000000000000000003"
+          ]
+        }
+      ],
+      [
+        "5A0000000000000000000003",
+        {
+          "id": "5A0000000000000000000003",
+          "name": "Products",
+          "childIds": [
+            "5A0000000000000000000501",
+            "C30000000000000000000502",
+            "5A0000000000000000000503"
+          ]
+        }
+      ],
+      [
+        "5A0000000000000000000004",
+        {
+          "id": "5A0000000000000000000004",
+          "name": "Frameworks",
+          "childIds": [
+            "C30000000000000000000115",
+            "5A0000000000000000000116"
+          ]
+        }
+      ],
+      [
+        "5A0000000000000000000010",
+        {
+          "id": "5A0000000000000000000010",
+          "path": "SampleApp",
+          "childIds": [
+            "5A0000000000000000000101",
+            "C30000000000000000000102",
+            "5A0000000000000000000011",
+            "C30000000000000000000013",
+            "C30000000000000000000014",
+            "5A000000000000000000010C",
+            "C30000000000000000000301",
+            "5A0000000000000000000302",
+            "3B0000000000000000000401",
+            "5A0000000000000000000112",
+            "C30000000000000000000113",
+            "5A0000000000000000000114"
+          ]
+        }
+      ],
+      [
+        "5A0000000000000000000011",
+        {
+          "id": "5A0000000000000000000011",
+          "path": "Views",
+          "childIds": [
+            "5A0000000000000000000103",
+            "C30000000000000000000104",
+            "5A0000000000000000000105",
+            "C30000000000000000000012"
+          ]
+        }
+      ],
+      [
+        "5A0000000000000000000015",
+        {
+          "id": "5A0000000000000000000015",
+          "path": "SampleAppTests",
+          "childIds": [
+            "5A000000000000000000010A"
+          ]
+        }
+      ],
+      [
+        "C30000000000000000000012",
+        {
+          "id": "C30000000000000000000012",
+          "path": "Rows",
+          "childIds": [
+            "C30000000000000000000106"
+          ]
+        }
+      ],
+      [
+        "C30000000000000000000013",
+        {
+          "id": "C30000000000000000000013",
+          "name": "Support",
+          "childIds": [
+            "5A0000000000000000000107",
+            "D10000000000000000000402"
+          ]
+        }
+      ],
+      [
+        "C30000000000000000000014",
+        {
+          "id": "C30000000000000000000014",
+          "path": "Shared",
+          "childIds": [
+            "C30000000000000000000108"
+          ]
+        }
+      ],
+      [
+        "C30000000000000000000016",
+        {
+          "id": "C30000000000000000000016",
+          "path": "SampleAppUITests",
+          "childIds": [
+            "C3000000000000000000010B"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "5A0000000000000000000002",
+    "buildGroupDirectories": [
+      [
+        "5A0000000000000000000002",
+        "/project"
+      ],
+      [
+        "5A0000000000000000000010",
+        "/project/SampleApp"
+      ],
+      [
+        "5A0000000000000000000011",
+        "/project/SampleApp/Views"
+      ],
+      [
+        "C30000000000000000000012",
+        "/project/SampleApp/Views/Rows"
+      ],
+      [
+        "C30000000000000000000013",
+        "/project/SampleApp"
+      ],
+      [
+        "C30000000000000000000014",
+        "/project/SampleApp/Shared"
+      ],
+      [
+        "5A0000000000000000000015",
+        "/project/SampleAppTests"
+      ],
+      [
+        "C30000000000000000000016",
+        "/project/SampleAppUITests"
+      ],
+      [
+        "5A0000000000000000000004",
+        "/project"
+      ],
+      [
+        "5A0000000000000000000003",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath SampleApp": "5A0000000000000000000010",
+    "resolveGroupForPath SampleApp/Views": "5A0000000000000000000011",
+    "resolveGroupForPath SampleApp/Views/Rows": "C30000000000000000000012",
+    "resolveGroupForPath Shared": null,
+    "resolveGroupForPath SampleApp/Shared": "C30000000000000000000014",
+    "resolveGroupForPath Support": null,
+    "resolveGroupForPath SampleApp/Missing": null,
+    "parseVersionGroups": [
+      {
+        "id": "3B0000000000000000000401",
+        "path": "Model.xcdatamodeld",
+        "childIds": [
+          "5A000000000000000000010F"
+        ],
+        "currentVersionId": "5A000000000000000000010F",
+        "sourceTree": "<group>",
+        "startIndex": 25338,
+        "endIndex": 25670
+      },
+      {
+        "id": "D10000000000000000000402",
+        "path": "Archive.xcdatamodeld",
+        "childIds": [
+          "C30000000000000000000110",
+          "C30000000000000000000111"
+        ],
+        "currentVersionId": "C30000000000000000000111",
+        "sourceTree": "<group>",
+        "startIndex": 25670,
+        "endIndex": 26070
+      }
+    ],
+    "findVersionGroupSection": {
+      "beginIndex": 25303,
+      "bodyStart": 25338,
+      "bodyEnd": 26070
+    },
+    "parseSwiftVersion": "6.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "17.0"
+      },
+      {
+        "platform": "macOS",
+        "version": "14.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "parseFrameworksBuildPhase C30000000000000000000702": [
+      "UIKit.framework",
+      "libz.tbd",
+      "Collections"
+    ],
+    "parseLinkedFrameworksForTarget C30000000000000000000702": [
+      "z",
+      "Collections"
+    ],
+    "parseFrameworksBuildPhase 5A0000000000000000000705": [],
+    "parseLinkedFrameworksForTarget 5A0000000000000000000705": [],
+    "parseResourcesBuildPhase 5A0000000000000000000703": [
+      "Assets.xcassets",
+      "Main.storyboard",
+      "Localizable.strings"
+    ],
+    "parseResourcesForTarget 5A0000000000000000000703": [
+      {
+        "type": ".process",
+        "path": "Assets.xcassets"
+      },
+      {
+        "type": ".process",
+        "path": "Main.storyboard"
+      },
+      {
+        "type": ".process",
+        "path": "Localizable.strings"
+      }
+    ],
+    "parseResourcesBuildPhase C30000000000000000000706": [],
+    "parseResourcesForTarget C30000000000000000000706": [],
+    "findFileReferenceId ContentView.swift": "C30000000000000000000102",
+    "findFileReferenceId SharedModels.swift": "C30000000000000000000108",
+    "findFileReferenceId Badge.swift": "5A0000000000000000000105",
+    "findFileReferenceId Legacy.swift": "5A0000000000000000000107",
+    "findFileReferenceId Missing.swift": null,
+    "findFileReferencePath C30000000000000000000102": "ContentView.swift",
+    "findBuildFileId C30000000000000000000102": "C30000000000000000000202",
+    "findFileReferencePath 5A0000000000000000000105": "Components/Badge.swift",
+    "findBuildFileId 5A0000000000000000000105": "5A0000000000000000000205",
+    "findFileReferencePath 5A0000000000000000000107": "../Legacy/Legacy.swift",
+    "findBuildFileId 5A0000000000000000000107": "5A0000000000000000000207",
+    "findFileReferencePath C30000000000000000000108": "SharedModels.swift",
+    "findBuildFileId C30000000000000000000108": "5A0000000000000000000209",
+    "writer addSwiftFileToPbxproj AddedView.swift": {
+      "lint": "OK",
+      "diff": [
+        "+24: \t\t800000000000000000000001 /* AddedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* AddedView.swift */; };",
+        "+66: \t\t800000000000000000000002 /* AddedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddedView.swift; sourceTree = \"<group>\"; };",
+        "+159: \t\t\t\t800000000000000000000002 /* AddedView.swift */,",
+        "+357: \t\t\t\t800000000000000000000001 /* AddedView.swift in Sources */,"
+      ]
+    },
+    "writer removeSwiftFileFromPbxproj SharedModels.swift": {
+      "lint": "OK",
+      "diff": [
+        "-18: \t\t5A0000000000000000000209 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; };",
+        "-69: \t\tC30000000000000000000108 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = \"<group>\"; };",
+        "-195: \t\t\t\tC30000000000000000000108 /* SharedModels.swift */,",
+        "-373: \t\t\t\t5A0000000000000000000209 /* SharedModels.swift in Sources */,"
+      ]
+    },
+    "writer addDataModelToPbxproj Added.xcdatamodeld": {
+      "lint": "OK",
+      "diff": [
+        "+24: \t\t800000000000000000000001 /* Added.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Added.xcdatamodeld */; };",
+        "+66: \t\t800000000000000000000003 /* Added.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Added.xcdatamodel; sourceTree = \"<group>\"; };",
+        "+140: \t\t\t\t800000000000000000000002 /* Added.xcdatamodeld */,",
+        "+357: \t\t\t\t800000000000000000000001 /* Added.xcdatamodeld in Sources */,",
+        "+606: \t\t800000000000000000000002 /* Added.xcdatamodeld */ = {",
+        "+606: \t\t\tisa = XCVersionGroup;",
+        "+606: \t\t\tchildren = (",
+        "+606: \t\t\t\t800000000000000000000003 /* Added.xcdatamodel */,",
+        "+606: \t\t\t);",
+        "+606: \t\t\tcurrentVersion = 800000000000000000000003 /* Added.xcdatamodel */;",
+        "+606: \t\t\tpath = Added.xcdatamodeld;",
+        "+606: \t\t\tsourceTree = \"<group>\";",
+        "+606: \t\t\tversionGroupType = wrapper.xcdatamodel;",
+        "+606: \t\t};"
+      ]
+    },
+    "writer updateVersionGroupVersions Archive.xcdatamodeld": {
+      "lint": "OK",
+      "diff": [
+        "+66: \t\t800000000000000000000001 /* Archive.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Archive.xcdatamodel; sourceTree = \"<group>\"; };",
+        "+66: \t\t800000000000000000000002 /* Archive 2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = \"Archive 2.xcdatamodel\"; sourceTree = \"<group>\"; };",
+        "+66: \t\t800000000000000000000003 /* Archive 3.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = \"Archive 3.xcdatamodel\"; sourceTree = \"<group>\"; };",
+        "-72: \t\tC30000000000000000000110 /* Archive.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Archive.xcdatamodel; sourceTree = \"<group>\"; };",
+        "-73: \t\tC30000000000000000000111 /* Archive 2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = \"Archive 2.xcdatamodel\"; sourceTree = \"<group>\"; };",
+        "-609: \t\t\t\tC30000000000000000000110 /* Archive.xcdatamodel */,",
+        "-610: \t\t\t\tC30000000000000000000111 /* Archive 2.xcdatamodel */,",
+        "+611: \t\t\t\t800000000000000000000001 /* Archive.xcdatamodel */,",
+        "+611: \t\t\t\t800000000000000000000002 /* Archive 2.xcdatamodel */,",
+        "+611: \t\t\t\t800000000000000000000003 /* Archive 3.xcdatamodel */,",
+        "-612: \t\t\tcurrentVersion = C30000000000000000000111 /* Archive 2.xcdatamodel */;",
+        "+613: \t\t\tcurrentVersion = 800000000000000000000003 /* Archive 3.xcdatamodel */;"
+      ]
+    },
+    "writer moveVersionGroupToGroup Model.xcdatamodeld": {
+      "lint": "OK",
+      "diff": [
+        "-148: \t\t\t\t3B0000000000000000000401 /* Model.xcdatamodeld */,",
+        "+162: \t\t\t\t3B0000000000000000000401 /* Model.xcdatamodeld */,"
+      ]
+    },
+    "writer removeDataModelFromPbxproj Archive.xcdatamodeld": {
+      "lint": "OK",
+      "diff": [
+        "-30: \t\tC30000000000000000000210 /* Archive.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000402 /* Archive.xcdatamodeld */; };",
+        "-72: \t\tC30000000000000000000110 /* Archive.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = Archive.xcdatamodel; sourceTree = \"<group>\"; };",
+        "-73: \t\tC30000000000000000000111 /* Archive 2.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = \"Archive 2.xcdatamodel\"; sourceTree = \"<group>\"; };",
+        "-187: \t\t\t\tD10000000000000000000402 /* Archive.xcdatamodeld */,",
+        "-356: \t\t\t\tC30000000000000000000210 /* Archive.xcdatamodeld in Sources */,",
+        "-606: \t\tD10000000000000000000402 /* Archive.xcdatamodeld */ = {",
+        "-607: \t\t\tisa = XCVersionGroup;",
+        "-608: \t\t\tchildren = (",
+        "-609: \t\t\t\tC30000000000000000000110 /* Archive.xcdatamodel */,",
+        "-610: \t\t\t\tC30000000000000000000111 /* Archive 2.xcdatamodel */,",
+        "-611: \t\t\t);",
+        "-612: \t\t\tcurrentVersion = C30000000000000000000111 /* Archive 2.xcdatamodel */;",
+        "-613: \t\t\tpath = Archive.xcdatamodeld;",
+        "-614: \t\t\tsourceTree = \"<group>\";",
+        "-615: \t\t\tversionGroupType = wrapper.xcdatamodel;",
+        "-616: \t\t};"
+      ]
+    },
+    "writer updateBuildSetting existing key": {
+      "lint": "OK",
+      "diff": [
+        "-441: \t\t\t\tSWIFT_STRICT_CONCURRENCY = targeted;",
+        "+442: \t\t\t\tSWIFT_STRICT_CONCURRENCY = complete;"
+      ]
+    },
+    "writer updateBuildSetting new key": {
+      "lint": "OK",
+      "diff": [
+        "+511: \t\t\t\tSWIFT_STRICT_CONCURRENCY = minimal;"
+      ]
+    }
+  }
+}

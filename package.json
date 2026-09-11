@@ -275,7 +275,8 @@
         "watch": "tsc -w -p ./",
         "prepublish": "npm run compile",
         "package": "vsce package",
-        "test:flag-parity": "npm run compile && node scripts/flag-parity.js"
+        "test:flag-parity": "npm run compile && node scripts/flag-parity.js",
+        "test:pbxproj": "npm run compile && node scripts/pbxproj-check.js"
     },
     "files": [
         "out",

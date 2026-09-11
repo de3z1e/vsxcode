@@ -13,8 +13,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   every Xcode upgrade**: the flag table in `src/types/swiftSettingFlags.ts` is transcribed
   from Xcode's `Swift.xcspec` and rots when Apple changes it. Requires a full Xcode; runs
   entirely in a temp directory.
+- `npm run test:pbxproj` — Run every exported pbxproj parser, plus a fixed set of pbxproj writer
+  edits, over the fixtures in `scripts/fixtures/pbxproj/` and diff the results against the
+  reviewed goldens in `scripts/fixtures/pbxproj/goldens/`. Each fixture must pass `plutil -lint`
+  with and without its comments, and entries in the script's `COMMENT_FREE` table must reproduce
+  the commented golden when the comments are stripped. `npm run test:pbxproj -- --update` rewrites
+  the goldens — review that diff. Setting `VSXCODE_PBXPROJ_CORPUS=<file listing project.pbxproj
+  paths>` and `VSXCODE_PBXPROJ_CORPUS_GOLDENS=<directory outside the repo>` also runs the parsers
+  and two writer edits over local projects, printing counts and list indexes only; those goldens
+  hold private project data, so the script refuses a directory inside the repository.
 
-No test framework or linter is configured; the flag-parity check is a plain Node script.
+No test framework or linter is configured; both checks are plain Node scripts.
 
 **Version bumps**: When bumping the version number, update it in **all** locations: `package.json`, `README.md`, and any other files that reference the version. Search the repo to ensure nothing is missed.
 
@@ -38,7 +47,7 @@ VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.sw
 1. **generatePackageSwift** — Parses pbxproj, builds Package.swift, configures SourceKit-LSP for iOS simulator SDK
 2. **configureBuildTasks** — Interactive setup of project/target/scheme/simulator, stores `BuildTaskConfig` to workspace state
 
-Also contains inline helpers: `parseDefaultLocalization`, `parseDeploymentTargets`, `parseExcludedFiles`, `generateCSettings`, `formatProductType`, `printToSharedPanel`, `cancelActiveRun`, `executeTaskAndWait`.
+Also contains inline helpers: `generateCSettings`, `formatProductType`, `printToSharedPanel`, `cancelActiveRun`, `executeTaskAndWait`.
 
 ### Commands
 
@@ -71,6 +80,8 @@ src/
 │   ├── resources.ts             — PBXResourcesBuildPhase parsing, resource type classification,
 │   │                              scanForUnhandledFiles (filesystem scan for SPM compatibility)
 │   ├── groups.ts                — PBXGroup hierarchy parsing, path-to-group resolution
+│   ├── project.ts               — project-level fields: default localization, deployment targets,
+│   │                              synchronized-folder exclusions
 │   └── versionGroups.ts         — XCVersionGroup parsing (.xcdatamodeld bundles): children,
 │                                  currentVersion, section bounds, entry offsets
 ├── generators/
