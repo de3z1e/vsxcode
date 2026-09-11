@@ -429,7 +429,15 @@ const SCENARIOS = [
         run() {
             const workspace = makeWorkspace('swiftpm');
             const initial = hashFiles(workspace.root);
-            const [open] = runSteps(workspace, [{ kind: 'activate', answers: [FULLY] }]);
+            const [open, added] = runSteps(workspace, [
+                { kind: 'activate', answers: [FULLY] },
+                // File sync handles SwiftPM's ids: a new file in the target folder is registered, once.
+                {
+                    kind: 'fire', glob: '**/*.swift', event: 'create', relative: 'Sources/SampleKit/Added.swift',
+                    write: { relative: 'Sources/SampleKit/Added.swift', contents: 'struct Added {}\n' }
+                }
+            ]);
+            const registered = fs.readFileSync(path.join(workspace.root, 'SampleKit.xcodeproj', 'project.pbxproj'), 'utf8');
             const firstBackups = hashFiles(workspace.root);
             const handWritten = fs.readFileSync(path.join(workspace.root, 'Package.swift_backup'), 'utf8');
             const [reopen, generateFully, restore, generateKeep] = runSteps(workspace, [
@@ -443,7 +451,7 @@ const SCENARIOS = [
                 }
             ]);
             const expect = expectations('fully');
-            for (const result of [open, reopen, generateFully, restore, generateKeep]) { checkNoCrash(result, expect); }
+            for (const result of [open, added, reopen, generateFully, restore, generateKeep]) { checkNoCrash(result, expect); }
 
             const pairs = [
                 ['Package.swift', 'Package.swift_backup'],
@@ -459,6 +467,11 @@ const SCENARIOS = [
             expect.that(open.changed.includes('Package.swift'), 'Package.swift not regenerated');
             // File sync must never register the project's files a second time; the backup is a separate file.
             expect.that(!open.changed.includes('SampleKit.xcodeproj/project.pbxproj'), 'opening the folder changed project.pbxproj');
+            const occurrences = (pattern) => (registered.match(pattern) || []).length;
+            expect.that(added.changed.includes('SampleKit.xcodeproj/project.pbxproj'), 'the new Swift file was not registered');
+            expect.that(occurrences(/path = Added\.swift;/g) === 1 && occurrences(/Added\.swift in Sources \*\/ = \{isa = PBXBuildFile;/g) === 1,
+                `Added.swift has ${occurrences(/path = Added\.swift;/g)} reference(s) and ${occurrences(/Added\.swift in Sources \*\/ = \{isa = PBXBuildFile;/g)} build file(s)`);
+            expect.that(occurrences(/path = SampleKit\.swift;/g) === 1, 'SampleKit.swift is no longer registered exactly once');
             expect.that(of(open, 'quickPick').length === 0, 'asked to overwrite after backing up');
             expect.that(SYNC_WATCHERS.every((glob) => syncWatchers(open).includes(glob)), `sync watchers not started (${syncWatchers(open)})`);
             expect.that(of(open, 'state').some((event) => event.key === 'buildTaskConfig'), 'build tasks not configured');
@@ -482,7 +495,7 @@ const SCENARIOS = [
             expect.that(generateKeep.changed.length === 0, `keep changed ${generateKeep.changed}`);
             expect.that(JSON.parse(fs.readFileSync(workspace.statePath, 'utf8')).swiftPMProjectChoices['SampleKit.xcodeproj'] === 'keep',
                 'switching to keep was not stored');
-            return { workspace, problems: expect.problems, logs: [open, reopen, generateFully, restore, generateKeep] };
+            return { workspace, problems: expect.problems, logs: [open, added, reopen, generateFully, restore, generateKeep] };
         }
     },
     {

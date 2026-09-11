@@ -360,6 +360,15 @@ const SCENARIOS = [
         },
         changes: { swift: { 'MyApp/Views/Bar.swift': null } }
     },
+    {
+        name: 'Swift file compiled by two targets deleted',
+        run: (s) => {
+            s.remove('Shared/SharedUtil.swift');
+            s.fire('delete', 'Shared/SharedUtil.swift');
+        },
+        // Both build files and both Sources entries go with the reference, so nothing dangles.
+        changes: { swift: { 'Shared/SharedUtil.swift': null } }
+    },
     ...['creates first', 'deletes first'].map((order) => ({
         name: `Swift file renamed in its folder, ${order}`,
         run: (s) => renameSwift(s, order),

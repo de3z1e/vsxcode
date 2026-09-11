@@ -233,7 +233,6 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": false,
-    "usesXcodeObjectIds": true,
     "parseFrameworksBuildPhase A10000000000000000000702": [],
     "parseLinkedFrameworksForTarget A10000000000000000000702": [],
     "parseResourcesBuildPhase E70000000000000000000703": [],
@@ -241,6 +240,49 @@
     "findFileReferenceId Helper.swift": "E70000000000000000000101",
     "findFileReferencePath E70000000000000000000101": "Helper.swift",
     "findBuildFileId E70000000000000000000101": "A10000000000000000000201",
+    "displayName E70000000000000000000101": "Helper.swift",
+    "buildFilesFor E70000000000000000000101": [
+      "A10000000000000000000201"
+    ],
+    "phasesOf E70000000000000000000101": {
+      "A10000000000000000000201": [
+        "E70000000000000000000701"
+      ]
+    },
+    "locateList A10000000000000000000012 children": {
+      "openIndex": 2243,
+      "closeIndex": 2296,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "E70000000000000000000101",
+          "startIndex": 2244,
+          "endIndex": 2293
+        }
+      ]
+    },
+    "locateListEntry A10000000000000000000012 children E70000000000000000000101": {
+      "id": "E70000000000000000000101",
+      "startIndex": 2244,
+      "endIndex": 2293
+    },
+    "locateList E70000000000000000000701 files": {
+      "openIndex": 4640,
+      "closeIndex": 4704,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "A10000000000000000000201",
+          "startIndex": 4641,
+          "endIndex": 4701
+        }
+      ]
+    },
+    "locateListEntry E70000000000000000000701 files A10000000000000000000201": {
+      "id": "A10000000000000000000201",
+      "startIndex": 4641,
+      "endIndex": 4701
+    },
     "writer addSwiftFileToPbxproj Added.swift": {
       "lint": "OK",
       "diff": [

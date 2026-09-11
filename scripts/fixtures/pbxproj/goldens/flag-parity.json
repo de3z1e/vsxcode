@@ -285,7 +285,6 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": false,
-    "usesXcodeObjectIds": true,
     "parseFrameworksBuildPhase AA0000000000000000000004": [],
     "parseLinkedFrameworksForTarget AA0000000000000000000004": [],
     "parseFrameworksBuildPhase AA0000000000000000000014": [],
@@ -296,33 +295,95 @@
     "findBuildFileId AA0000000000000000000002": "AA0000000000000000000001",
     "findFileReferencePath AA0000000000000000000012": "Inherited.swift",
     "findBuildFileId AA0000000000000000000012": "AA0000000000000000000011",
+    "displayName AA0000000000000000000002": "Covered.swift",
+    "buildFilesFor AA0000000000000000000002": [
+      "AA0000000000000000000001"
+    ],
+    "phasesOf AA0000000000000000000002": {
+      "AA0000000000000000000001": [
+        "AA000000000000000000000A"
+      ]
+    },
+    "displayName AA0000000000000000000012": "Inherited.swift",
+    "buildFilesFor AA0000000000000000000012": [
+      "AA0000000000000000000011"
+    ],
+    "phasesOf AA0000000000000000000012": {
+      "AA0000000000000000000011": [
+        "AA0000000000000000000018"
+      ]
+    },
+    "locateList AA0000000000000000000006 children": {
+      "openIndex": 3282,
+      "closeIndex": 3328,
+      "multiLine": false,
+      "entries": [
+        {
+          "id": "AA0000000000000000000002",
+          "startIndex": 3282,
+          "endIndex": 3328
+        }
+      ]
+    },
+    "locateListEntry AA0000000000000000000006 children AA0000000000000000000002": {
+      "id": "AA0000000000000000000002",
+      "startIndex": 3282,
+      "endIndex": 3328
+    },
+    "locateList AA000000000000000000000A files": {
+      "openIndex": 5907,
+      "closeIndex": 5964,
+      "multiLine": false,
+      "entries": [
+        {
+          "id": "AA0000000000000000000001",
+          "startIndex": 5907,
+          "endIndex": 5964
+        }
+      ]
+    },
+    "locateListEntry AA000000000000000000000A files AA0000000000000000000001": {
+      "id": "AA0000000000000000000001",
+      "startIndex": 5907,
+      "endIndex": 5964
+    },
+    "locateList AA0000000000000000000004 files": {
+      "openIndex": 2690,
+      "closeIndex": 2690,
+      "multiLine": false,
+      "entries": []
+    },
     "writer addSwiftFileToPbxproj Added.swift": {
-      "lint": "FAIL",
+      "lint": "OK",
       "diff": [
         "+25: \t\t800000000000000000000001 /* Added.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Added.swift */; };",
         "+30: \t\t800000000000000000000002 /* Added.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Added.swift; sourceTree = \"<group>\"; };",
         "-44: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
-        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (\t\t\t\t800000000000000000000002 /* Added.swift */,",
-        "+45: AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
-        "+92: \t\t\t\t800000000000000000000001 /* Added.swift in Sources */,"
+        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (800000000000000000000002 /* Added.swift */, AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "-92: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };",
+        "+93: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, 800000000000000000000001 /* Added.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };"
       ]
     },
     "writer addSwiftFileToPbxproj Zed.swift": {
-      "lint": "FAIL",
+      "lint": "OK",
       "diff": [
         "+25: \t\t800000000000000000000001 /* Zed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Zed.swift */; };",
         "+30: \t\t800000000000000000000002 /* Zed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Zed.swift; sourceTree = \"<group>\"; };",
         "-44: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
-        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, )\t\t\t\t800000000000000000000002 /* Zed.swift */,",
-        "+45: ; path = FlagParityTarget; sourceTree = \"<group>\"; };",
-        "+92: \t\t\t\t800000000000000000000001 /* Zed.swift in Sources */,"
+        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, 800000000000000000000002 /* Zed.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "-92: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };",
+        "+93: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, 800000000000000000000001 /* Zed.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };"
       ]
     },
     "writer removeSwiftFileFromPbxproj Covered.swift": {
       "lint": "OK",
       "diff": [
         "-25: \t\tAA0000000000000000000001 /* Covered.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* Covered.swift */; };",
-        "-30: \t\tAA0000000000000000000002 /* Covered.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Covered.swift; sourceTree = \"<group>\"; };"
+        "-30: \t\tAA0000000000000000000002 /* Covered.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Covered.swift; sourceTree = \"<group>\"; };",
+        "-44: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "-92: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };",
+        "+93: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };"
       ]
     },
     "writer updateBuildSetting SWIFT_VERSION": {

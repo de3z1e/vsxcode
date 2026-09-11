@@ -50,7 +50,7 @@ export function parseVersionGroups(pbxContents: string): XCVersionGroupInfo[] {
 
     const groups: XCVersionGroupInfo[] = [];
     for (const { id, object } of index.objectsOfIsa('XCVersionGroup')) {
-        // Writers splice by these offsets, so an entry the text walk can't place is left out rather than guessed at.
+        // An entry the text walk can't place is left out rather than given guessed offsets.
         const location = locateObject(pbxContents, id);
         if (!location) { continue; }
         groups.push({

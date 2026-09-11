@@ -8,6 +8,8 @@ export interface ProjectObject {
 
 export interface ProjectIndex {
     objects: Readonly<Record<string, ProjectObject>>;
+    /** Every object id, in the order the project file defines them. */
+    ids: readonly string[];
     /** The root PBXProject object. */
     project: ProjectObject | undefined;
     mainGroupId: string | undefined;
@@ -55,6 +57,7 @@ function buildIndex(contents: string): ProjectIndex | ProjectReadError {
     const byIsa = new Map<string, { id: string; object: ProjectObject }[]>();
     return {
         objects,
+        ids: order,
         project,
         mainGroupId: stringValue(project?.mainGroup),
         object: (id) => (typeof id === 'string' && Object.prototype.hasOwnProperty.call(objects, id) ? objects[id] : undefined),
@@ -86,52 +89,55 @@ function objectOrder(contents: string, objects: Record<string, ProjectObject>): 
     return ids.sort();
 }
 
+/** What Xcode shows for a file or group: its `name`, else the last component of its `path`; empty when it has neither. */
+export function displayName(object: ProjectObject | undefined): string {
+    const name = stringValue(object?.name);
+    if (name !== undefined) { return name; }
+    return stringValue(object?.path)?.split('/').pop() ?? '';
+}
+
+/** The PBXBuildFiles whose `fileRef` is the id, in definition order. */
+export function buildFilesFor(index: ProjectIndex, fileReferenceId: string): string[] {
+    return index.objectsOfIsa('PBXBuildFile')
+        .filter(({ object }) => object.fileRef === fileReferenceId)
+        .map(({ id }) => id);
+}
+
+/** The build phases whose `files` list holds the id, in definition order. */
+export function phasesOf(index: ProjectIndex, buildFileId: string): string[] {
+    return index.ids.filter((id) => {
+        const object = index.objects[id];
+        return (object.isa ?? '').endsWith('BuildPhase') && stringList(object.files).includes(buildFileId);
+    });
+}
+
+// ── Text locators ────────────────────────────────────────
+
 interface Token {
     /** A punctuation character, or `string` for quoted and bare values. */
     type: string;
     value: string;
     start: number;
+    /** Just past the token. */
+    end: number;
+}
+
+interface Tokenizer {
+    next(): Token | null;
+    expect(type: string): Token;
+    /** The next token, which must exist. */
+    value(): Token;
+    /** Skips the value `first` begins and returns its last token: `first` itself for a string, else the matching close. */
+    skipValue(first: Token): Token;
 }
 
 const WHITESPACE = new Set([' ', '\t', '\n', '\r']);
 const PUNCTUATION = new Set(['{', '}', '(', ')', '=', ';', ',']);
 
-/** Where one root `objects` entry sits in the project text. */
-export interface ObjectLocation {
-    /** The start of the entry's line. */
-    startIndex: number;
-    /** Just past the entry's `};`, any spaces or tabs after it, and its line break. */
-    endIndex: number;
-}
-
-/**
- * The keys of the root `objects` dictionary, in the order the OpenStep text defines them. Values are skipped by nesting
- * depth, so ids that reappear as keys further down (a project's TargetAttributes) are never counted.
- */
-export function definitionOrder(contents: string): string[] {
-    return walkObjects(contents).map((entry) => entry.id);
-}
-
-let lastLocatedContents: string | undefined;
-let lastLocations = new Map<string, ObjectLocation>();
-
-/** The offsets of one root `objects` entry; undefined when the id isn't an entry or the text can't be walked. */
-export function locateObject(contents: string, id: string): ObjectLocation | undefined {
-    if (contents !== lastLocatedContents) {
-        try {
-            lastLocations = new Map(walkObjects(contents).map((entry) => [entry.id, entry.location]));
-        } catch {
-            lastLocations = new Map();
-        }
-        lastLocatedContents = contents;
-    }
-    return lastLocations.get(id);
-}
-
-/** Every root `objects` entry with its offsets, in text order; throws where the text doesn't follow the grammar. */
-function walkObjects(contents: string): { id: string; location: ObjectLocation }[] {
+/** Tokens of the OpenStep text from `start`, past whitespace and comments; `expect`, `value` and `skipValue` throw where the text doesn't follow the grammar. */
+function tokenizer(contents: string, start: number): Tokenizer {
     const length = contents.length;
-    let position = 0;
+    let position = start;
 
     const next = (): Token | null => {
         for (;;) {
@@ -147,11 +153,11 @@ function walkObjects(contents: string): { id: string; location: ObjectLocation }
             }
         }
         if (position >= length) { return null; }
-        const start = position;
+        const tokenStart = position;
         const character = contents[position];
         if (PUNCTUATION.has(character)) {
             position++;
-            return { type: character, value: character, start };
+            return { type: character, value: character, start: tokenStart, end: position };
         }
         if (character === '"') {
             let value = '';
@@ -160,14 +166,14 @@ function walkObjects(contents: string): { id: string; location: ObjectLocation }
                 value += contents[position];
             }
             position++;
-            return { type: 'string', value, start };
+            return { type: 'string', value, start: tokenStart, end: position };
         }
         // A bare value ends only at whitespace, punctuation or a quote: plutil reads `foo//bar` as one value.
         while (position < length && !WHITESPACE.has(contents[position]) && !PUNCTUATION.has(contents[position]) &&
             contents[position] !== '"') {
             position++;
         }
-        return { type: 'string', value: contents.slice(start, position), start };
+        return { type: 'string', value: contents.slice(tokenStart, position), start: tokenStart, end: position };
     };
 
     const expect = (type: string): Token => {
@@ -178,45 +184,229 @@ function walkObjects(contents: string): { id: string; location: ObjectLocation }
         return token;
     };
 
-    const skipValue = (first: Token | null): number => {
-        if (!first) { throw new Error('missing value'); }
-        if (first.type === 'string') { return position; }
+    const value = (): Token => {
+        const token = next();
+        if (!token) { throw new Error('missing value'); }
+        return token;
+    };
+
+    const skipValue = (first: Token): Token => {
+        if (first.type === 'string') { return first; }
         if (first.type !== '{' && first.type !== '(') { throw new Error(`unexpected "${first.type}" at ${first.start}`); }
-        for (let depth = 1; depth > 0;) {
+        for (let depth = 1; ;) {
             const token = next();
             if (!token) { throw new Error('unterminated value'); }
             if (token.type === '{' || token.type === '(') {
                 depth++;
-            } else if (token.type === '}' || token.type === ')') {
-                depth--;
+            } else if ((token.type === '}' || token.type === ')') && --depth === 0) {
+                return token;
             }
         }
-        return position;
     };
 
-    expect('{');
+    return { next, expect, value, skipValue };
+}
+
+/** Where one root `objects` entry sits in the project text. */
+export interface ObjectLocation {
+    /** The start of the entry's line. */
+    startIndex: number;
+    /** Just past the entry's `};`, any spaces or tabs after it, and its line break. */
+    endIndex: number;
+}
+
+/** Where one entry of a list sits in the project text. */
+export interface ListEntryLocation {
+    id: string;
+    /** In a multi-line list, the start of the entry's line; in a single-line list, its token. */
+    startIndex: number;
+    /**
+     * In a multi-line list, just past the entry's `,`, any spaces or tabs, and one line break; in a single-line list, the
+     * next token: the following entry or `)`.
+     */
+    endIndex: number;
+}
+
+/** Where a list value sits in the project text. */
+export interface ListLocation {
+    /** Just past the list's `(`. */
+    openIndex: number;
+    /** At the list's `)`. */
+    closeIndex: number;
+    /** Whether a line break lies between `(` and the first entry, or `)` in an empty list. */
+    multiLine: boolean;
+    entries: ListEntryLocation[];
+}
+
+/** Where a dictionary value sits in the project text. */
+export interface DictionaryLocation {
+    /** Just past the dictionary's `{`. */
+    openIndex: number;
+    /** At the dictionary's `}`. */
+    closeIndex: number;
+}
+
+/**
+ * The keys of the root `objects` dictionary, in the order the OpenStep text defines them. Values are skipped by nesting
+ * depth, so ids that reappear as keys further down (a project's TargetAttributes) are never counted.
+ */
+export function definitionOrder(contents: string): string[] {
+    const walk = walked(contents);
+    if (walk.error) { throw walk.error; }
+    return walk.entries.map((entry) => entry.id);
+}
+
+/** The offsets of one root `objects` entry; undefined when the id isn't an entry or the text can't be walked. */
+export function locateObject(contents: string, id: string): ObjectLocation | undefined {
+    return walked(contents).byId.get(id)?.location;
+}
+
+/** Every root `objects` entry with its offsets, in text order; empty when the text can't be walked. */
+export function locateObjects(contents: string): ReadonlyArray<{ readonly id: string; readonly location: ObjectLocation }> {
+    return walked(contents).entries;
+}
+
+/** The offset of the `}` that closes the root `objects` dictionary; undefined when the text can't be walked. */
+export function locateObjectsClose(contents: string): number | undefined {
+    return walked(contents).objectsClose;
+}
+
+/**
+ * The owner's top-level `key = ( … );` list of strings, such as a group's `children` or a build phase's `files`;
+ * undefined for an unknown owner, a missing key, a value that isn't such a list, or text the walk can't follow.
+ */
+export function locateList(contents: string, ownerId: string, key: string): ListLocation | undefined {
+    const value = valueOf(contents, ownerId, key);
+    if (!value || value.first.type !== '(') { return undefined; }
+    const listed = listItems(value.tokens);
+    if (!listed) { return undefined; }
+    const { items, close } = listed;
+    const open = value.first;
+    const multiLine = contents.slice(open.end, items.length > 0 ? items[0].token.start : close.start).includes('\n');
+    const entries = items.map(({ token, comma }, position): ListEntryLocation => ({
+        id: token.value,
+        startIndex: multiLine ? lineStart(contents, token.start) : token.start,
+        endIndex: multiLine
+            ? pastLineBreak(contents, (comma ?? token).end)
+            : position + 1 < items.length ? items[position + 1].token.start : close.start
+    }));
+    return { openIndex: open.end, closeIndex: close.start, multiLine, entries };
+}
+
+/** The first entry of the owner's `key` list whose id is `entryId`; undefined when there's none. */
+export function locateListEntry(contents: string, ownerId: string, key: string, entryId: string): ListEntryLocation | undefined {
+    return locateList(contents, ownerId, key)?.entries.find((entry) => entry.id === entryId);
+}
+
+/** The owner's top-level `key = { … };` dictionary, such as a configuration's `buildSettings`; undefined when there's none. */
+export function locateDictionary(contents: string, ownerId: string, key: string): DictionaryLocation | undefined {
+    const value = valueOf(contents, ownerId, key);
+    if (!value || value.first.type !== '{') { return undefined; }
+    try {
+        return { openIndex: value.first.end, closeIndex: value.tokens.skipValue(value.first).start };
+    } catch {
+        return undefined;
+    }
+}
+
+interface WalkedObject {
+    id: string;
+    location: ObjectLocation;
+    /** Where the entry's value, its `{`, starts. */
+    valueStart: number;
+}
+
+interface Walk {
+    entries: WalkedObject[];
+    byId: Map<string, WalkedObject>;
+    objectsClose: number | undefined;
+    /** Why the text couldn't be walked, when it couldn't; the walk is then empty. */
+    error?: Error;
+}
+
+let lastWalkedContents: string | undefined;
+let lastWalk: Walk = { entries: [], byId: new Map(), objectsClose: undefined };
+
+/** The walk of `contents`, reused while callers pass the same contents. */
+function walked(contents: string): Walk {
+    if (contents !== lastWalkedContents) {
+        try {
+            const { entries, objectsClose } = walkObjects(contents);
+            lastWalk = { entries, byId: new Map(entries.map((entry) => [entry.id, entry])), objectsClose };
+        } catch (error) {
+            lastWalk = { entries: [], byId: new Map(), objectsClose: undefined, error: error instanceof Error ? error : new Error(String(error)) };
+        }
+        lastWalkedContents = contents;
+    }
+    return lastWalk;
+}
+
+/** Every root `objects` entry with its offsets, in text order, and where `objects` closes; throws where the text doesn't follow the grammar. */
+function walkObjects(contents: string): { entries: WalkedObject[]; objectsClose: number | undefined } {
+    const tokens = tokenizer(contents, 0);
+    tokens.expect('{');
     for (;;) {
-        const key = next();
-        if (!key || key.type === '}') { return []; }
-        expect('=');
-        const value = next();
-        if (key.type === 'string' && key.value === 'objects' && value?.type === '{') {
-            const entries: { id: string; location: ObjectLocation }[] = [];
+        const key = tokens.next();
+        if (!key || key.type === '}') { return { entries: [], objectsClose: undefined }; }
+        tokens.expect('=');
+        const value = tokens.value();
+        if (key.type === 'string' && key.value === 'objects' && value.type === '{') {
+            const entries: WalkedObject[] = [];
             for (;;) {
-                const objectKey = next();
+                const objectKey = tokens.next();
                 if (!objectKey) { throw new Error('unterminated objects dictionary'); }
-                if (objectKey.type === '}') { return entries; }
-                expect('=');
-                const valueEnd = skipValue(next());
-                expect(';');
+                if (objectKey.type === '}') { return { entries, objectsClose: objectKey.start }; }
+                tokens.expect('=');
+                const objectValue = tokens.value();
+                tokens.skipValue(objectValue);
+                const semicolon = tokens.expect(';');
                 entries.push({
                     id: objectKey.value,
-                    location: { startIndex: lineStart(contents, objectKey.start), endIndex: entryEnd(contents, valueEnd) }
+                    location: { startIndex: lineStart(contents, objectKey.start), endIndex: pastLineBreak(contents, semicolon.end) },
+                    valueStart: objectValue.start
                 });
             }
         }
-        skipValue(value);
-        expect(';');
+        tokens.skipValue(value);
+        tokens.expect(';');
+    }
+}
+
+/** A tokenizer just past the first token of the owner's top-level `key` value, and that token; undefined when there's none. */
+function valueOf(contents: string, ownerId: string, key: string): { tokens: Tokenizer; first: Token } | undefined {
+    const owner = walked(contents).byId.get(ownerId);
+    if (!owner) { return undefined; }
+    const tokens = tokenizer(contents, owner.valueStart);
+    try {
+        tokens.expect('{');
+        for (;;) {
+            const keyToken = tokens.next();
+            if (!keyToken || keyToken.type === '}') { return undefined; }
+            tokens.expect('=');
+            const first = tokens.value();
+            if (keyToken.type === 'string' && keyToken.value === key) { return { tokens, first }; }
+            tokens.skipValue(first);
+            tokens.expect(';');
+        }
+    } catch {
+        return undefined;
+    }
+}
+
+/** A list's string items, each with the `,` after it when there is one, through its `)`; undefined for anything else. */
+function listItems(tokens: Tokenizer): { items: { token: Token; comma: Token | undefined }[]; close: Token } | undefined {
+    const items: { token: Token; comma: Token | undefined }[] = [];
+    for (;;) {
+        const token = tokens.next();
+        if (token?.type === ')') { return { items, close: token }; }
+        if (token?.type !== 'string') { return undefined; }
+        const after = tokens.next();
+        if (after?.type === ')') {
+            items.push({ token, comma: undefined });
+            return { items, close: after };
+        }
+        if (after?.type !== ',') { return undefined; }
+        items.push({ token, comma: after });
     }
 }
 
@@ -227,9 +417,9 @@ function lineStart(contents: string, offset: number): number {
     return start;
 }
 
-function entryEnd(contents: string, valueEnd: number): number {
-    let index = valueEnd;
-    if (contents[index] === ';') { index += 1; }
+/** `offset` moved past any spaces or tabs and one line break. */
+function pastLineBreak(contents: string, offset: number): number {
+    let index = offset;
     while (contents[index] === ' ' || contents[index] === '\t') { index += 1; }
     if (contents[index] === '\r') { index += 1; }
     if (contents[index] === '\n') { index += 1; }

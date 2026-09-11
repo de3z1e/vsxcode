@@ -1,12 +1,21 @@
 import * as crypto from 'crypto';
 
-import { cleanup } from '../utils/version';
 import {
-    findVersionGroupSection,
-    parseVersionGroups,
-    VERSION_GROUP_SECTION_BEGIN,
-    VERSION_GROUP_SECTION_END
-} from '../parsers/versionGroups';
+    buildFilesFor,
+    displayName,
+    locateDictionary,
+    locateList,
+    locateListEntry,
+    locateObject,
+    locateObjects,
+    locateObjectsClose,
+    phasesOf,
+    readProject,
+    stringList,
+    stringValue
+} from '../parsers/projectIndex';
+import type { ListEntryLocation, ProjectIndex } from '../parsers/projectIndex';
+import { VERSION_GROUP_SECTION_BEGIN, VERSION_GROUP_SECTION_END } from '../parsers/versionGroups';
 
 // ── ID Generation ────────────────────────────────────────
 
@@ -38,45 +47,126 @@ function formatPath(fileName: string): string {
     return needsQuoting(fileName) ? `"${fileName}"` : fileName;
 }
 
-function extractCommentName(line: string): string | null {
-    const match = /\/\*\s*([^*]+?)\s*\*\//.exec(line);
-    return match ? match[1] : null;
+/** An object id as written in the file: quoted when it needs it, as a path is. */
+const formatId = formatPath;
+
+/** One writer call: the text as it changes, and what was read from the call's input. */
+interface Edit {
+    contents: string;
+    /** Read once, on the call's input; offsets always come from `contents`. */
+    index: ProjectIndex;
+    /** Whether the file uses section markers, in which case comments are written. */
+    commented: boolean;
+    /** Display names of objects inserted during the call, which the index doesn't know. */
+    insertedNames: Map<string, string>;
 }
 
-/** Extract leading whitespace from the first line containing a pbxproj ID. */
-function detectIndent(lines: string[], fallback: string): string {
-    for (const line of lines) {
-        const m = /^(\s+)[A-F0-9]{24}\s/.exec(line);
-        if (m) { return m[1]; }
+const SECTION_MARKER = /^\/\* Begin [A-Za-z]+ section \*\//m;
+
+/** Starts an edit; null when plutil can't read the text, which writers then leave unchanged. */
+function beginEdit(pbxContents: string): Edit | null {
+    const index = readProject(pbxContents);
+    if (typeof index === 'string') { return null; }
+    return { contents: pbxContents, index, commented: SECTION_MARKER.test(pbxContents), insertedNames: new Map() };
+}
+
+function comment(edit: Edit, text: string): string {
+    return edit.commented ? ` /* ${text} */` : '';
+}
+
+function splice(edit: Edit, start: number, end: number, insert: string): void {
+    edit.contents = edit.contents.slice(0, start) + insert + edit.contents.slice(end);
+}
+
+/** `offset` moved back over the spaces and tabs before it, when only those precede it on its line. */
+function lineStartIfBlank(contents: string, offset: number): number {
+    let start = offset;
+    while (start > 0 && (contents[start - 1] === ' ' || contents[start - 1] === '\t')) { start--; }
+    return start === 0 || contents[start - 1] === '\n' ? start : offset;
+}
+
+/** The spaces and tabs at `start`, the indentation of the line it begins. */
+function indentAt(contents: string, start: number): string {
+    let end = start;
+    while (contents[end] === ' ' || contents[end] === '\t') { end++; }
+    return contents.slice(start, end);
+}
+
+interface Section {
+    /** Offset of the `/* Begin … *\/` marker. */
+    beginIndex: number;
+    /** Offset of the `/* End … *\/` marker, where the section's entries stop. */
+    bodyEnd: number;
+}
+
+function findSection(contents: string, isa: string): Section | null {
+    const beginIndex = contents.indexOf(`/* Begin ${isa} section */`);
+    if (beginIndex === -1) { return null; }
+    const bodyEnd = contents.indexOf(`/* End ${isa} section */`, beginIndex);
+    return bodyEnd === -1 ? null : { beginIndex, bodyEnd };
+}
+
+/** Indentation of the entries in `isa`'s section; of any entry when the file has no such section; else two tabs. */
+function objectIndent(contents: string, isa: string): string {
+    const entries = locateObjects(contents);
+    const section = findSection(contents, isa);
+    const sample = section
+        ? entries.find(({ location }) => location.startIndex > section.beginIndex && location.startIndex < section.bodyEnd)
+        : entries[0];
+    return sample ? indentAt(contents, sample.location.startIndex) : '\t\t';
+}
+
+/** Offset just past the last `/* End <isa> section *\/` line, where a section that sorts last belongs. */
+function findLastSectionEnd(pbxContents: string): number {
+    const markerRegex = /^\/\* End [A-Za-z]+ section \*\/[ \t]*\r?\n/gm;
+    let insertAt = -1;
+    let match: RegExpExecArray | null;
+    while ((match = markerRegex.exec(pbxContents)) !== null) {
+        insertAt = match.index + match[0].length;
     }
-    return fallback;
+    return insertAt;
 }
 
-/** Find the insertion offset within a pbxproj section to maintain ascending ID order. */
-function findIdOrderInsertOffset(
-    pbxContents: string,
-    sectionStartIdx: number,
-    sectionEndIdx: number,
-    newId: string
-): number {
-    const sectionBody = pbxContents.slice(sectionStartIdx, sectionEndIdx);
-    const lines = sectionBody.split('\n');
-    const idPattern = /^\s*([A-F0-9]{24})\s/;
-
-    let offset = sectionStartIdx;
-    for (const line of lines) {
-        const match = idPattern.exec(line);
-        if (match && match[1] > newId) {
-            return offset;
+/** In its isa's section by id order; else a new section in isa order, in Xcode's blank-line layout; else before `objects` closes. */
+function insertObject(edit: Edit, isa: string, id: string, entry: string): void {
+    const contents = edit.contents;
+    const section = findSection(contents, isa);
+    if (section) {
+        // The section's entries as the text holds them now, so earlier edits in this call are accounted for.
+        const next = locateObjects(contents).find(({ id: other, location }) =>
+            location.startIndex > section.beginIndex && location.startIndex < section.bodyEnd && other > id);
+        const at = next ? next.location.startIndex : section.bodyEnd;
+        splice(edit, at, at, entry);
+        return;
+    }
+    if (edit.commented) {
+        const following = [...contents.matchAll(/^\/\* Begin ([A-Za-z]+) section \*\/[ \t]*\r?\n/gm)]
+            .find((match) => match[1] > isa);
+        if (following?.index !== undefined) {
+            splice(edit, following.index, following.index, `/* Begin ${isa} section */\n${entry}/* End ${isa} section */\n\n`);
+            return;
         }
-        offset += line.length + 1;
+        const lastEnd = findLastSectionEnd(contents);
+        if (lastEnd !== -1) {
+            splice(edit, lastEnd, lastEnd, `\n/* Begin ${isa} section */\n${entry}/* End ${isa} section */\n`);
+            return;
+        }
     }
-    return sectionEndIdx;
+    const close = locateObjectsClose(contents);
+    if (close === undefined) { return; }
+    const at = lineStartIfBlank(contents, close);
+    splice(edit, at, at, entry);
+}
+
+/** Removes an object definition, whole. */
+function removeObject(edit: Edit, id: string): void {
+    const location = locateObject(edit.contents, id);
+    if (location) { splice(edit, location.startIndex, location.endIndex, ''); }
 }
 
 /** Comparable-entry filter matching the .swift children `addToGroup` sorts among by default. */
-function isSwiftEntry(commentName: string): boolean {
-    return commentName.endsWith('.swift') || commentName.includes('.swift ');
+function isSwiftEntry(name: string): boolean {
+    return name.endsWith('.swift') || name.includes('.swift ');
 }
 
 /** Comparable-entry filter that sorts among every named child, the way Xcode orders a group. */
@@ -84,41 +174,82 @@ export function anyEntry(): boolean {
     return true;
 }
 
-/** Find the alphabetical insertion offset among the entries `comparable` accepts. */
-function findAlphabeticalInsertOffset(
-    lines: string[],
-    baseOffset: number,
-    defaultOffset: number,
-    fileName: string,
-    comparable: (commentName: string) => boolean
-): number {
-    let lastComparableLineEnd = -1;
-    for (let i = 0; i < lines.length; i++) {
-        const commentName = extractCommentName(lines[i]);
-        if (!commentName) { continue; }
-        if (!comparable(commentName)) { continue; }
+/** With `comparable`, sorts case-insensitively by display name among accepted, named entries; otherwise, or when none are, appends. */
+function insertListEntry(
+    edit: Edit,
+    ownerId: string,
+    key: string,
+    entryId: string,
+    entryComment: string,
+    name: string,
+    comparable: ((name: string) => boolean) | null
+): void {
+    const list = locateList(edit.contents, ownerId, key);
+    if (!list) { return; }
 
-        if (commentName.localeCompare(fileName, undefined, { sensitivity: 'base' }) > 0) {
-            // Insert before this entry
-            let offset = baseOffset;
-            for (let j = 0; j < i; j++) {
-                offset += lines[j].length + 1;
+    let at: number | undefined;
+    if (comparable) {
+        let lastBefore: ListEntryLocation | undefined;
+        for (const entry of list.entries) {
+            const entryName = edit.insertedNames.get(entry.id) ?? displayName(edit.index.object(entry.id));
+            if (entryName === '' || !comparable(entryName)) { continue; }
+            if (entryName.localeCompare(name, undefined, { sensitivity: 'base' }) > 0) {
+                at = entry.startIndex;
+                break;
             }
-            return offset;
+            lastBefore = entry;
         }
-
-        // Track the end of this line as fallback insertion point
-        let offset = baseOffset;
-        for (let j = 0; j <= i; j++) {
-            offset += lines[j].length + 1;
-        }
-        lastComparableLineEnd = offset;
+        if (at === undefined && lastBefore) { at = lastBefore.endIndex; }
     }
-    // Insert after the last comparable entry, or fall back to end
-    return lastComparableLineEnd !== -1 ? lastComparableLineEnd : defaultOffset;
+
+    const text = `${formatId(entryId)}${comment(edit, entryComment)}`;
+    if (list.multiLine) {
+        const indent = list.entries.length > 0 ? indentAt(edit.contents, list.entries[0].startIndex) : '\t\t\t\t';
+        const position = at ?? lineStartIfBlank(edit.contents, list.closeIndex);
+        splice(edit, position, position, `${indent}${text},\n`);
+    } else {
+        const position = at ?? list.closeIndex;
+        splice(edit, position, position, `${text}, `);
+    }
+}
+
+type ListKey = 'children' | 'files';
+
+/** Removes `id` from every `children` list, or every build phase's `files` list, that holds it per the call's index. */
+function removeFromLists(edit: Edit, id: string, key: ListKey): void {
+    const owners = key === 'files'
+        ? phasesOf(edit.index, id)
+        : edit.index.ids.filter((ownerId) => stringList(edit.index.objects[ownerId].children).includes(id));
+    for (const ownerId of owners) {
+        // Once per listing, in case a list names the id more than once.
+        const listings = stringList(edit.index.objects[ownerId][key]).filter((entryId) => entryId === id).length;
+        for (let removed = 0; removed < listings; removed++) {
+            const entry = locateListEntry(edit.contents, ownerId, key, id);
+            if (!entry) { break; }
+            splice(edit, entry.startIndex, entry.endIndex, '');
+        }
+    }
+}
+
+/** The first PBXFileReference, in definition order, whose display name is `fileName`. */
+function fileReferenceNamed(index: ProjectIndex, fileName: string): string | undefined {
+    return index.objectsOfIsa('PBXFileReference').find(({ object }) => displayName(object) === fileName)?.id;
 }
 
 // ── Adding a File ────────────────────────────────────────
+
+function addFileReferenceTo(edit: Edit, fileRefId: string, fileName: string, lastKnownFileType: string): void {
+    const indent = objectIndent(edit.contents, 'PBXFileReference');
+    const entry = `${indent}${formatId(fileRefId)}${comment(edit, fileName)} = {isa = PBXFileReference; lastKnownFileType = ${lastKnownFileType}; path = ${formatPath(fileName)}; sourceTree = "<group>"; };\n`;
+    insertObject(edit, 'PBXFileReference', fileRefId, entry);
+    edit.insertedNames.set(fileRefId, fileName);
+}
+
+function addBuildFileTo(edit: Edit, buildFileId: string, fileRefId: string, fileName: string): void {
+    const indent = objectIndent(edit.contents, 'PBXBuildFile');
+    const entry = `${indent}${formatId(buildFileId)}${comment(edit, `${fileName} in Sources`)} = {isa = PBXBuildFile; fileRef = ${formatId(fileRefId)}${comment(edit, fileName)}; };\n`;
+    insertObject(edit, 'PBXBuildFile', buildFileId, entry);
+}
 
 export function addFileReference(
     pbxContents: string,
@@ -126,21 +257,10 @@ export function addFileReference(
     fileName: string,
     lastKnownFileType: string = 'sourcecode.swift'
 ): string {
-    const endMarker = '/* End PBXFileReference section */';
-    const endIdx = pbxContents.indexOf(endMarker);
-    if (endIdx === -1) { return pbxContents; }
-
-    const startMarker = '/* Begin PBXFileReference section */';
-    const startIdx = pbxContents.indexOf(startMarker);
-    if (startIdx === -1) { return pbxContents; }
-
-    const sectionBody = pbxContents.slice(startIdx, endIdx);
-    const lines = sectionBody.split('\n');
-    const indent = detectIndent(lines.slice(1), '\t\t');
-
-    const entry = `${indent}${fileRefId} /* ${fileName} */ = {isa = PBXFileReference; lastKnownFileType = ${lastKnownFileType}; path = ${formatPath(fileName)}; sourceTree = "<group>"; };\n`;
-    const insertAt = findIdOrderInsertOffset(pbxContents, startIdx, endIdx, fileRefId);
-    return pbxContents.slice(0, insertAt) + entry + pbxContents.slice(insertAt);
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    addFileReferenceTo(edit, fileRefId, fileName, lastKnownFileType);
+    return edit.contents;
 }
 
 export function addBuildFile(
@@ -149,21 +269,10 @@ export function addBuildFile(
     fileRefId: string,
     fileName: string
 ): string {
-    const endMarker = '/* End PBXBuildFile section */';
-    const endIdx = pbxContents.indexOf(endMarker);
-    if (endIdx === -1) { return pbxContents; }
-
-    const startMarker = '/* Begin PBXBuildFile section */';
-    const startIdx = pbxContents.indexOf(startMarker);
-    if (startIdx === -1) { return pbxContents; }
-
-    const sectionBody = pbxContents.slice(startIdx, endIdx);
-    const lines = sectionBody.split('\n');
-    const indent = detectIndent(lines.slice(1), '\t\t');
-
-    const entry = `${indent}${buildFileId} /* ${fileName} in Sources */ = {isa = PBXBuildFile; fileRef = ${fileRefId} /* ${fileName} */; };\n`;
-    const insertAt = findIdOrderInsertOffset(pbxContents, startIdx, endIdx, buildFileId);
-    return pbxContents.slice(0, insertAt) + entry + pbxContents.slice(insertAt);
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    addBuildFileTo(edit, buildFileId, fileRefId, fileName);
+    return edit.contents;
 }
 
 export function addToGroup(
@@ -171,31 +280,12 @@ export function addToGroup(
     groupId: string,
     fileRefId: string,
     fileName: string,
-    comparable: (commentName: string) => boolean = isSwiftEntry
+    comparable: (name: string) => boolean = isSwiftEntry
 ): string {
-    // Find the group entry by its ID
-    const groupPattern = new RegExp(
-        groupId + '\\s*(?:\\/\\*[^*]*\\*\\/\\s*)?=\\s*\\{[\\s\\S]*?children\\s*=\\s*\\('
-    );
-    const groupMatch = groupPattern.exec(pbxContents);
-    if (!groupMatch) { return pbxContents; }
-
-    const childrenStart = groupMatch.index + groupMatch[0].length;
-
-    // Find the closing paren of children = (...)
-    const closingParenIdx = pbxContents.indexOf(')', childrenStart);
-    if (closingParenIdx === -1) { return pbxContents; }
-
-    const childrenBlock = pbxContents.slice(childrenStart, closingParenIdx);
-    const childLines = childrenBlock.split('\n');
-    const indent = detectIndent(childLines, '\t\t\t\t');
-    const newEntry = `${indent}${fileRefId} /* ${fileName} */,\n`;
-
-    // Default insertion: before the newline that precedes the closing )
-    const lastNewline = pbxContents.lastIndexOf('\n', closingParenIdx);
-    const defaultInsert = lastNewline !== -1 ? lastNewline + 1 : closingParenIdx;
-    const insertOffset = findAlphabeticalInsertOffset(childLines, childrenStart, defaultInsert, fileName, comparable);
-    return pbxContents.slice(0, insertOffset) + newEntry + pbxContents.slice(insertOffset);
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    insertListEntry(edit, groupId, 'children', fileRefId, fileName, fileName, comparable);
+    return edit.contents;
 }
 
 export function addToSourcesBuildPhase(
@@ -204,26 +294,10 @@ export function addToSourcesBuildPhase(
     buildFileId: string,
     fileName: string
 ): string {
-    // Find the Sources build phase by its ID
-    const phasePattern = new RegExp(
-        sourcesBuildPhaseId + '\\s*(?:\\/\\*[^*]*\\*\\/\\s*)?=\\s*\\{[\\s\\S]*?files\\s*=\\s*\\('
-    );
-    const phaseMatch = phasePattern.exec(pbxContents);
-    if (!phaseMatch) { return pbxContents; }
-
-    const filesStart = phaseMatch.index + phaseMatch[0].length;
-    const closingParenIdx = pbxContents.indexOf(')', filesStart);
-    if (closingParenIdx === -1) { return pbxContents; }
-
-    const filesBlock = pbxContents.slice(filesStart, closingParenIdx);
-    const fileLines = filesBlock.split('\n');
-    const indent = detectIndent(fileLines, '\t\t\t\t');
-    const newEntry = `${indent}${buildFileId} /* ${fileName} in Sources */,\n`;
-
-    // Insert before the newline that precedes the closing ), not at ) itself
-    const lastNewline = pbxContents.lastIndexOf('\n', closingParenIdx);
-    const insertAt = lastNewline !== -1 ? lastNewline + 1 : closingParenIdx;
-    return pbxContents.slice(0, insertAt) + newEntry + pbxContents.slice(insertAt);
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    insertListEntry(edit, sourcesBuildPhaseId, 'files', buildFileId, `${fileName} in Sources`, fileName, null);
+    return edit.contents;
 }
 
 export function addSwiftFileToPbxproj(
@@ -232,31 +306,29 @@ export function addSwiftFileToPbxproj(
     groupId: string,
     sourcesBuildPhaseId: string
 ): string {
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
     const existingIds = collectExistingIds(pbxContents);
     const buildFileId = generateUniqueId(existingIds);
     existingIds.add(buildFileId);
     const fileRefId = generateUniqueId(existingIds);
 
-    let result = pbxContents;
-    result = addBuildFile(result, buildFileId, fileRefId, fileName);
-    result = addFileReference(result, fileRefId, fileName);
-    result = addToGroup(result, groupId, fileRefId, fileName);
-    result = addToSourcesBuildPhase(result, sourcesBuildPhaseId, buildFileId, fileName);
-    return result;
+    addBuildFileTo(edit, buildFileId, fileRefId, fileName);
+    addFileReferenceTo(edit, fileRefId, fileName, 'sourcecode.swift');
+    insertListEntry(edit, groupId, 'children', fileRefId, fileName, fileName, isSwiftEntry);
+    insertListEntry(edit, sourcesBuildPhaseId, 'files', buildFileId, `${fileName} in Sources`, fileName, null);
+    return edit.contents;
 }
 
 // ── Finding entries for removal ──────────────────────────
 
+/** The first PBXFileReference, in definition order, whose display name (`name`, else the path's last component) is `fileName`. */
 export function findFileReferenceId(
     pbxContents: string,
     fileName: string
 ): string | null {
-    const escaped = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = new RegExp(
-        `([A-F0-9]{24})\\s*\\/\\*\\s*${escaped}\\s*\\*\\/\\s*=\\s*\\{[^}]*isa\\s*=\\s*PBXFileReference`
-    );
-    const match = pattern.exec(pbxContents);
-    return match ? match[1] : null;
+    const index = readProject(pbxContents);
+    return typeof index === 'string' ? null : fileReferenceNamed(index, fileName) ?? null;
 }
 
 /** The `path` of a PBXFileReference, for checking a recorded entry against disk. */
@@ -264,23 +336,16 @@ export function findFileReferencePath(
     pbxContents: string,
     fileRefId: string
 ): string | null {
-    const pattern = new RegExp(
-        `^[\\t ]*${fileRefId}\\s*(?:\\/\\*[^*]*\\*\\/\\s*)?=\\s*\\{[^}]*\\bpath\\s*=\\s*([^;]+);`,
-        'm'
-    );
-    const match = pattern.exec(pbxContents);
-    return match ? cleanup(match[1]) : null;
+    const index = readProject(pbxContents);
+    return typeof index === 'string' ? null : stringValue(index.object(fileRefId)?.path) ?? null;
 }
 
 export function findBuildFileId(
     pbxContents: string,
     fileRefId: string
 ): string | null {
-    const pattern = new RegExp(
-        `([A-F0-9]{24})\\s*\\/\\*[^*]*\\*\\/\\s*=\\s*\\{[^}]*fileRef\\s*=\\s*${fileRefId}`
-    );
-    const match = pattern.exec(pbxContents);
-    return match ? match[1] : null;
+    const index = readProject(pbxContents);
+    return typeof index === 'string' ? null : buildFilesFor(index, fileRefId)[0] ?? null;
 }
 
 // ── Removing a File ──────────────────────────────────────
@@ -289,32 +354,40 @@ export function removeFileReference(
     pbxContents: string,
     fileRefId: string
 ): string {
-    const pattern = new RegExp(`^[\\t ]*${fileRefId}\\s*\\/\\*[^*]*\\*\\/\\s*=\\s*\\{[^}]*\\};\\s*\\n`, 'm');
-    return pbxContents.replace(pattern, '');
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    removeObject(edit, fileRefId);
+    return edit.contents;
 }
 
 export function removeBuildFile(
     pbxContents: string,
     buildFileId: string
 ): string {
-    const pattern = new RegExp(`^[\\t ]*${buildFileId}\\s*\\/\\*[^*]*\\*\\/\\s*=\\s*\\{[^}]*\\};\\s*\\n`, 'm');
-    return pbxContents.replace(pattern, '');
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    removeObject(edit, buildFileId);
+    return edit.contents;
 }
 
 export function removeFromGroup(
     pbxContents: string,
     fileRefId: string
 ): string {
-    const pattern = new RegExp(`^[\\t ]*${fileRefId}\\s*\\/\\*[^*]*\\*\\/,\\s*\\n`, 'gm');
-    return pbxContents.replace(pattern, '');
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    removeFromLists(edit, fileRefId, 'children');
+    return edit.contents;
 }
 
 export function removeFromSourcesBuildPhase(
     pbxContents: string,
     buildFileId: string
 ): string {
-    const pattern = new RegExp(`^[\\t ]*${buildFileId}\\s*\\/\\*[^*]*\\*\\/,\\s*\\n`, 'gm');
-    return pbxContents.replace(pattern, '');
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    removeFromLists(edit, buildFileId, 'files');
+    return edit.contents;
 }
 
 export function updateBuildSetting(
@@ -323,14 +396,10 @@ export function updateBuildSetting(
     key: string,
     value: string
 ): string {
-    // Match the XCBuildConfiguration block by its ID
-    const blockRegex = new RegExp(
-        `(${configId}\\s*/\\*[^*]*\\*/\\s*=\\s*\\{[^}]*buildSettings\\s*=\\s*\\{)((?:[^}]|\\}(?!;))*)(\\};\\s*name)`,
-    );
-    const blockMatch = blockRegex.exec(pbxContents);
-    if (!blockMatch) { return pbxContents; }
+    const block = locateDictionary(pbxContents, configId, 'buildSettings');
+    if (!block) { return pbxContents; }
 
-    const settingsBlock = blockMatch[2];
+    const settingsBlock = pbxContents.slice(block.openIndex, block.closeIndex);
     const settingRegex = new RegExp(`([ \\t]*)${key} = [^;]*;`);
     const existingMatch = settingRegex.exec(settingsBlock);
 
@@ -351,28 +420,26 @@ export function updateBuildSetting(
         }
     }
 
-    return pbxContents.slice(0, blockMatch.index) +
-        blockMatch[1] + newSettings + blockMatch[3] +
-        pbxContents.slice(blockMatch.index + blockMatch[0].length);
+    return pbxContents.slice(0, block.openIndex) + newSettings + pbxContents.slice(block.closeIndex);
 }
 
 export function removeSwiftFileFromPbxproj(
     pbxContents: string,
     fileName: string
 ): string | null {
-    const fileRefId = findFileReferenceId(pbxContents, fileName);
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return null; }
+    const fileRefId = fileReferenceNamed(edit.index, fileName);
     if (!fileRefId) { return null; }
 
-    const buildFileId = findBuildFileId(pbxContents, fileRefId);
-
-    let result = pbxContents;
-    if (buildFileId) {
-        result = removeFromSourcesBuildPhase(result, buildFileId);
-        result = removeBuildFile(result, buildFileId);
+    // A file compiled by several targets has one build file per target, so drain them all.
+    for (const buildFileId of buildFilesFor(edit.index, fileRefId)) {
+        removeFromLists(edit, buildFileId, 'files');
+        removeObject(edit, buildFileId);
     }
-    result = removeFromGroup(result, fileRefId);
-    result = removeFileReference(result, fileRefId);
-    return result;
+    removeFromLists(edit, fileRefId, 'children');
+    removeObject(edit, fileRefId);
+    return edit.contents;
 }
 
 // ── Core Data Models (XCVersionGroup) ────────────────────
@@ -390,15 +457,14 @@ function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Indent used by object entries elsewhere in the file, so a new section matches its style. */
-function detectSectionIndent(pbxContents: string): string {
-    const startIdx = pbxContents.indexOf('/* Begin PBXFileReference section */');
-    const endIdx = pbxContents.indexOf('/* End PBXFileReference section */');
-    if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) { return '\t\t'; }
-    return detectIndent(pbxContents.slice(startIdx, endIdx).split('\n').slice(1), '\t\t');
-}
+// An empty section is invalid for Xcode to round-trip, so a removal takes the markers with the last entry.
+const EMPTY_VERSION_GROUP_SECTION = new RegExp(
+    `(?:(?<=\\n)\\r?\\n)?${escapeRegExp(VERSION_GROUP_SECTION_BEGIN)}[ \\t]*\\r?\\n` +
+    `${escapeRegExp(VERSION_GROUP_SECTION_END)}[ \\t]*\\r?\\n`
+);
 
 function formatVersionGroupEntry(
+    edit: Edit,
     versionGroupId: string,
     bundleName: string,
     versions: DataModelVersion[],
@@ -410,16 +476,16 @@ function formatVersionGroupEntry(
     const inner = indent + '\t';
     const child = inner + '\t';
     const lines = [
-        `${indent}${versionGroupId} /* ${bundleName} */ = {`,
+        `${indent}${formatId(versionGroupId)}${comment(edit, bundleName)} = {`,
         `${inner}isa = XCVersionGroup;`,
         `${inner}children = (`,
-        ...versions.map((version) => `${child}${version.id} /* ${version.name} */,`),
+        ...versions.map((version) => `${child}${formatId(version.id)}${comment(edit, version.name)},`),
         `${inner});`
     ];
 
     const current = versions.find((version) => version.id === currentVersionId);
     if (current) {
-        lines.push(`${inner}currentVersion = ${current.id} /* ${current.name} */;`);
+        lines.push(`${inner}currentVersion = ${formatId(current.id)}${comment(edit, current.name)};`);
     }
     if (name !== undefined) {
         lines.push(`${inner}name = ${formatPath(name)};`);
@@ -433,15 +499,28 @@ function formatVersionGroupEntry(
     return lines.join('\n') + '\n';
 }
 
-/** Offset just past the last `/* End <isa> section *\/` line, where a new section belongs. */
-function findLastSectionEnd(pbxContents: string): number {
-    const markerRegex = /^\/\* End [A-Za-z]+ section \*\/[ \t]*\r?\n/gm;
-    let insertAt = -1;
-    let match: RegExpExecArray | null;
-    while ((match = markerRegex.exec(pbxContents)) !== null) {
-        insertAt = match.index + match[0].length;
-    }
-    return insertAt;
+function addVersionGroupTo(
+    edit: Edit,
+    versionGroupId: string,
+    bundleName: string,
+    versions: DataModelVersion[],
+    currentVersionId: string | undefined
+): void {
+    // Indented like the file references, the section a new XCVersionGroup section's entries would match.
+    const indent = objectIndent(edit.contents, 'PBXFileReference');
+    insertObject(edit, 'XCVersionGroup', versionGroupId,
+        formatVersionGroupEntry(edit, versionGroupId, bundleName, versions, currentVersionId, indent));
+    edit.insertedNames.set(versionGroupId, bundleName);
+}
+
+/** Removes an XCVersionGroup entry, and its section markers once the last entry is gone. False when it isn't one. */
+function removeVersionGroupFrom(edit: Edit, versionGroupId: string): boolean {
+    if (edit.index.object(versionGroupId)?.isa !== 'XCVersionGroup') { return false; }
+    const location = locateObject(edit.contents, versionGroupId);
+    if (!location) { return false; }
+    splice(edit, location.startIndex, location.endIndex, '');
+    edit.contents = edit.contents.replace(EMPTY_VERSION_GROUP_SECTION, '');
+    return true;
 }
 
 /** Insert an XCVersionGroup in ascending ID order, creating the section when the project has none. */
@@ -452,43 +531,18 @@ export function addVersionGroup(
     versions: DataModelVersion[],
     currentVersionId: string | undefined
 ): string {
-    const indent = detectSectionIndent(pbxContents);
-    const entry = formatVersionGroupEntry(versionGroupId, bundleName, versions, currentVersionId, indent);
-
-    const section = findVersionGroupSection(pbxContents);
-    if (!section) {
-        // XCVersionGroup sorts last among pbxproj isa sections, so append after the final one.
-        const insertAt = findLastSectionEnd(pbxContents);
-        if (insertAt === -1) { return pbxContents; }
-        const newSection =
-            `\n${VERSION_GROUP_SECTION_BEGIN}\n${entry}${VERSION_GROUP_SECTION_END}\n`;
-        return pbxContents.slice(0, insertAt) + newSection + pbxContents.slice(insertAt);
-    }
-
-    // Entries are multi-line, so order by parsed entry rather than by scanning lines for IDs.
-    let insertAt = section.bodyEnd;
-    for (const group of parseVersionGroups(pbxContents)) {
-        if (group.id > versionGroupId) {
-            insertAt = group.startIndex;
-            break;
-        }
-    }
-    return pbxContents.slice(0, insertAt) + entry + pbxContents.slice(insertAt);
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    addVersionGroupTo(edit, versionGroupId, bundleName, versions, currentVersionId);
+    return edit.contents;
 }
 
 /** Remove an XCVersionGroup entry, dropping the section markers once the last entry is gone. */
 export function removeVersionGroup(pbxContents: string, versionGroupId: string): string {
-    const target = parseVersionGroups(pbxContents).find((group) => group.id === versionGroupId);
-    if (!target) { return pbxContents; }
-
-    const result = pbxContents.slice(0, target.startIndex) + pbxContents.slice(target.endIndex);
-
-    // An empty section is invalid for Xcode to round-trip, so take the markers with it.
-    const emptySection = new RegExp(
-        `(?:(?<=\\n)\\r?\\n)?${escapeRegExp(VERSION_GROUP_SECTION_BEGIN)}[ \\t]*\\r?\\n` +
-        `${escapeRegExp(VERSION_GROUP_SECTION_END)}[ \\t]*\\r?\\n`
-    );
-    return result.replace(emptySection, '');
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    removeVersionGroupFrom(edit, versionGroupId);
+    return edit.contents;
 }
 
 /** Rewrite an XCVersionGroup's versions in place, so its id, section position, and every target's PBXBuildFile, group child, and Sources entry survive. */
@@ -499,37 +553,37 @@ export function updateVersionGroupVersions(
     currentVersionName: string | undefined
 ): string | null {
     if (versionNames.length === 0) { return null; }
-    const target = parseVersionGroups(pbxContents).find((group) => group.id === versionGroupId);
-    if (!target) { return null; }
+    const edit = beginEdit(pbxContents);
+    const group = edit?.index.object(versionGroupId);
+    if (!edit || group?.isa !== 'XCVersionGroup' || !locateObject(pbxContents, versionGroupId)) { return null; }
 
-    let result = pbxContents;
-    for (const childId of target.childIds) {
-        result = removeFileReference(result, childId);
+    for (const childId of stringList(group.children)) {
+        removeObject(edit, childId);
     }
 
-    const existingIds = collectExistingIds(result);
+    const existingIds = collectExistingIds(edit.contents);
     const versions: DataModelVersion[] = versionNames.map((name) => {
         const id = generateUniqueId(existingIds);
         existingIds.add(id);
         return { id, name };
     });
     for (const version of versions) {
-        result = addFileReference(result, version.id, version.name, DATA_MODEL_VERSION_FILE_TYPE);
+        addFileReferenceTo(edit, version.id, version.name, DATA_MODEL_VERSION_FILE_TYPE);
     }
     const current = versions.find((version) => version.name === currentVersionName) ?? versions[0];
 
-    // Offsets moved with the edits above, so relocate the entry before splicing.
-    const fresh = parseVersionGroups(result).find((group) => group.id === versionGroupId);
-    if (!fresh) { return null; }
-    const bundleName = fresh.path ?? fresh.name;
-    if (!bundleName) { return null; }
-    // The entry's identity fields survive verbatim; only children/currentVersion change.
-    const name = fresh.path !== undefined ? fresh.name : undefined;
+    // Offsets moved with the edits above; identity fields survive verbatim from the index, only children and currentVersion change.
+    const location = locateObject(edit.contents, versionGroupId);
+    const groupPath = stringValue(group.path);
+    const groupName = stringValue(group.name);
+    const bundleName = groupPath ?? groupName;
+    if (!location || !bundleName) { return null; }
     const entry = formatVersionGroupEntry(
-        versionGroupId, bundleName, versions, current.id, detectSectionIndent(result),
-        name, fresh.sourceTree ?? '<group>'
+        edit, versionGroupId, bundleName, versions, current.id, objectIndent(edit.contents, 'PBXFileReference'),
+        groupPath !== undefined ? groupName : undefined, stringValue(group.sourceTree) ?? '<group>'
     );
-    return result.slice(0, fresh.startIndex) + entry + result.slice(fresh.endIndex);
+    splice(edit, location.startIndex, location.endIndex, entry);
+    return edit.contents;
 }
 
 /** Move an XCVersionGroup's child entry to another PBXGroup, leaving every other structure alone. */
@@ -539,19 +593,22 @@ export function moveVersionGroupToGroup(
     newGroupId: string,
     bundleName: string
 ): string {
-    let result = removeFromGroup(pbxContents, versionGroupId);
-    result = addToGroup(result, newGroupId, versionGroupId, bundleName, anyEntry);
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
+    removeFromLists(edit, versionGroupId, 'children');
+    insertListEntry(edit, newGroupId, 'children', versionGroupId, bundleName, bundleName, anyEntry);
 
     // The new parent group maps to the bundle's own directory, so a path that
     // carried directory components must collapse to the plain bundle name or
     // the entry would resolve to a directory that no longer exists.
-    const target = parseVersionGroups(result).find((group) => group.id === versionGroupId);
-    if (target && target.path !== undefined && target.path !== bundleName) {
-        const entryText = result.slice(target.startIndex, target.endIndex)
+    const groupPath = stringValue(edit.index.object(versionGroupId)?.path);
+    const location = locateObject(edit.contents, versionGroupId);
+    if (location && groupPath !== undefined && groupPath !== bundleName) {
+        const entryText = edit.contents.slice(location.startIndex, location.endIndex)
             .replace(/(\bpath\s*=\s*)[^;]+;/, `$1${formatPath(bundleName)};`);
-        result = result.slice(0, target.startIndex) + entryText + result.slice(target.endIndex);
+        splice(edit, location.startIndex, location.endIndex, entryText);
     }
-    return result;
+    return edit.contents;
 }
 
 /** Register a `.xcdatamodeld` bundle: all five structures, in one pass. */
@@ -563,6 +620,8 @@ export function addDataModelToPbxproj(
     groupId: string,
     sourcesBuildPhaseId: string
 ): string {
+    const edit = beginEdit(pbxContents);
+    if (!edit) { return pbxContents; }
     const existingIds = collectExistingIds(pbxContents);
     const takeId = (): string => {
         const id = generateUniqueId(existingIds);
@@ -576,16 +635,15 @@ export function addDataModelToPbxproj(
     const currentVersion =
         versions.find((version) => version.name === currentVersionName) ?? versions[0];
 
-    let result = pbxContents;
     // The build file's fileRef is the XCVersionGroup — the bundle has no PBXFileReference of its own.
-    result = addBuildFile(result, buildFileId, versionGroupId, bundleName);
+    addBuildFileTo(edit, buildFileId, versionGroupId, bundleName);
     for (const version of versions) {
-        result = addFileReference(result, version.id, version.name, DATA_MODEL_VERSION_FILE_TYPE);
+        addFileReferenceTo(edit, version.id, version.name, DATA_MODEL_VERSION_FILE_TYPE);
     }
-    result = addToGroup(result, groupId, versionGroupId, bundleName, anyEntry);
-    result = addToSourcesBuildPhase(result, sourcesBuildPhaseId, buildFileId, bundleName);
-    result = addVersionGroup(result, versionGroupId, bundleName, versions, currentVersion?.id);
-    return result;
+    insertListEntry(edit, groupId, 'children', versionGroupId, bundleName, bundleName, anyEntry);
+    insertListEntry(edit, sourcesBuildPhaseId, 'files', buildFileId, `${bundleName} in Sources`, bundleName, null);
+    addVersionGroupTo(edit, versionGroupId, bundleName, versions, currentVersion?.id);
+    return edit.contents;
 }
 
 /** Unregister a `.xcdatamodeld` bundle; null when the XCVersionGroup is absent, so callers can tell "nothing to do" from "removed". */
@@ -593,26 +651,20 @@ export function removeDataModelFromPbxproj(
     pbxContents: string,
     versionGroupId: string
 ): string | null {
-    const target = parseVersionGroups(pbxContents).find((group) => group.id === versionGroupId);
-    if (!target) { return null; }
+    const edit = beginEdit(pbxContents);
+    const group = edit?.index.object(versionGroupId);
+    if (!edit || group?.isa !== 'XCVersionGroup' || !locateObject(pbxContents, versionGroupId)) { return null; }
 
-    let result = pbxContents;
     // A model shared by several targets has one PBXBuildFile per target, so drain them all.
-    const handled = new Set<string>();
-    for (
-        let buildFileId = findBuildFileId(result, versionGroupId);
-        buildFileId && !handled.has(buildFileId);
-        buildFileId = findBuildFileId(result, versionGroupId)
-    ) {
-        handled.add(buildFileId);
-        result = removeFromSourcesBuildPhase(result, buildFileId);
-        result = removeBuildFile(result, buildFileId);
+    for (const buildFileId of buildFilesFor(edit.index, versionGroupId)) {
+        removeFromLists(edit, buildFileId, 'files');
+        removeObject(edit, buildFileId);
     }
     // Drops the group child entry; the XCVersionGroup body is removed whole below.
-    result = removeFromGroup(result, versionGroupId);
-    result = removeVersionGroup(result, versionGroupId);
-    for (const childId of target.childIds) {
-        result = removeFileReference(result, childId);
+    removeFromLists(edit, versionGroupId, 'children');
+    removeVersionGroupFrom(edit, versionGroupId);
+    for (const childId of stringList(group.children)) {
+        removeObject(edit, childId);
     }
-    return result;
+    return edit.contents;
 }

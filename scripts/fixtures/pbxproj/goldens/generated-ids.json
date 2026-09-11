@@ -184,26 +184,94 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": true,
-    "usesXcodeObjectIds": false,
     "parseFrameworksBuildPhase OBJ_17": [],
     "parseLinkedFrameworksForTarget OBJ_17": [],
-    "findFileReferenceId SampleKit.swift": null,
-    "findFileReferenceId Package.swift": null,
+    "findFileReferenceId SampleKit.swift": "OBJ_9",
+    "findFileReferenceId Package.swift": "OBJ_6",
     "findFileReferencePath OBJ_9": "SampleKit.swift",
-    "findBuildFileId OBJ_9": null,
+    "findBuildFileId OBJ_9": "OBJ_16",
     "findFileReferencePath OBJ_6": "Package.swift",
     "findBuildFileId OBJ_6": null,
+    "displayName OBJ_9": "SampleKit.swift",
+    "buildFilesFor OBJ_9": [
+      "OBJ_16"
+    ],
+    "phasesOf OBJ_9": {
+      "OBJ_16": [
+        "OBJ_15"
+      ]
+    },
+    "displayName OBJ_6": "Package.swift",
+    "buildFilesFor OBJ_6": [],
+    "phasesOf OBJ_6": {},
+    "locateList OBJ_8 children": {
+      "openIndex": 1804,
+      "closeIndex": 1841,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "OBJ_9",
+          "startIndex": 1805,
+          "endIndex": 1838
+        }
+      ]
+    },
+    "locateListEntry OBJ_8 children OBJ_9": {
+      "id": "OBJ_9",
+      "startIndex": 1805,
+      "endIndex": 1838
+    },
+    "locateList OBJ_15 files": {
+      "openIndex": 3239,
+      "closeIndex": 3288,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "OBJ_16",
+          "startIndex": 3240,
+          "endIndex": 3285
+        }
+      ]
+    },
+    "locateListEntry OBJ_15 files OBJ_16": {
+      "id": "OBJ_16",
+      "startIndex": 3240,
+      "endIndex": 3285
+    },
+    "locateList OBJ_10 children": {
+      "openIndex": 1270,
+      "closeIndex": 1337,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "SampleKit::SampleKit::Product",
+          "startIndex": 1271,
+          "endIndex": 1334
+        }
+      ]
+    },
+    "locateListEntry OBJ_10 children SampleKit::SampleKit::Product": {
+      "id": "SampleKit::SampleKit::Product",
+      "startIndex": 1271,
+      "endIndex": 1334
+    },
     "writer addSwiftFileToPbxproj Added.swift": {
       "lint": "OK",
       "diff": [
-        "+13: \t\t800000000000000000000001 /* Added.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Added.swift */; };",
-        "+19: \t\t800000000000000000000002 /* Added.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Added.swift; sourceTree = \"<group>\"; };",
+        "+12: \t\t800000000000000000000001 /* Added.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Added.swift */; };",
+        "+16: \t\t800000000000000000000002 /* Added.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Added.swift; sourceTree = \"<group>\"; };",
         "+62: \t\t\t\t800000000000000000000002 /* Added.swift */,",
         "+117: \t\t\t\t800000000000000000000001 /* Added.swift in Sources */,"
       ]
     },
     "writer removeSwiftFileFromPbxproj SampleKit.swift": {
-      "output": null
+      "lint": "OK",
+      "diff": [
+        "-12: \t\tOBJ_16 /* SampleKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_9 /* SampleKit.swift */; };",
+        "-17: \t\tOBJ_9 /* SampleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleKit.swift; sourceTree = \"<group>\"; };",
+        "-62: \t\t\t\tOBJ_9 /* SampleKit.swift */,",
+        "-116: \t\t\t\tOBJ_16 /* SampleKit.swift in Sources */,"
+      ]
     },
     "writer updateBuildSetting SWIFT_VERSION": {
       "lint": "OK",

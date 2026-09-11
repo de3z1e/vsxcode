@@ -7,8 +7,8 @@
  * so a change that shifts parser output or corrupts an edit fails a command instead of surfacing later as a
  * wrong Package.swift or a damaged project.
  *
- * Every fixture must also lint with its comments stripped, and entries named in COMMENT_FREE must reproduce
- * the commented golden there.
+ * Every fixture must also lint with its comments stripped, entries named in COMMENT_FREE must reproduce the
+ * commented golden there, and every writer edit's output must lint.
  *
  * Usage:
  *   npm run test:pbxproj                  compare with the goldens
@@ -42,17 +42,27 @@ const resources = load('parsers/resources.js');
 const versionGroups = load('parsers/versionGroups.js');
 const project = load('parsers/project.js');
 const version = load('utils/version.js');
+const projectIndex = load('parsers/projectIndex.js');
 const writers = load('writers/pbxproj.js');
 
 // Entry families — the name before the first space, or `writer <function>` for edits — whose output on the
 // comment-stripped fixture must equal the commented golden.
 const COMMENT_FREE = new Set([
-    'parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds', 'usesXcodeObjectIds',
-    'parseGroups', 'findMainGroupId', 'buildGroupDirectories', 'resolveGroupForPath', 'parseVersionGroups'
+    'parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds',
+    'parseGroups', 'findMainGroupId', 'buildGroupDirectories', 'resolveGroupForPath', 'parseVersionGroups',
+    'findFileReferenceId', 'findFileReferencePath', 'findBuildFileId',
+    'displayName', 'buildFilesFor', 'phasesOf', 'locateList', 'locateListEntry',
+    'writer addSwiftFileToPbxproj', 'writer removeSwiftFileFromPbxproj', 'writer addDataModelToPbxproj',
+    'writer updateVersionGroupVersions', 'writer moveVersionGroupToGroup', 'writer removeDataModelFromPbxproj',
+    'writer updateBuildSetting'
 ]);
 
-// Families whose entries carry text offsets, which must be mapped back from the stripped fixture before comparing.
-const TEXT_OFFSET_FAMILIES = new Set(['parseVersionGroups']);
+// Families whose entries carry text offsets, each with how they map back from the stripped fixture before comparing.
+const TEXT_OFFSET_FAMILIES = new Map([
+    ['parseVersionGroups', offsetsInOriginal],
+    ['locateList', listOffsetsInOriginal],
+    ['locateListEntry', entryOffsetsInOriginal]
+]);
 
 const CONFIGURATIONS = ['Debug', 'Release'];
 const MAX_DIFF_LINES = 500;
@@ -60,6 +70,8 @@ const MAX_DIFF_LINES = 500;
 // ── Fixture table ────────────────────────────────────────────────────────────────────
 // Ids are written out rather than read back through a parser, so a parser change moves only its own goldens
 // and those of outputs that compose it internally (buildGroupDirectories, the version-group writers).
+// `helpers.lists` names `[ownerId, key, entryId]` lists for the list locators: the group and Sources phase the add
+// edit targets, plus special cases, each with its first entry as written (none when the list is empty).
 
 const hexId = (prefix, suffix) => prefix + '0'.repeat(18) + suffix;
 
@@ -74,6 +86,7 @@ const FIXTURES = [
         groupPaths: ['SampleApp', 'SampleApp/Views', 'SampleApp/Views/Rows', 'Shared', 'SampleApp/Shared', 'Support', 'SampleApp/Missing'],
         fileNames: ['ContentView.swift', 'SharedModels.swift', 'Badge.swift', 'Legacy.swift', 'Missing.swift'],
         fileReferenceIds: [hexId('C3', '0102'), hexId('5A', '0105'), hexId('5A', '0107'), hexId('C3', '0108')],
+        helpers: { lists: [[hexId('5A', '0011'), 'children', hexId('5A', '0103')], [hexId('5A', '0701'), 'files', hexId('5A', '0201')]] },
         writers: {
             'addSwiftFileToPbxproj AddedView.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'AddedView.swift', hexId('5A', '0011'), hexId('5A', '0701')),
@@ -105,6 +118,7 @@ const FIXTURES = [
         groupPaths: ['SyncApp', 'Extras'],
         fileNames: ['Helper.swift'],
         fileReferenceIds: [hexId('E7', '0101')],
+        helpers: { lists: [[hexId('A1', '0012'), 'children', hexId('E7', '0101')], [hexId('E7', '0701'), 'files', hexId('A1', '0201')]] },
         writers: {
             'addSwiftFileToPbxproj Added.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'Added.swift', hexId('A1', '0012'), hexId('E7', '0701')),
@@ -127,6 +141,8 @@ const FIXTURES = [
         groupPaths: ['Sources', 'SampleKit'],
         fileNames: ['SampleKit.swift', 'Package.swift'],
         fileReferenceIds: ['OBJ_9', 'OBJ_6'],
+        // OBJ_10's first child is a quoted id.
+        helpers: { lists: [['OBJ_8', 'children', 'OBJ_9'], ['OBJ_15', 'files', 'OBJ_16'], ['OBJ_10', 'children', 'SampleKit::SampleKit::Product']] },
         writers: {
             'addSwiftFileToPbxproj Added.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'Added.swift', 'OBJ_8', 'OBJ_15'),
@@ -146,6 +162,8 @@ const FIXTURES = [
         groupPaths: ['EmptyKit'],
         fileNames: ['README.md'],
         fileReferenceIds: [hexId('B2', '0101')],
+        // The Sources phase's list is empty and multi-line.
+        helpers: { lists: [[hexId('7F', '0010'), 'children', hexId('B2', '0101')], [hexId('7F', '0701'), 'files']] },
         writers: {
             'addSwiftFileToPbxproj First.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'First.swift', hexId('7F', '0010'), hexId('7F', '0701')),
@@ -163,6 +181,10 @@ const FIXTURES = [
         groupPaths: ['FlagParityTarget', 'FlagParityInherited'],
         fileNames: ['Covered.swift', 'Inherited.swift'],
         fileReferenceIds: [hexId('AA', '0002'), hexId('AA', '0012')],
+        // Single-line lists; the Frameworks phase's is empty.
+        helpers: {
+            lists: [[hexId('AA', '0006'), 'children', hexId('AA', '0002')], [hexId('AA', '000A'), 'files', hexId('AA', '0001')], [hexId('AA', '0004'), 'files']]
+        },
         writers: {
             'addSwiftFileToPbxproj Added.swift': (text) =>
                 writers.addSwiftFileToPbxproj(text, 'Added.swift', hexId('AA', '0006'), hexId('AA', '000A')),
@@ -255,14 +277,30 @@ function stripComments(text) {
     return { text: kept.join(''), origin };
 }
 
-/** Maps stripped-text offsets back to the original; an exclusive end maps through the character before it, since a removed comment can follow. */
+// Stripped-text offsets map back to the original; an exclusive end maps through the character before it, since a
+// removed comment can follow.
+const startInOriginal = (offset, origin) => origin[offset];
+const endInOriginal = (offset, origin) => (offset === 0 ? 0 : origin[offset - 1] + 1);
+
+/** A `{ startIndex, endIndex }` entry mapped back; anything else, such as null, as it is. */
+function entryOffsetsInOriginal(entry, origin) {
+    if (!entry || typeof entry !== 'object') { return entry; }
+    return { ...entry, startIndex: startInOriginal(entry.startIndex, origin), endIndex: endInOriginal(entry.endIndex, origin) };
+}
+
 function offsetsInOriginal(value, origin) {
-    if (!Array.isArray(value)) { return value; }
-    return value.map((entry) => ({
-        ...entry,
-        startIndex: origin[entry.startIndex],
-        endIndex: entry.endIndex === 0 ? 0 : origin[entry.endIndex - 1] + 1
-    }));
+    return Array.isArray(value) ? value.map((entry) => entryOffsetsInOriginal(entry, origin)) : value;
+}
+
+/** A located list mapped back: `openIndex` and entry ends as ends, `closeIndex` and entry starts as starts. */
+function listOffsetsInOriginal(list, origin) {
+    if (!list || typeof list !== 'object') { return list; }
+    return {
+        ...list,
+        openIndex: endInOriginal(list.openIndex, origin),
+        closeIndex: startInOriginal(list.closeIndex, origin),
+        entries: offsetsInOriginal(list.entries, origin)
+    };
 }
 
 /**
@@ -367,7 +405,6 @@ function parserEntries(text, inputs) {
     record('parseDeploymentTargets', () => project.parseDeploymentTargets(text));
     record('parseDefaultLocalization', () => project.parseDefaultLocalization(text));
     record('usesSwiftPMObjectIds', () => project.usesSwiftPMObjectIds(text));
-    record('usesXcodeObjectIds', () => project.usesXcodeObjectIds(text));
     for (const phaseId of inputs.frameworksPhases) {
         record(`parseFrameworksBuildPhase ${phaseId}`, () => frameworks.parseFrameworksBuildPhase(text, phaseId));
         record(`parseLinkedFrameworksForTarget ${phaseId}`, () => frameworks.parseLinkedFrameworksForTarget(text, phaseId));
@@ -382,6 +419,23 @@ function parserEntries(text, inputs) {
     for (const fileReferenceId of inputs.fileReferenceIds) {
         record(`findFileReferencePath ${fileReferenceId}`, () => writers.findFileReferencePath(text, fileReferenceId));
         record(`findBuildFileId ${fileReferenceId}`, () => writers.findBuildFileId(text, fileReferenceId));
+    }
+    // Index helpers come only from a fixture's helpers table, so corpus mode records none.
+    if (inputs.helpers) {
+        const read = projectIndex.readProject(text);
+        const withIndex = (compute) => () => (typeof read === 'string' ? read : compute(read));
+        for (const fileReferenceId of inputs.fileReferenceIds) {
+            record(`displayName ${fileReferenceId}`, withIndex((index) => projectIndex.displayName(index.object(fileReferenceId))));
+            record(`buildFilesFor ${fileReferenceId}`, withIndex((index) => projectIndex.buildFilesFor(index, fileReferenceId)));
+            record(`phasesOf ${fileReferenceId}`, withIndex((index) => Object.fromEntries(projectIndex.buildFilesFor(index, fileReferenceId)
+                .map((buildFileId) => [buildFileId, projectIndex.phasesOf(index, buildFileId)]))));
+        }
+        for (const [ownerId, key, entryId] of inputs.helpers.lists) {
+            record(`locateList ${ownerId} ${key}`, () => projectIndex.locateList(text, ownerId, key));
+            if (entryId !== undefined) {
+                record(`locateListEntry ${ownerId} ${key} ${entryId}`, () => projectIndex.locateListEntry(text, ownerId, key, entryId));
+            }
+        }
     }
     return entries;
 }
@@ -405,7 +459,8 @@ function commentFreeProblems(inputs, text, stripped, origin, goldenEntries) {
     for (const [key, value] of Object.entries(parserEntries(stripped, inputs))) {
         const family = entryFamily(key);
         if (!COMMENT_FREE.has(family)) { continue; }
-        const actual = TEXT_OFFSET_FAMILIES.has(family) ? offsetsInOriginal(value, origin) : value;
+        const mapBack = TEXT_OFFSET_FAMILIES.get(family);
+        const actual = mapBack ? mapBack(value, origin) : value;
         if (!sameValue(actual, goldenEntries[key])) {
             problems.push({ key: `${key} [comments stripped]`, expected: goldenEntries[key], actual });
         }
@@ -460,6 +515,11 @@ function checkFixture(fixture, producedKeys) {
 
     const entries = { ...parserEntries(text, fixture), ...writerEntries(text, fixture) };
     producedKeys.push(...Object.keys(entries));
+    for (const [key, value] of Object.entries(entries)) {
+        if (key.startsWith('writer ') && value && value.lint === 'FAIL') {
+            problems.push({ key: `${key} output passes plutil -lint`, expected: 'OK', actual: 'FAIL' });
+        }
+    }
     const goldenPath = path.join(GOLDEN_DIR, `${fixture.name}.json`);
     const entryCount = Object.keys(entries).length;
 
@@ -624,7 +684,7 @@ function indexCaseProblems() {
     const conflicted = text.replace('\tobjects = {\n', '<<<<<<< HEAD\n\tobjects = {\n');
     const empty = {
         parseNativeTargets: [], parseTargetDependencies: [], parseBuildPhaseIds: {},
-        parseGroups: [], findMainGroupId: null, parseVersionGroups: [], usesXcodeObjectIds: false
+        parseGroups: [], findMainGroupId: null, parseVersionGroups: []
     };
     const read = capture(() => ({
         parseNativeTargets: targets.parseNativeTargets(conflicted),
@@ -632,8 +692,7 @@ function indexCaseProblems() {
         parseBuildPhaseIds: targets.parseBuildPhaseIds(conflicted, 'SampleApp'),
         parseGroups: mapEntries(groups.parseGroups(conflicted)),
         findMainGroupId: groups.findMainGroupId(conflicted),
-        parseVersionGroups: versionGroups.parseVersionGroups(conflicted),
-        usesXcodeObjectIds: project.usesXcodeObjectIds(conflicted)
+        parseVersionGroups: versionGroups.parseVersionGroups(conflicted)
     }));
     if (!sameValue(read, empty)) {
         problems.push({ key: 'index-backed readers on explicit-app with a merge conflict marker', expected: empty, actual: read });

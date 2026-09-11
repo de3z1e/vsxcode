@@ -715,7 +715,6 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": false,
-    "usesXcodeObjectIds": true,
     "parseFrameworksBuildPhase C30000000000000000000702": [
       "UIKit.framework",
       "libz.tbd",
@@ -761,6 +760,140 @@
     "findBuildFileId 5A0000000000000000000107": "5A0000000000000000000207",
     "findFileReferencePath C30000000000000000000108": "SharedModels.swift",
     "findBuildFileId C30000000000000000000108": "5A0000000000000000000209",
+    "displayName C30000000000000000000102": "ContentView.swift",
+    "buildFilesFor C30000000000000000000102": [
+      "C30000000000000000000202"
+    ],
+    "phasesOf C30000000000000000000102": {
+      "C30000000000000000000202": [
+        "5A0000000000000000000701"
+      ]
+    },
+    "displayName 5A0000000000000000000105": "Badge.swift",
+    "buildFilesFor 5A0000000000000000000105": [
+      "5A0000000000000000000205"
+    ],
+    "phasesOf 5A0000000000000000000105": {
+      "5A0000000000000000000205": [
+        "5A0000000000000000000701"
+      ]
+    },
+    "displayName 5A0000000000000000000107": "Legacy.swift",
+    "buildFilesFor 5A0000000000000000000107": [
+      "5A0000000000000000000207"
+    ],
+    "phasesOf 5A0000000000000000000107": {
+      "5A0000000000000000000207": [
+        "5A0000000000000000000701"
+      ]
+    },
+    "displayName C30000000000000000000108": "SharedModels.swift",
+    "buildFilesFor C30000000000000000000108": [
+      "5A0000000000000000000209",
+      "C30000000000000000000208"
+    ],
+    "phasesOf C30000000000000000000108": {
+      "5A0000000000000000000209": [
+        "C30000000000000000000704"
+      ],
+      "C30000000000000000000208": [
+        "5A0000000000000000000701"
+      ]
+    },
+    "locateList 5A0000000000000000000011 children": {
+      "openIndex": 10974,
+      "closeIndex": 11171,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "5A0000000000000000000103",
+          "startIndex": 10975,
+          "endIndex": 11026
+        },
+        {
+          "id": "C30000000000000000000104",
+          "startIndex": 11026,
+          "endIndex": 11079
+        },
+        {
+          "id": "5A0000000000000000000105",
+          "startIndex": 11079,
+          "endIndex": 11127
+        },
+        {
+          "id": "C30000000000000000000012",
+          "startIndex": 11127,
+          "endIndex": 11168
+        }
+      ]
+    },
+    "locateListEntry 5A0000000000000000000011 children 5A0000000000000000000103": {
+      "id": "5A0000000000000000000103",
+      "startIndex": 10975,
+      "endIndex": 11026
+    },
+    "locateList 5A0000000000000000000701 files": {
+      "openIndex": 16802,
+      "closeIndex": 17442,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "5A0000000000000000000201",
+          "startIndex": 16803,
+          "endIndex": 16868
+        },
+        {
+          "id": "C30000000000000000000202",
+          "startIndex": 16868,
+          "endIndex": 16933
+        },
+        {
+          "id": "5A0000000000000000000203",
+          "startIndex": 16933,
+          "endIndex": 16995
+        },
+        {
+          "id": "C30000000000000000000204",
+          "startIndex": 16995,
+          "endIndex": 17059
+        },
+        {
+          "id": "5A0000000000000000000205",
+          "startIndex": 17059,
+          "endIndex": 17118
+        },
+        {
+          "id": "C30000000000000000000206",
+          "startIndex": 17118,
+          "endIndex": 17179
+        },
+        {
+          "id": "5A0000000000000000000207",
+          "startIndex": 17179,
+          "endIndex": 17239
+        },
+        {
+          "id": "C30000000000000000000208",
+          "startIndex": 17239,
+          "endIndex": 17305
+        },
+        {
+          "id": "5A000000000000000000020F",
+          "startIndex": 17305,
+          "endIndex": 17371
+        },
+        {
+          "id": "C30000000000000000000210",
+          "startIndex": 17371,
+          "endIndex": 17439
+        }
+      ]
+    },
+    "locateListEntry 5A0000000000000000000701 files 5A0000000000000000000201": {
+      "id": "5A0000000000000000000201",
+      "startIndex": 16803,
+      "endIndex": 16868
+    },
     "writer addSwiftFileToPbxproj AddedView.swift": {
       "lint": "OK",
       "diff": [
@@ -774,8 +907,10 @@
       "lint": "OK",
       "diff": [
         "-18: \t\t5A0000000000000000000209 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; };",
+        "-27: \t\tC30000000000000000000208 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; settings = {COMPILER_FLAGS = \"-DSHARED_MODELS\"; }; };",
         "-69: \t\tC30000000000000000000108 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = \"<group>\"; };",
         "-195: \t\t\t\tC30000000000000000000108 /* SharedModels.swift */,",
+        "-354: \t\t\t\tC30000000000000000000208 /* SharedModels.swift in Sources */,",
         "-373: \t\t\t\t5A0000000000000000000209 /* SharedModels.swift in Sources */,"
       ]
     },

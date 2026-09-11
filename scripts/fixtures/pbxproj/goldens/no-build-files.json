@@ -202,15 +202,44 @@
     ],
     "parseDefaultLocalization": "en",
     "usesSwiftPMObjectIds": false,
-    "usesXcodeObjectIds": true,
     "parseFrameworksBuildPhase B20000000000000000000702": [],
     "parseLinkedFrameworksForTarget B20000000000000000000702": [],
     "findFileReferenceId README.md": "B20000000000000000000101",
     "findFileReferencePath B20000000000000000000101": "README.md",
     "findBuildFileId B20000000000000000000101": null,
+    "displayName B20000000000000000000101": "README.md",
+    "buildFilesFor B20000000000000000000101": [],
+    "phasesOf B20000000000000000000101": {},
+    "locateList 7F0000000000000000000010 children": {
+      "openIndex": 1164,
+      "closeIndex": 1214,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "B20000000000000000000101",
+          "startIndex": 1165,
+          "endIndex": 1211
+        }
+      ]
+    },
+    "locateListEntry 7F0000000000000000000010 children B20000000000000000000101": {
+      "id": "B20000000000000000000101",
+      "startIndex": 1165,
+      "endIndex": 1211
+    },
+    "locateList 7F0000000000000000000701 files": {
+      "openIndex": 3063,
+      "closeIndex": 3067,
+      "multiLine": true,
+      "entries": []
+    },
     "writer addSwiftFileToPbxproj First.swift": {
       "lint": "OK",
       "diff": [
+        "+10: /* Begin PBXBuildFile section */",
+        "+10: \t\t800000000000000000000001 /* First.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* First.swift */; };",
+        "+10: /* End PBXBuildFile section */",
+        "+10: ",
         "+12: \t\t800000000000000000000002 /* First.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = First.swift; sourceTree = \"<group>\"; };",
         "+38: \t\t\t\t800000000000000000000002 /* First.swift */,",
         "+106: \t\t\t\t800000000000000000000001 /* First.swift in Sources */,"

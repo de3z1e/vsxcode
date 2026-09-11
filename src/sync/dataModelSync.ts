@@ -4,7 +4,6 @@ import { promises as fsp } from 'fs';
 
 import { parseGroups, findMainGroupId, buildGroupDirectories } from '../parsers/groups';
 import { parseVersionGroups, versionGroupBaseName, versionGroupBundleName } from '../parsers/versionGroups';
-import { usesXcodeObjectIds } from '../parsers/project';
 import type { XCVersionGroupInfo } from '../parsers/versionGroups';
 import {
     addDataModelToPbxproj,
@@ -300,8 +299,6 @@ export function createDataModelWatcher(
     const syncBundle = async (bundlePath: string): Promise<boolean> => {
         const bundleName = path.basename(bundlePath);
         const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-        // buildTargetMappings applies the same id check, but the delete path below edits without a mapping.
-        if (!usesXcodeObjectIds(pbxContents)) { return false; }
         const mappings = buildTargetMappings(rootPath, pbxContents, pbxprojPath);
         const mapping = findMappingForFile(bundlePath, mappings);
 

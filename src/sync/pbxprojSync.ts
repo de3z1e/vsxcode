@@ -6,7 +6,6 @@ import * as fs from 'fs';
 import { parseNativeTargets, isTestTarget, parseBuildPhaseIds } from '../parsers/targets';
 import { parseGroups, findMainGroupId, resolveGroupForPath, buildGroupDirectories } from '../parsers/groups';
 import type { PBXGroupInfo } from '../parsers/groups';
-import { usesXcodeObjectIds } from '../parsers/project';
 import { SPM_RESOURCE_DIR_EXTENSIONS } from '../types/constants';
 import { determineTargetPath } from '../utils/path';
 
@@ -28,8 +27,6 @@ export function buildTargetMappings(
     pbxprojPath: string
 ): TargetDirectoryMapping[] {
     const mappings: TargetDirectoryMapping[] = [];
-    // The writers match only Xcode's 24-hex ids, so projects with other ids (SwiftPM-generated ones) get no sync.
-    if (!usesXcodeObjectIds(pbxContents)) { return mappings; }
     const targets = parseNativeTargets(pbxContents);
     const groups = parseGroups(pbxContents);
     const mainGroupId = findMainGroupId(pbxContents);
