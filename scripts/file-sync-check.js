@@ -4,9 +4,10 @@
  *
  * Runs the compiled Swift and Core Data sync watchers (out/sync/) in plain Node with `vscode` stubbed. Each scenario
  * lays the fixture project and its sources out in a fresh temp directory, applies real filesystem operations, fires the
- * watcher and rename events VS Code would deliver, and reads the resulting project through plutil rather than the parsers under
- * test. The entries a scenario names must change as stated; every other Swift file reference and Core Data model must
- * come out unchanged, ids included, and the project must still lint.
+ * watcher and rename events VS Code would deliver (a folder's own events for a folder rename, never its contents'), and
+ * reads the resulting project through plutil rather than the parsers under test. The entries a scenario names must change
+ * as stated; every other Swift file reference and Core Data model must come out unchanged, ids included, nothing else may
+ * join a Sources phase, and the project must still lint.
  *
  * VS Code's extension host dispatches a batch's creates before its deletes, so creates-first is the default event
  * order; reversed and duplicated deliveries are scenarios of their own.
@@ -113,7 +114,7 @@ function canonical(value) {
 const same = (left, right) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 const show = (value) => (value === undefined ? '(absent)' : JSON.stringify(canonical(value)));
 
-/** Swift file references and XCVersionGroups keyed by Xcode-resolved path, plus dangling Sources entries, repeated group children, and folders several own-path groups resolve to. */
+/** Swift file references and XCVersionGroups keyed by Xcode-resolved path, plus dangling Sources entries, Sources entries for anything else, repeated group children, and folders several own-path groups resolve to. */
 function readState(text) {
     const { objects, rootObject } = JSON.parse(plutil(['-convert', 'json', '-o', '-', '-'], text));
     const parentOf = new Map();
@@ -143,6 +144,8 @@ function readState(text) {
 
     const compiledBy = new Map();
     const dangling = [];
+    // A Sources entry for anything but a Swift file or a Core Data model, which a folder mistaken for a file would produce.
+    const otherSources = [];
     for (const target of Object.values(objects)) {
         if (target.isa !== 'PBXNativeTarget') { continue; }
         for (const phaseId of target.buildPhases || []) {
@@ -154,6 +157,10 @@ function readState(text) {
                     continue;
                 }
                 if (!buildFile.fileRef) { continue; }
+                const file = objects[buildFile.fileRef];
+                if (!(file.isa === 'PBXFileReference' && /\.swift$/.test(file.path || '')) && file.isa !== 'XCVersionGroup') {
+                    otherSources.push(`${target.name} compiles ${file.isa} ${file.path || file.name || buildFile.fileRef}`);
+                }
                 const membership = buildFile.settings ? `${target.name} ${JSON.stringify(buildFile.settings)}` : target.name;
                 compiledBy.set(buildFile.fileRef, [...(compiledBy.get(buildFile.fileRef) || []), membership]);
             }
@@ -192,6 +199,7 @@ function readState(text) {
         swift,
         models,
         dangling: dangling.sort(),
+        otherSources: otherSources.sort(),
         duplicateChildren: duplicateChildren.sort(),
         duplicateGroupFolders: [...groupsByFolder].filter(([, count]) => count > 1).map(([folder, count]) => `${folder} (${count} groups)`).sort(),
         ids: new Set(Object.keys(objects))
@@ -223,6 +231,7 @@ function withChanges(state, changes) {
         swift: { ...state.swift },
         models: { ...state.models },
         dangling: state.dangling,
+        otherSources: state.otherSources,
         duplicateChildren: state.duplicateChildren,
         duplicateGroupFolders: state.duplicateGroupFolders
     };
@@ -246,6 +255,7 @@ function stateProblems(actual, expected, idsBefore) {
     }
     for (const [list, label] of [
         ['dangling', 'dangling Sources entries'],
+        ['otherSources', 'Sources entries for anything but Swift files and Core Data models'],
         ['duplicateChildren', 'elements listed as a child more than once'],
         ['duplicateGroupFolders', 'folders more than one group with its own path resolves to']
     ]) {
@@ -280,6 +290,7 @@ function baselineProblems() {
         swift: Object.fromEntries(Object.entries(BASELINE_SWIFT).map(([key, targets]) => [key, { ids: ANY_ID, targets }])),
         models: Object.fromEntries(Object.entries(BASELINE_MODELS).map(([key, entry]) => [key, { ids: ANY_ID, ...entry }])),
         dangling: [],
+        otherSources: [],
         duplicateChildren: [],
         duplicateGroupFolders: []
     };
@@ -360,8 +371,8 @@ const moveModel = (s, from, to, order) => {
 
 const EVENT_ORDERS = ['creates first', 'deletes first', 'events twice'];
 
-/** A move on disk, then its events: creates first, deletes first, or creates-first delivered twice 100 ms apart. */
-const moveSwift = async (s, from, to, order) => {
+/** A file or folder moved on disk, then its own events (a folder's contents get none): creates first, deletes first, or creates-first delivered twice 100 ms apart. */
+const moveEntry = async (s, from, to, order) => {
     s.move(from, to);
     const fire = () => {
         if (order === 'deletes first') {
@@ -381,6 +392,30 @@ const moveSwift = async (s, from, to, order) => {
 
 // Rename.swift's entry, AA…0113, following its file to Renamed.swift in the same folder.
 const RENAME_KEPT = { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Renamed.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } };
+
+/** Rewrites the project text for a shape the fixture lacks, then lets the watcher record identities from it, as a project-file change would. */
+const rewriteProject = async (s, transform) => {
+    fs.writeFileSync(projectPath(s.root), transform(s.projectText()));
+    s.fire('change', 'FixtureApp.xcodeproj/project.pbxproj');
+    await s.wait(500);
+};
+
+/** Bar.swift listed in the MyApp group under a two-component path, the shape Xcode writes for a file outside its group's folder. */
+const barUnderMyApp = (text) => text
+    .replace('\t\t\t\tAA0000000000000000000112 /* Bar.swift */,\n', '')
+    .replace('\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n',
+        '\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n\t\t\t\tAA0000000000000000000112 /* Bar.swift */,\n')
+    .replace('path = Bar.swift; sourceTree = "<group>";', 'name = Bar.swift; path = Views/Bar.swift; sourceTree = "<group>";');
+
+/** The Views entries, AA…0111–AA…0113, keyed under another folder. */
+const viewsUnder = (folder) => ({
+    'MyApp/Views/Bar.swift': null,
+    'MyApp/Views/ContentView.swift': null,
+    'MyApp/Views/Rename.swift': null,
+    [`${folder}/Bar.swift`]: { ids: [fixtureId('0112')], targets: ['MyApp'] },
+    [`${folder}/ContentView.swift`]: { ids: [fixtureId('0111')], targets: ['MyApp'] },
+    [`${folder}/Rename.swift`]: { ids: [fixtureId('0113')], targets: ['MyApp'] }
+});
 
 const SCENARIOS = [
     {
@@ -420,12 +455,12 @@ const SCENARIOS = [
     },
     ...EVENT_ORDERS.map((order) => ({
         name: `Swift file renamed in its folder (S2), ${order}`,
-        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift', order),
+        run: (s) => moveEntry(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift', order),
         changes: RENAME_KEPT
     })),
     ...EVENT_ORDERS.map((order) => ({
         name: `Swift file moved to another folder (S1), ${order}`,
-        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Models/Bar.swift', order),
+        run: (s) => moveEntry(s, 'MyApp/Views/Bar.swift', 'MyApp/Models/Bar.swift', order),
         changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Models/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
     })),
     {
@@ -440,7 +475,7 @@ const SCENARIOS = [
     },
     ...EVENT_ORDERS.map((order) => ({
         name: `Swift file renamed to a name another target uses (S3), ${order}`,
-        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Constants.swift', order),
+        run: (s) => moveEntry(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Constants.swift', order),
         changes: { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Constants.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } }
     })),
     ...['once', 'twice'].map((times) => ({
@@ -457,12 +492,12 @@ const SCENARIOS = [
     })),
     ...EVENT_ORDERS.map((order) => ({
         name: `Swift file moved while another target has its name (S7), ${order}`,
-        run: (s) => moveSwift(s, 'MyApp/Helpers.swift', 'MyApp/Services/Helpers.swift', order),
+        run: (s) => moveEntry(s, 'MyApp/Helpers.swift', 'MyApp/Services/Helpers.swift', order),
         changes: { swift: { 'MyApp/Helpers.swift': null, 'MyApp/Services/Helpers.swift': { ids: [fixtureId('0110')], targets: ['MyApp'] } } }
     })),
     {
         name: 'Swift file moved into new folders, groups created',
-        run: (s) => moveSwift(s, 'MyApp/Views/ContentView.swift', 'MyApp/Features/Home/ContentView.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/ContentView.swift', 'MyApp/Features/Home/ContentView.swift', 'creates first'),
         changes: {
             swift: {
                 'MyApp/Views/ContentView.swift': null,
@@ -504,7 +539,7 @@ const SCENARIOS = [
     },
     {
         name: 'Swift file renamed in letter case only',
-        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Views/bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
     },
     {
@@ -514,7 +549,7 @@ const SCENARIOS = [
             const text = s.projectText().replace('path = Bar.swift; sourceTree = "<group>";',
                 `path = "${s.root}/MyApp/Views/Bar.swift"; sourceTree = "<absolute>";`);
             fs.writeFileSync(projectPath(s.root), text);
-            return moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift', 'creates first');
+            return moveEntry(s, 'MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift', 'creates first');
         },
         // The oracle resolves only group-relative and SOURCE_ROOT paths, so the entry reads as unresolved, keyed by its path.
         changes: (before, root) => ({
@@ -526,12 +561,12 @@ const SCENARIOS = [
     },
     {
         name: 'Swift file moved under its name into a group folder that is no target\'s',
-        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'Shared/Bar.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/Bar.swift', 'Shared/Bar.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/Bar.swift': null, 'Shared/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
     },
     {
         name: 'Swift file compiled by two targets renamed (S5)',
-        run: (s) => moveSwift(s, 'Shared/SharedUtil.swift', 'Shared/SharedHelpers.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'Shared/SharedUtil.swift', 'Shared/SharedHelpers.swift', 'creates first'),
         changes: {
             swift: {
                 'Shared/SharedUtil.swift': null,
@@ -541,22 +576,22 @@ const SCENARIOS = [
     },
     {
         name: 'Swift file renamed while moved to another folder',
-        run: (s) => moveSwift(s, 'MyApp/Views/ContentView.swift', 'MyApp/Models/HomeView.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/ContentView.swift', 'MyApp/Models/HomeView.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/ContentView.swift': null, 'MyApp/Models/HomeView.swift': { ids: [fixtureId('0111')], targets: ['MyApp'] } } }
     },
     {
         name: 'Swift file renamed while moved into new folders, groups created',
-        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Features/Home/HomeBar.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/Bar.swift', 'MyApp/Features/Home/HomeBar.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Features/Home/HomeBar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
     },
     {
         name: 'Swift file renamed into another target\'s folder keeps its own target',
-        run: (s) => moveSwift(s, 'MyKit/Constants.swift', 'MyApp/Views/KitConstants.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyKit/Constants.swift', 'MyApp/Views/KitConstants.swift', 'creates first'),
         changes: { swift: { 'MyKit/Constants.swift': null, 'MyApp/Views/KitConstants.swift': { ids: [fixtureId('0211')], targets: ['MyKit'] } } }
     },
     {
         name: 'Swift file renamed out of known places, group created in the main group',
-        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'Tools/Renamed.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/Rename.swift', 'Tools/Renamed.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/Rename.swift': null, 'Tools/Renamed.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } }
     },
     {
@@ -624,12 +659,12 @@ const SCENARIOS = [
     },
     {
         name: 'Swift file renamed over a registered file',
-        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Bar.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Bar.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/Rename.swift': null } }
     },
     {
         name: 'Swift file renamed into a synchronized root',
-        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'SyncKit/Rename.swift', 'creates first'),
+        run: (s) => moveEntry(s, 'MyApp/Views/Rename.swift', 'SyncKit/Rename.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/Rename.swift': null } }
     },
     {
@@ -694,7 +729,7 @@ const SCENARIOS = [
             s.move('MyApp/Views/Rename.swift.tmp', 'MyApp/Views/Rename.swift');
             s.fire(kind, 'MyApp/Views/Rename.swift');
             await s.wait(pause);
-            await moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift', 'creates first');
+            await moveEntry(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift', 'creates first');
         },
         changes: RENAME_KEPT
     })),
@@ -704,7 +739,7 @@ const SCENARIOS = [
             s.write('MyApp/Views/NewView.swift', 'struct NewView {}\n');
             s.fire('create', 'MyApp/Views/NewView.swift');
             await s.wait(600);
-            await moveSwift(s, 'MyApp/Views/NewView.swift', 'MyApp/Views/NewScreen.swift', 'creates first');
+            await moveEntry(s, 'MyApp/Views/NewView.swift', 'MyApp/Views/NewScreen.swift', 'creates first');
         },
         // The add draws its build file's id first, so its reference has the second pinned id.
         changes: { swift: { 'MyApp/Views/NewScreen.swift': { ids: [pinnedId(2)], targets: ['MyApp'] } } }
@@ -716,6 +751,177 @@ const SCENARIOS = [
             s.fire('delete', 'MyApp/Services/Service.swift');
         },
         changes: { swift: { 'MyApp/Services/Service.swift': null } }
+    },
+    ...EVENT_ORDERS.map((order) => ({
+        name: `folder renamed (S6), ${order}`,
+        run: (s) => moveEntry(s, 'MyApp/Services', 'MyApp/Networking', order),
+        changes: { swift: { 'MyApp/Services/Service.swift': null, 'MyApp/Networking/Service.swift': { ids: [fixtureId('0115')], targets: ['MyApp'] } } }
+    })),
+    {
+        name: 'folder renamed in the editor, folder events 136 ms later',
+        run: async (s) => {
+            s.move('MyApp/Views', 'MyApp/Screens');
+            s.fireRename('MyApp/Views', 'MyApp/Screens');
+            await s.wait(136);
+            s.fire('create', 'MyApp/Screens');
+            s.fire('delete', 'MyApp/Views');
+        },
+        changes: { swift: viewsUnder('MyApp/Screens') }
+    },
+    {
+        name: 'folder renamed in the editor as a copy and delete, rename event only',
+        run: (s) => {
+            fs.cpSync(path.join(s.root, 'MyApp/Views'), path.join(s.root, 'MyApp/Screens'), { recursive: true });
+            s.remove('MyApp/Views');
+            s.fireRename('MyApp/Views', 'MyApp/Screens');
+        },
+        changes: { swift: viewsUnder('MyApp/Screens') }
+    },
+    {
+        name: 'folder holding a Core Data model renamed',
+        run: (s) => moveEntry(s, 'MyApp/Models', 'MyApp/Entities', 'creates first'),
+        changes: (before) => ({
+            swift: { 'MyApp/Models/Model.swift': null, 'MyApp/Entities/Model.swift': { ids: [fixtureId('0114')], targets: ['MyApp'] } },
+            models: { [STORE]: null, 'MyApp/Entities/Store.xcdatamodeld': before.models[STORE] }
+        })
+    },
+    {
+        name: 'folder holding nested groups renamed',
+        run: (s) => moveEntry(s, 'MyApp', 'App', 'creates first'),
+        // The target's folder is found by name convention, so its sync breaks; its entries still follow the folder.
+        changes: (before) => ({
+            swift: Object.fromEntries(Object.entries(before.swift)
+                .filter(([key]) => key.startsWith('MyApp/'))
+                .flatMap(([key, entry]) => [[key, null], [key.replace(/^MyApp\//, 'App/'), entry]])),
+            models: { [STORE]: null, [STORE.replace(/^MyApp\//, 'App/')]: before.models[STORE] }
+        })
+    },
+    {
+        name: 'SOURCE_ROOT group folder renamed',
+        run: async (s) => {
+            await rewriteProject(s, (text) => text.replace('path = Shared;\n\t\t\tsourceTree = "<group>";', 'path = Shared;\n\t\t\tsourceTree = SOURCE_ROOT;'));
+            await moveEntry(s, 'Shared', 'Common', 'creates first');
+        },
+        changes: (before) => ({ swift: { 'Shared/SharedUtil.swift': null, 'Common/SharedUtil.swift': before.swift['Shared/SharedUtil.swift'] } })
+    },
+    {
+        name: 'folder spelled by a group and by another entry\'s path renamed',
+        run: async (s) => {
+            await rewriteProject(s, barUnderMyApp);
+            await moveEntry(s, 'MyApp/Views', 'MyApp/Screens', 'creates first');
+        },
+        changes: { swift: viewsUnder('MyApp/Screens') }
+    },
+    {
+        name: 'folder spelled after a .. segment renamed',
+        run: async (s) => {
+            // Rename.swift listed in the Shared group, reaching its file through the parent folder.
+            await rewriteProject(s, (text) => text
+                .replace('\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n', '')
+                .replace('\t\t\t\tAA0000000000000000000310 /* SharedUtil.swift */,\n',
+                    '\t\t\t\tAA0000000000000000000310 /* SharedUtil.swift */,\n\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n')
+                .replace('path = Rename.swift; sourceTree = "<group>";', 'name = Rename.swift; path = ../MyApp/Views/Rename.swift; sourceTree = "<group>";'));
+            await moveEntry(s, 'MyApp/Views', 'MyApp/Screens', 'creates first');
+        },
+        changes: { swift: viewsUnder('MyApp/Screens') }
+    },
+    {
+        name: 'folder whose name repeats earlier in a path renamed',
+        run: async (s) => {
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Sub/Views/Rename.swift');
+            await rewriteProject(s, (text) => text
+                .replace('\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n', '')
+                .replace('\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n',
+                    '\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n')
+                .replace('path = Rename.swift; sourceTree = "<group>";', 'name = Rename.swift; path = Views/Sub/Views/Rename.swift; sourceTree = "<group>";'));
+            await moveEntry(s, 'MyApp/Views/Sub/Views', 'MyApp/Views/Sub/Screens', 'creates first');
+        },
+        // Only the component at the renamed folder's position changes; the first `Views` stays.
+        changes: { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Sub/Screens/Rename.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'folder moved into another target\'s folder keeps its target',
+        run: (s) => moveEntry(s, 'MyApp/Services', 'MyKit/Services', 'creates first'),
+        changes: { swift: { 'MyApp/Services/Service.swift': null, 'MyKit/Services/Service.swift': { ids: [fixtureId('0115')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'folder moved into a new folder, group created',
+        run: (s) => moveEntry(s, 'MyApp/Services', 'MyApp/Features/Services', 'creates first'),
+        changes: { swift: { 'MyApp/Services/Service.swift': null, 'MyApp/Features/Services/Service.swift': { ids: [fixtureId('0115')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'folder spelled by another entry\'s path moved',
+        run: async (s) => {
+            await rewriteProject(s, barUnderMyApp);
+            await moveEntry(s, 'MyApp/Views', 'UI/Views', 'creates first');
+        },
+        changes: { swift: viewsUnder('UI/Views') }
+    },
+    {
+        name: 'folder renamed in letter case only',
+        run: (s) => moveEntry(s, 'MyApp/Views', 'MyApp/views', 'creates first'),
+        changes: { swift: viewsUnder('MyApp/views') }
+    },
+    {
+        name: 'folder moved into a synchronized root',
+        run: (s) => moveEntry(s, 'MyApp/Services', 'SyncKit/Services', 'creates first'),
+        textUnchanged: true
+    },
+    {
+        name: 'folder renamed while a Swift file is created inside it',
+        run: (s) => {
+            s.move('MyApp/Views', 'MyApp/Screens');
+            s.write('MyApp/Screens/New.swift', 'struct New {}\n');
+            s.fire('create', 'MyApp/Screens');
+            s.fire('create', 'MyApp/Screens/New.swift');
+            s.fire('delete', 'MyApp/Views');
+        },
+        // One group spells Screens: the duplicate-group-folder list stays empty.
+        changes: { swift: { ...viewsUnder('MyApp/Screens'), 'MyApp/Screens/New.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: 'folder moved while an entry inside it reaches out with ..',
+        run: async (s) => {
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Rename.swift');
+            await rewriteProject(s, (text) => text.replace('path = Rename.swift; sourceTree = "<group>";', 'path = ../Rename.swift; sourceTree = "<group>";'));
+            await moveEntry(s, 'MyApp/Views', 'MyApp/Features/Views', 'creates first');
+        },
+        // Rename.swift's base folder moves with Views, so its path is recomputed to keep pointing at MyApp/Rename.swift.
+        changes: {
+            swift: {
+                'MyApp/Views/Bar.swift': null,
+                'MyApp/Views/ContentView.swift': null,
+                'MyApp/Views/Rename.swift': null,
+                'MyApp/Features/Views/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] },
+                'MyApp/Features/Views/ContentView.swift': { ids: [fixtureId('0111')], targets: ['MyApp'] },
+                'MyApp/Rename.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] }
+            }
+        }
+    },
+    {
+        name: 'folder deleted, delete event only',
+        run: (s) => {
+            s.remove('MyApp/Services');
+            s.fire('delete', 'MyApp/Services');
+        },
+        textUnchanged: true
+    },
+    {
+        name: 'folder copied with its file, not paired',
+        run: (s) => {
+            fs.cpSync(path.join(s.root, 'MyApp/Services'), path.join(s.root, 'MyApp/Copied'), { recursive: true });
+            s.fire('create', 'MyApp/Copied');
+            s.fire('create', 'MyApp/Copied/Service.swift');
+        },
+        changes: { swift: { 'MyApp/Copied/Service.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: 'folder renamed inside .build/',
+        run: (s) => {
+            s.write('.build/checkouts/Dep/Sources/Dep.swift', 'enum Dep {}\n');
+            return moveEntry(s, '.build/checkouts/Dep', '.build/checkouts/Dep2', 'creates first');
+        },
+        textUnchanged: true
     },
     {
         name: 'new Swift file while a registered file\'s folder is already gone',

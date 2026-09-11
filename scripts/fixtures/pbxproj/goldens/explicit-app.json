@@ -755,6 +755,48 @@
     "findBuildFileId 5A0000000000000000000107": "5A0000000000000000000207",
     "findFileReferencePath C30000000000000000000108": "SharedModels.swift",
     "findBuildFileId C30000000000000000000108": "5A0000000000000000000209",
+    "folderSpellings": [
+      {
+        "id": "5A0000000000000000000105",
+        "position": 0,
+        "folder": "/project/SampleApp/Views/Components"
+      },
+      {
+        "id": "5A0000000000000000000107",
+        "position": 1,
+        "folder": "/project/Legacy"
+      },
+      {
+        "id": "5A0000000000000000000010",
+        "position": 0,
+        "folder": "/project/SampleApp"
+      },
+      {
+        "id": "5A0000000000000000000011",
+        "position": 0,
+        "folder": "/project/SampleApp/Views"
+      },
+      {
+        "id": "5A0000000000000000000015",
+        "position": 0,
+        "folder": "/project/SampleAppTests"
+      },
+      {
+        "id": "C30000000000000000000012",
+        "position": 0,
+        "folder": "/project/SampleApp/Views/Rows"
+      },
+      {
+        "id": "C30000000000000000000014",
+        "position": 0,
+        "folder": "/project/Shared"
+      },
+      {
+        "id": "C30000000000000000000016",
+        "position": 0,
+        "folder": "/project/SampleAppUITests"
+      }
+    ],
     "displayName C30000000000000000000102": "ContentView.swift",
     "buildFilesFor C30000000000000000000102": [
       "C30000000000000000000202"
@@ -1007,6 +1049,33 @@
         "+355: \t\t\t\tC30000000000000000000208 /* Models.swift in Sources */,",
         "-373: \t\t\t\t5A0000000000000000000209 /* SharedModels.swift in Sources */,",
         "+374: \t\t\t\t5A0000000000000000000209 /* Models.swift in Sources */,"
+      ]
+    },
+    "writer setElementPaths SampleApp/Views to Screens": {
+      "lint": "OK",
+      "diff": [
+        "-142: \t\t\t\t5A0000000000000000000011 /* Views */,",
+        "+143: \t\t\t\t5A0000000000000000000011 /* Screens */,",
+        "-156: \t\t5A0000000000000000000011 /* Views */ = {",
+        "+157: \t\t5A0000000000000000000011 /* Screens */ = {",
+        "-164: \t\t\tpath = Views;",
+        "+165: \t\t\tpath = Screens;"
+      ]
+    },
+    "writer setElementPaths Components to Parts": {
+      "lint": "OK",
+      "diff": [
+        "-55: \t\t5A0000000000000000000105 /* Badge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Badge.swift; path = Components/Badge.swift; sourceTree = \"<group>\"; };",
+        "+56: \t\t5A0000000000000000000105 /* Badge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Badge.swift; path = \"Parts/Badge.swift\"; sourceTree = \"<group>\"; };"
+      ]
+    },
+    "writer moveElement Shared into Views": {
+      "lint": "OK",
+      "diff": [
+        "-144: \t\t\t\tC30000000000000000000014 /* Shared */,",
+        "+163: \t\t\t\tC30000000000000000000014 /* Shared */,",
+        "-198: \t\t\tsourceTree = SOURCE_ROOT;",
+        "+199: \t\t\tsourceTree = \"<group>\";"
       ]
     },
     "writer addGroupPath SampleApp/Views/Cells/Compact": {

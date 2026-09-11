@@ -122,8 +122,12 @@ export function targetOfPhase(index: ProjectIndex, phaseId: string): string | un
 interface Relations {
     /** Each listed element's parent: the first object, in definition order, whose `children` holds it. */
     parents: Map<string, string>;
+    /** Every object whose `children` lists an element, in definition order. */
+    owners: Map<string, string[]>;
     /** Resolved paths by project folder, then by id. */
     resolved: Map<string, Map<string, string | undefined>>;
+    /** Folder spellings by project folder. */
+    spellings: Map<string, FolderSpelling[]>;
 }
 
 const relationsByIndex = new WeakMap<ProjectIndex, Relations>();
@@ -132,12 +136,14 @@ function relationsOf(index: ProjectIndex): Relations {
     let relations = relationsByIndex.get(index);
     if (!relations) {
         const parents = new Map<string, string>();
+        const owners = new Map<string, string[]>();
         for (const id of index.ids) {
             for (const child of stringList(index.objects[id].children)) {
                 if (!parents.has(child)) { parents.set(child, id); }
+                owners.set(child, [...(owners.get(child) ?? []), id]);
             }
         }
-        relations = { parents, resolved: new Map() };
+        relations = { parents, owners, resolved: new Map(), spellings: new Map() };
         relationsByIndex.set(index, relations);
     }
     return relations;
@@ -146,6 +152,11 @@ function relationsOf(index: ProjectIndex): Relations {
 /** The object whose `children` lists the id; undefined for the main group and for anything no list holds. */
 export function parentOf(index: ProjectIndex, id: string): string | undefined {
     return relationsOf(index).parents.get(id);
+}
+
+/** Every object whose `children` lists the id, in definition order; normally one. */
+export function ownersOf(index: ProjectIndex, id: string): readonly string[] {
+    return relationsOf(index).owners.get(id) ?? [];
 }
 
 /** The elements from `id` up to the main group, or undefined when the chain doesn't reach it. */
@@ -196,6 +207,72 @@ export function resolvedPath(index: ProjectIndex, id: string, projectDir: string
     }
     byId.set(id, folder);
     return folder;
+}
+
+/** The folder an element's own `path` starts from: the parent's folder in the `<group>` tree, the project folder for SOURCE_ROOT; undefined for other trees and unresolvable parents. */
+export function baseFolder(index: ProjectIndex, id: string, projectDir: string): string | undefined {
+    switch (stringValue(index.objects[id]?.sourceTree)) {
+        case '<group>': {
+            const parent = parentOf(index, id);
+            return parent === undefined ? projectDir : resolvedPath(index, parent, projectDir);
+        }
+        case 'SOURCE_ROOT':
+            return projectDir;
+        default:
+            return undefined;
+    }
+}
+
+const BUNDLE_EXTENSIONS = ['.xcdatamodeld', '.xcdatamodel', '.lproj', '.xcassets', '.bundle', '.framework', '.app', '.xcframework'];
+
+/** Whether a folder name is a bundle Xcode treats as one item, whose rename is no folder rename. */
+export function isBundleName(name: string): boolean {
+    const lower = name.toLowerCase();
+    return BUNDLE_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}
+
+/** One component of an element's own `path` that names a folder. */
+export interface FolderSpelling {
+    id: string;
+    /** The component's index in `path.split('/')`. */
+    position: number;
+    /** The folder the component reaches, resolved like `resolvedPath`. */
+    folder: string;
+}
+
+const PATH_ELEMENT_ISAS = new Set(['PBXGroup', 'PBXVariantGroup', 'PBXFileSystemSynchronizedRootGroup', 'PBXFileReference', 'XCVersionGroup']);
+const FOLDER_ISAS = new Set(['PBXGroup', 'PBXVariantGroup', 'PBXFileSystemSynchronizedRootGroup']);
+
+/**
+ * Every component of an element's own `path` that names a folder, walked from `baseFolder`: the last component of a group,
+ * synchronized root or folder reference, and each earlier component of any element. `..`, `.` and empty components move
+ * the walk but name nothing, bundle components name nothing, and elements outside the `<group>` and SOURCE_ROOT trees or
+ * that don't resolve are left out. Memoized per index and project folder.
+ */
+export function folderSpellings(index: ProjectIndex, projectDir: string): readonly FolderSpelling[] {
+    const relations = relationsOf(index);
+    let spellings = relations.spellings.get(projectDir);
+    if (spellings) { return spellings; }
+    spellings = [];
+    for (const id of index.ids) {
+        const object = index.objects[id];
+        if (!PATH_ELEMENT_ISAS.has(object.isa ?? '')) { continue; }
+        const own = stringValue(object.path);
+        const base = own ? baseFolder(index, id, projectDir) : undefined;
+        if (!own || base === undefined || resolvedPath(index, id, projectDir) === undefined) { continue; }
+        const namesFolder = FOLDER_ISAS.has(object.isa ?? '') ||
+            stringValue(object.lastKnownFileType) === 'folder' || stringValue(object.explicitFileType) === 'folder';
+        const components = own.split('/');
+        let current = base;
+        components.forEach((component, position) => {
+            current = path.join(current, component);
+            if (component === '' || component === '.' || component === '..' || isBundleName(component)) { return; }
+            if (position === components.length - 1 && !namesFolder) { return; }
+            spellings!.push({ id, position, folder: current });
+        });
+    }
+    relations.spellings.set(projectDir, spellings);
+    return spellings;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
     locateObject,
     locateObjects,
     locateObjectsClose,
+    ownersOf,
     phasesOf,
     readProject,
     stringList,
@@ -391,9 +392,9 @@ function commentAfter(contents: string, offset: number): CommentText | undefined
     return { start, end: start + text.length, text };
 }
 
-/** Rewrites the comments showing a file reference's display name, in commented files; only a comment whose whole text is `from`, or `from in …`, changes. */
-function renameComments(edit: ProjectEdit, fileReferenceId: string, from: string, to: string): void {
-    if (!edit.commented || from === '' || from === to) { return; }
+/** The comments on the current text that show an element's display name `from`, each with `to` in its place: after its id in its definition and in each `children` entry, and for its build files after their ids (`from in …`) and `fileRef` values. Only a comment whose whole text matches changes. */
+function commentChanges(edit: ProjectEdit, id: string, from: string, to: string): CommentText[] {
+    if (!edit.commented || from === '' || from === to) { return []; }
     const contents = edit.contents;
     const changes: CommentText[] = [];
     const afterId = (offset: number | undefined): CommentText | undefined =>
@@ -405,13 +406,11 @@ function renameComments(edit: ProjectEdit, fileReferenceId: string, from: string
         if (comment?.text.startsWith(`${from} in `)) { changes.push({ ...comment, text: `${to}${comment.text.slice(from.length)}` }); }
     };
 
-    name(afterId(locateObject(contents, fileReferenceId)?.startIndex));
-    for (const ownerId of edit.index.ids) {
-        if (stringList(edit.index.objects[ownerId].children).includes(fileReferenceId)) {
-            name(afterId(locateListEntry(contents, ownerId, 'children', fileReferenceId)?.startIndex));
-        }
+    name(afterId(locateObject(contents, id)?.startIndex));
+    for (const ownerId of ownersOf(edit.index, id)) {
+        name(afterId(locateListEntry(contents, ownerId, 'children', id)?.startIndex));
     }
-    for (const buildFileId of buildFilesFor(edit.index, fileReferenceId)) {
+    for (const buildFileId of buildFilesFor(edit.index, id)) {
         inPhase(afterId(locateObject(contents, buildFileId)?.startIndex));
         const fileRef = locateKey(contents, buildFileId, 'fileRef');
         name(fileRef ? commentAfter(contents, fileRef.valueEnd) : undefined);
@@ -419,11 +418,61 @@ function renameComments(edit: ProjectEdit, fileReferenceId: string, from: string
             inPhase(afterId(locateListEntry(contents, phaseId, 'files', buildFileId)?.startIndex));
         }
     }
-    // Every offset was taken on one text, so the changes apply from the end, each once.
+    return changes;
+}
+
+/** Applies text changes located on one text, from the end so earlier offsets stay valid, each start once. */
+function applyTextChanges(edit: ProjectEdit, changes: CommentText[]): void {
     const ordered = changes.sort((a, b) => b.start - a.start).filter((change, position, all) => position === 0 || all[position - 1].start !== change.start);
     for (const change of ordered) {
         splice(edit, change.start, change.end, change.text);
     }
+}
+
+/** Rewrites the comments showing an element's display name, in commented files; only a comment whose whole text is `from`, or `from in …`, changes. */
+function renameComments(edit: ProjectEdit, id: string, from: string, to: string): void {
+    applyTextChanges(edit, commentChanges(edit, id, from, to));
+}
+
+/** A new `path`, and `name` when it changes, for one element. */
+export interface ElementPathChange {
+    id: string;
+    path: string;
+    name?: string;
+}
+
+/** Sets many elements' `path` (and given `name`) values in one pass over the text, with comments following changed display names; absent keys are left alone. */
+export function setElementPaths(edit: ProjectEdit, changes: readonly ElementPathChange[]): void {
+    const contents = edit.contents;
+    const spans: CommentText[] = [];
+    for (const change of changes) {
+        const object = edit.index.object(change.id);
+        if (!object) { continue; }
+        const pathKey = locateKey(contents, change.id, 'path');
+        if (pathKey) { spans.push({ start: pathKey.valueStart, end: pathKey.valueEnd, text: formatPath(change.path) }); }
+        if (change.name !== undefined) {
+            const nameKey = locateKey(contents, change.id, 'name');
+            if (nameKey) { spans.push({ start: nameKey.valueStart, end: nameKey.valueEnd, text: formatPath(change.name) }); }
+        }
+        const shown = change.name ?? stringValue(object.name) ?? change.path.split('/').pop() ?? '';
+        spans.push(...commentChanges(edit, change.id, displayName(object), shown));
+    }
+    applyTextChanges(edit, spans);
+}
+
+/** Moves an element into a group: its child entry leaves every `children` list and joins `groupId` as `shownName`, sorted with `comparable`; `path` is set and the tree becomes `<group>`. */
+export function moveElement(
+    edit: ProjectEdit,
+    id: string,
+    groupId: string,
+    elementPath: string,
+    shownName: string,
+    comparable: ((name: string) => boolean) | null
+): void {
+    removeFromLists(edit, id, 'children');
+    insertListEntry(edit, groupId, 'children', id, shownName, shownName, comparable);
+    setKey(edit, id, 'path', formatPath(elementPath));
+    setKey(edit, id, 'sourceTree', formatPath('<group>'));
 }
 
 /** Moves a file reference into a group under a file name: `path` becomes it, a `name` repeating the old or new file name goes, comments follow; ids, build files and settings stay. */
@@ -434,11 +483,8 @@ export function rehomeSwiftFile(edit: ProjectEdit, fileReferenceId: string, grou
     const keepsName = recordedName !== undefined && recordedName !== fileName && recordedName !== oldFileName;
     const shownName = keepsName && recordedName !== undefined ? recordedName : fileName;
     renameComments(edit, fileReferenceId, displayName(object), shownName);
-    removeFromLists(edit, fileReferenceId, 'children');
-    insertListEntry(edit, groupId, 'children', fileReferenceId, shownName, shownName, isSwiftEntry);
     if (recordedName !== undefined && !keepsName) { removeKey(edit, fileReferenceId, 'name'); }
-    setKey(edit, fileReferenceId, 'path', formatPath(fileName));
-    setKey(edit, fileReferenceId, 'sourceTree', formatPath('<group>'));
+    moveElement(edit, fileReferenceId, groupId, fileName, shownName, isSwiftEntry);
 }
 
 /** Renames a file reference in place: its `path`'s last component, a `name` repeating the old file name, and its comments; ids, build files, settings and group position stay. */

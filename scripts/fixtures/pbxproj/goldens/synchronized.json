@@ -239,6 +239,18 @@
     "parseResourcesForTarget E70000000000000000000703": [],
     "findFileReferencePath E70000000000000000000101": "Helper.swift",
     "findBuildFileId E70000000000000000000101": "A10000000000000000000201",
+    "folderSpellings": [
+      {
+        "id": "A10000000000000000000010",
+        "position": 0,
+        "folder": "/project/SyncApp"
+      },
+      {
+        "id": "A10000000000000000000012",
+        "position": 0,
+        "folder": "/project/Extras"
+      }
+    ],
     "displayName E70000000000000000000101": "Helper.swift",
     "buildFilesFor E70000000000000000000101": [
       "A10000000000000000000201"

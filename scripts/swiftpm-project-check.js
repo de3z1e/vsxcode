@@ -27,7 +27,8 @@ const FIXTURES = path.join(__dirname, 'fixtures');
 
 const FULLY = 'Use VSXcode fully';
 const KEEP = 'Keep it a SwiftPM package';
-const SYNC_WATCHERS = ['**/*.swift', '**/*.xcdatamodeld', '**/*.xcdatamodeld/**'];
+// The file-sync watchers; `**/*` is the Swift sync's folder watcher, and no other part of the extension creates one.
+const SYNC_WATCHERS = ['**/*.swift', '**/*', '**/*.xcdatamodeld', '**/*.xcdatamodeld/**'];
 const QUIET_MS = 2000;
 const MAX_WAIT_MS = 30000;
 

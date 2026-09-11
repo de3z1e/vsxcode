@@ -3,18 +3,32 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { promises as fsp } from 'fs';
 
-import { buildFilesFor, groupForFolder, phasesOf, readProject, resolvedPath, stringValue, targetOfPhase } from '../parsers/projectIndex';
-import type { ProjectIndex } from '../parsers/projectIndex';
+import {
+    baseFolder,
+    buildFilesFor,
+    displayName,
+    folderSpellings,
+    groupForFolder,
+    phasesOf,
+    readProject,
+    resolvedPath,
+    stringValue,
+    targetOfPhase
+} from '../parsers/projectIndex';
+import type { FolderSpelling, ProjectIndex } from '../parsers/projectIndex';
 import {
     addGroupPath,
     addSwiftFile,
+    anyEntry,
     beginProjectEdit,
+    moveElement,
     rehomeSwiftFile,
     removeSwiftFile,
     renameSwiftFile,
+    setElementPaths,
     setFileReferencePath
 } from '../writers/pbxproj';
-import type { ProjectEdit } from '../writers/pbxproj';
+import type { ElementPathChange, ProjectEdit } from '../writers/pbxproj';
 import {
     buildTargetMappings,
     canonicalPath,
@@ -23,6 +37,7 @@ import {
     enqueueWrite,
     findMappingForFile,
     findPbxprojPath,
+    isFilteredFolder,
     isFilteredPath,
     isUnderSynchronizedRoot,
     walkTargetDirectory
@@ -51,16 +66,19 @@ interface FileIdentity {
     ino: bigint;
 }
 
-/** A registered file's identity, taken while the file existed. */
+/** A registered file's or spelled folder's identity, taken while it existed. */
 interface RecordedIdentity extends FileIdentity {
-    /** The reference's `recordedPath` when taken; the entry counts only while the reference still records that place. */
+    /** The place as the project recorded it when taken; the entry counts only while the project still records it. */
     recordedPath: string;
-    /** The same place in on-disk form, which change events are matched by. */
+    /** The same place in on-disk form, which events are matched by. */
     path: string;
 }
 
-/** Identities of registered Swift files by reference id, kept by a watcher across batches. */
-type Identities = Map<string, RecordedIdentity>;
+/** Identities a watcher keeps across batches: registered Swift files by reference id, and spelled folders by the folder as the project spells it. */
+interface IdentityStore {
+    files: Map<string, RecordedIdentity>;
+    folders: Map<string, RecordedIdentity>;
+}
 
 /** A rename VS Code reported, both paths in on-disk form. */
 interface Rename {
@@ -80,7 +98,7 @@ interface SyncPass {
     /** The deepest group created for a folder during the pass, by on-disk folder. */
     createdGroups: Map<string, string>;
     rehomed: Set<string>;
-    identities: Identities;
+    identities: IdentityStore;
     /** Identities statted during the pass, by on-disk path. */
     statted: Map<string, FileIdentity | undefined>;
     log: (message: string) => void;
@@ -88,6 +106,9 @@ interface SyncPass {
     synchronizedFolders?: string[];
     unregistered?: Promise<string[]>;
 }
+
+const isSwiftPath = (target: string): boolean => target.endsWith('.swift');
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 /** canonicalPath, remembered per path. */
 function canonicalForms(): (target: string) => string {
@@ -127,7 +148,7 @@ function openPass(
     pbxprojPath: string,
     contents: string,
     log: (message: string) => void,
-    identities: Identities
+    identities: IdentityStore
 ): SyncPass | null {
     const edit = beginProjectEdit(contents);
     if (!edit) {
@@ -158,12 +179,13 @@ function relativeTo(pass: SyncPass, target: string): string {
     return path.relative(pass.root, target) || '.';
 }
 
-// ── File identities ──────────────────────────────────────
+// ── Identities ───────────────────────────────────────────
 
-function identityOf(filePath: string): FileIdentity | undefined {
+/** The identity of a file, or with `folder` of a folder; undefined for anything else or nothing. */
+function identityOf(target: string, folder = false): FileIdentity | undefined {
     try {
-        const stats = fs.statSync(filePath, { bigint: true });
-        return stats.isFile() ? { dev: stats.dev, ino: stats.ino } : undefined;
+        const stats = fs.statSync(target, { bigint: true });
+        return (folder ? stats.isDirectory() : stats.isFile()) ? { dev: stats.dev, ino: stats.ino } : undefined;
     } catch {
         return undefined;
     }
@@ -173,44 +195,60 @@ function sameFile(left: FileIdentity | undefined, right: FileIdentity | undefine
     return left !== undefined && right !== undefined && left.dev === right.dev && left.ino === right.ino;
 }
 
-/** A path's identity, statted at most once per pass. */
+/** A path's file identity, statted at most once per pass. */
 function statOnce(pass: SyncPass, filePath: string): FileIdentity | undefined {
     if (!pass.statted.has(filePath)) { pass.statted.set(filePath, identityOf(filePath)); }
     return pass.statted.get(filePath);
 }
 
-/** A missing file's entry survives while its reference records the same place, so a rename whose events are pending stays pairable. */
-function recordIdentities(identities: Identities, references: SwiftReference[]): void {
-    const recorded: Identities = new Map();
-    for (const reference of references) {
+function replaceEntries(store: Map<string, RecordedIdentity>, entries: Map<string, RecordedIdentity>): void {
+    store.clear();
+    for (const [key, entry] of entries) { store.set(key, entry); }
+}
+
+/** Takes the identity of each registered file and spelled folder that exists. A missing one keeps its entry while the project still records the same place, so a rename whose events are pending stays pairable; entries gone from the project drop out. */
+function recordIdentities(store: IdentityStore, index: ProjectIndex, root: string, canonical: (target: string) => string): void {
+    const files = new Map<string, RecordedIdentity>();
+    for (const reference of swiftReferences(index, root, canonical)) {
         const identity = reference.exists ? identityOf(reference.recordedPath) : undefined;
-        const previous = identities.get(reference.id);
+        const previous = store.files.get(reference.id);
         if (identity) {
-            recorded.set(reference.id, { ...identity, recordedPath: reference.recordedPath, path: reference.path });
+            files.set(reference.id, { ...identity, recordedPath: reference.recordedPath, path: reference.path });
         } else if (previous && previous.recordedPath === reference.recordedPath) {
-            recorded.set(reference.id, previous);
+            files.set(reference.id, previous);
         }
     }
-    identities.clear();
-    for (const [id, entry] of recorded) { identities.set(id, entry); }
+    replaceEntries(store.files, files);
+
+    const folders = new Map<string, RecordedIdentity>();
+    for (const folder of new Set(folderSpellings(index, root).map((spelling) => spelling.folder))) {
+        const identity = identityOf(folder, true);
+        const previous = store.folders.get(folder);
+        if (identity) {
+            folders.set(folder, { ...identity, recordedPath: folder, path: canonical(folder) });
+        } else if (previous) {
+            folders.set(folder, previous);
+        }
+    }
+    replaceEntries(store.folders, folders);
 }
 
 /** Records identities from the project file as it is on disk; an unreadable project leaves them as they were. */
-async function recordProjectIdentities(root: string, pbxprojPath: string, identities: Identities): Promise<void> {
+async function recordProjectIdentities(root: string, pbxprojPath: string, store: IdentityStore): Promise<void> {
     const index = readProject(await fsp.readFile(pbxprojPath, 'utf8'));
     if (typeof index === 'string') { return; }
-    recordIdentities(identities, swiftReferences(index, root, canonicalForms()));
+    recordIdentities(store, index, root, canonicalForms());
 }
 
 /** Retakes a registered file's identity: an atomic save arrives as a create and gives the path a new inode. */
-function refreshIdentity(identities: Identities, reference: SwiftReference): void {
+function refreshIdentity(files: Map<string, RecordedIdentity>, reference: SwiftReference): void {
     const identity = identityOf(reference.recordedPath);
-    if (identity) { identities.set(reference.id, { ...identity, recordedPath: reference.recordedPath, path: reference.path }); }
+    if (identity) { files.set(reference.id, { ...identity, recordedPath: reference.recordedPath, path: reference.path }); }
 }
 
 /** Retakes the identities recorded at a path, for a change event: VS Code folds a delete-then-create of one path into a change. */
-function refreshIdentitiesAt(identities: Identities, filePath: string): void {
-    for (const entry of identities.values()) {
+function refreshIdentitiesAt(files: Map<string, RecordedIdentity>, filePath: string): void {
+    for (const entry of files.values()) {
         if (entry.path !== filePath) { continue; }
         const identity = identityOf(filePath);
         if (identity) {
@@ -218,6 +256,15 @@ function refreshIdentitiesAt(identities: Identities, filePath: string): void {
             entry.ino = identity.ino;
         }
     }
+}
+
+/** Whether a folder identity is recorded at an on-disk path, compared without regard to letter case. */
+function hasRecordedFolder(store: IdentityStore, folder: string): boolean {
+    const wanted = folder.toLowerCase();
+    for (const entry of store.folders.values()) {
+        if (entry.path.toLowerCase() === wanted) { return true; }
+    }
+    return false;
 }
 
 // ── Places ───────────────────────────────────────────────
@@ -251,7 +298,7 @@ function isInSynchronizedFolder(pass: SyncPass, filePath: string): boolean {
             .map(pass.canonical);
     }
     return pass.mappings.some((mapping) => isUnderSynchronizedRoot(filePath, mapping)) ||
-        pass.synchronizedFolders.some((folder) => filePath.startsWith(folder + path.sep));
+        pass.synchronizedFolders.some((folder) => filePath === folder || filePath.startsWith(folder + path.sep));
 }
 
 /** The group for a folder: its own, one created earlier in the pass, or new groups under the deepest ancestor folder that has one. */
@@ -276,6 +323,177 @@ function relist(pass: SyncPass, reference: SwiftReference, destination: string, 
     if (others.length > 0) { pass.byPath.set(reference.path, others); } else { pass.byPath.delete(reference.path); }
     Object.assign(reference, { recordedPath: destination, path: destination, ownPath, fileName: path.basename(destination), exists: true });
     pass.byPath.set(destination, [...(pass.byPath.get(destination) ?? []), reference]);
+}
+
+// ── Folders ──────────────────────────────────────────────
+
+/** A folder the project spells in elements' own paths, with where it is on disk. */
+interface SpelledFolder {
+    /** The folder as the project spells it. */
+    folder: string;
+    /** The same place in on-disk form. */
+    path: string;
+    spellings: FolderSpelling[];
+    exists: boolean;
+}
+
+const under = (candidate: string, folder: string): boolean => candidate === folder || candidate.startsWith(folder + path.sep);
+
+/** Every spelled folder, by its spelling. */
+function spelledFolders(pass: SyncPass): Map<string, SpelledFolder> {
+    const spelled = new Map<string, SpelledFolder>();
+    for (const spelling of folderSpellings(pass.index, pass.root)) {
+        let entry = spelled.get(spelling.folder);
+        if (!entry) {
+            entry = { folder: spelling.folder, path: pass.canonical(spelling.folder), spellings: [], exists: identityOf(spelling.folder, true) !== undefined };
+            spelled.set(spelling.folder, entry);
+        }
+        entry.spellings.push(spelling);
+    }
+    return spelled;
+}
+
+/** One pair decided for a folder pass: the spelled folder and where it is now, in on-disk form. */
+interface FolderPair {
+    from: SpelledFolder;
+    to: string;
+}
+
+/** The elements' path changes that rename a spelled folder in place: its component at each spelling's position, and a `name` that repeated it. */
+function renameChanges(pass: SyncPass, from: SpelledFolder, newName: string): ElementPathChange[] {
+    const oldName = path.basename(from.folder);
+    const changes = new Map<string, ElementPathChange>();
+    for (const spelling of from.spellings) {
+        const object = pass.index.object(spelling.id);
+        const own = stringValue(object?.path);
+        if (own === undefined) { continue; }
+        const change = changes.get(spelling.id) ?? { id: spelling.id, path: own };
+        const components = change.path.split('/');
+        components[spelling.position] = newName;
+        change.path = components.join('/');
+        if (spelling.position === components.length - 1 && stringValue(object?.name) === oldName) { change.name = newName; }
+        changes.set(spelling.id, change);
+    }
+    return [...changes.values()];
+}
+
+/** Moves a spelled folder's elements to `to`, under another parent: elements resolving to the folder move under the new parent's group, paths passing through it are recomputed, and descendants whose paths climb out of it keep resolving where they did. */
+function moveFolder(pass: SyncPass, { from, to }: FolderPair): number {
+    const groupId = destinationGroup(pass, path.dirname(to));
+    if (!groupId) {
+        pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, path.dirname(to))}, leaving ${relativeTo(pass, from.path)}'s entries for repair`);
+        return 0;
+    }
+    const oldFolder = from.folder;
+    const newName = path.basename(to);
+    const rebased = (base: string): string => (under(base, oldFolder) ? path.join(to, path.relative(oldFolder, base)) : base);
+    const changes: ElementPathChange[] = [];
+    const spelledIds = new Set(from.spellings.map((spelling) => spelling.id));
+
+    for (const spelling of from.spellings) {
+        const object = pass.index.object(spelling.id);
+        const own = stringValue(object?.path);
+        const base = baseFolder(pass.index, spelling.id, pass.root);
+        if (!object || own === undefined || base === undefined) { continue; }
+        const components = own.split('/');
+        if (spelling.position === components.length - 1) {
+            if (spelling.id === pass.index.mainGroupId) {
+                pass.log(`${LOG_PREFIX} the main group spells ${relativeTo(pass, from.path)}, leaving it`);
+                continue;
+            }
+            const recordedName = stringValue(object.name);
+            const renamesName = recordedName === path.basename(oldFolder);
+            const shownName = recordedName !== undefined && !renamesName ? recordedName : newName;
+            moveElement(pass.edit, spelling.id, groupId, newName, shownName, anyEntry);
+            changes.push({ id: spelling.id, path: newName, ...(renamesName ? { name: newName } : {}) });
+            continue;
+        }
+        const through = path.relative(rebased(base), to);
+        changes.push({ id: spelling.id, path: path.posix.join(through, ...components.slice(spelling.position + 1)) });
+    }
+
+    for (const id of pass.index.ids) {
+        if (spelledIds.has(id) || stringValue(pass.index.objects[id].sourceTree) !== '<group>' || !stringValue(pass.index.objects[id].path)) { continue; }
+        const base = baseFolder(pass.index, id, pass.root);
+        const resolved = resolvedPath(pass.index, id, pass.root);
+        if (base === undefined || resolved === undefined || !under(base, oldFolder) || under(resolved, oldFolder)) { continue; }
+        changes.push({ id, path: path.relative(rebased(base), resolved) });
+    }
+
+    setElementPaths(pass.edit, changes);
+    return changes.length;
+}
+
+/** Decides the batch's folder paths and folder renames: pairs by VS Code's rename event, then by identity, then letter-case drift; the paired folders' elements are rewritten. */
+function syncFolders(pass: SyncPass, folderPaths: string[], renames: Rename[]): void {
+    const spelled = spelledFolders(pass);
+    const byDisk = new Map<string, SpelledFolder[]>();
+    for (const entry of spelled.values()) {
+        byDisk.set(entry.path, [...(byDisk.get(entry.path) ?? []), entry]);
+    }
+    const present = [...new Set(folderPaths)].filter((folder) => identityOf(folder, true) !== undefined);
+    const pairs: FolderPair[] = [];
+    const paired = new Set<string>();
+    const takeable = (destination: string): boolean => {
+        if (isInSynchronizedFolder(pass, destination)) { return false; }
+        if (byDisk.has(destination)) {
+            pass.log(`${LOG_PREFIX} ${relativeTo(pass, destination)} is already in the project, leaving the folder's entries for repair`);
+            return false;
+        }
+        return true;
+    };
+
+    for (const { from, to } of renames) {
+        const sources = (byDisk.get(from) ?? []).filter((entry) => !entry.exists && !paired.has(entry.folder));
+        if (sources.length === 0 || identityOf(to, true) === undefined || !takeable(to)) { continue; }
+        for (const source of sources) {
+            pairs.push({ from: source, to });
+            paired.add(source.folder);
+        }
+    }
+
+    for (const created of present) {
+        if (byDisk.has(created) || isInSynchronizedFolder(pass, created)) { continue; }
+        const identity = identityOf(created, true);
+        const gone = [...spelled.values()].filter((entry) =>
+            !entry.exists && !paired.has(entry.folder) && sameFile(pass.identities.folders.get(entry.folder), identity));
+        if (gone.length === 1) {
+            pairs.push({ from: gone[0], to: created });
+            paired.add(gone[0].folder);
+        } else if (gone.length > 1) {
+            pass.log(`${LOG_PREFIX} ${gone.length} project folders have ${relativeTo(pass, created)}'s identity, leaving them`);
+        }
+    }
+
+    const caseChanges: ElementPathChange[] = [];
+    for (const created of present) {
+        for (const entry of byDisk.get(created) ?? []) {
+            if (entry.folder === created || paired.has(entry.folder)) { continue; }
+            const spelledName = path.basename(entry.folder);
+            const actualName = path.basename(created);
+            if (path.dirname(entry.folder) !== path.dirname(created) || spelledName.toLowerCase() !== actualName.toLowerCase()) {
+                pass.log(`${LOG_PREFIX} ${relativeTo(pass, created)} differs from the project in letter case above its own name, leaving it`);
+                continue;
+            }
+            caseChanges.push(...renameChanges(pass, entry, actualName));
+            pass.log(`${LOG_PREFIX} ${spelledName} renamed to ${actualName}, ${plural(entry.spellings.length, 'path')} rewritten`);
+        }
+    }
+    if (caseChanges.length > 0) { setElementPaths(pass.edit, caseChanges); }
+
+    for (const pair of pairs) {
+        const { from, to } = pair;
+        if (path.dirname(from.path) === path.dirname(to)) {
+            const changes = renameChanges(pass, from, path.basename(to));
+            setElementPaths(pass.edit, changes);
+            pass.log(`${LOG_PREFIX} ${relativeTo(pass, from.path)} renamed to ${path.basename(to)}, ${plural(changes.length, 'path')} rewritten`);
+        } else {
+            const count = moveFolder(pass, pair);
+            if (count > 0) {
+                pass.log(`${LOG_PREFIX} ${relativeTo(pass, from.path)} moved to ${relativeTo(pass, path.dirname(to))}${path.basename(from.path) === path.basename(to) ? '' : ` as ${path.basename(to)}`}, ${plural(count, 'path')} rewritten`);
+            }
+        }
+    }
 }
 
 // ── Decisions ────────────────────────────────────────────
@@ -329,14 +547,14 @@ function moveReferences(pass: SyncPass, references: SwiftReference[], destinatio
 
 /** Whether a path can take over a gone file's entry: an existing Swift file that isn't registered and isn't under a synchronized root. */
 function pairableDestination(pass: SyncPass, filePath: string): boolean {
-    return filePath.endsWith('.swift') && !pass.byPath.has(filePath) && fs.existsSync(filePath) && !isInSynchronizedFolder(pass, filePath);
+    return isSwiftPath(filePath) && !pass.byPath.has(filePath) && statOnce(pass, filePath) !== undefined && !isInSynchronizedFolder(pass, filePath);
 }
 
 /** Registered references whose file is gone and whose recorded identity is `identity`. */
 function missingReferencesWith(pass: SyncPass, identity: FileIdentity | undefined): SwiftReference[] {
     return pass.references.filter((reference) => {
         if (reference.exists || pass.rehomed.has(reference.id)) { return false; }
-        const recorded = pass.identities.get(reference.id);
+        const recorded = pass.identities.files.get(reference.id);
         return recorded !== undefined && recorded.recordedPath === reference.recordedPath && sameFile(recorded, identity);
     });
 }
@@ -376,7 +594,7 @@ function placePresentFile(pass: SyncPass, filePath: string): void {
     if (registered) {
         for (const reference of registered) {
             fixLetterCase(pass, reference);
-            if (!pass.rehomed.has(reference.id)) { refreshIdentity(pass.identities, reference); }
+            if (!pass.rehomed.has(reference.id)) { refreshIdentity(pass.identities.files, reference); }
         }
         return;
     }
@@ -450,7 +668,7 @@ async function settleMissingFile(pass: SyncPass, filePath: string): Promise<void
 
     // A rename whose create comes in a later batch: the file already sits at its new path, with the identity it had.
     for (const reference of waiting()) {
-        const recorded = pass.identities.get(reference.id);
+        const recorded = pass.identities.files.get(reference.id);
         if (!recorded || recorded.recordedPath !== reference.recordedPath || pass.rehomed.has(reference.id)) { continue; }
         const matches = unregistered().filter((candidate) => sameFile(statOnce(pass, candidate), recorded) && !isInSynchronizedFolder(pass, candidate));
         if (matches.length === 1) {
@@ -472,35 +690,56 @@ async function settleMissingFile(pass: SyncPass, filePath: string): Promise<void
     pass.log(`${LOG_PREFIX} Removed ${fileName} from pbxproj`);
 }
 
-/** One batch of paths in on-disk form, plus the renames VS Code reported for them; pairs are decided before existing paths, existing before missing, with one write. */
+/** Writes a pass's text when it changed, and records identities from what was written. */
+async function writePass(pass: SyncPass, pbxprojPath: string, contents: string): Promise<string> {
+    if (pass.edit.contents === contents) { return contents; }
+    await fsp.writeFile(pbxprojPath, pass.edit.contents, 'utf8');
+    const written = readProject(pass.edit.contents);
+    if (typeof written !== 'string') { recordIdentities(pass.identities, written, pass.root, pass.canonical); }
+    return pass.edit.contents;
+}
+
+/**
+ * One batch of paths in on-disk form, plus the renames VS Code reported for them. Folder paths (anything not `.swift`) are
+ * decided first and written, then the Swift paths are decided on a fresh pass over the written text: pairs before existing
+ * paths, existing before missing, with one write.
+ */
 async function syncBatch(
     root: string,
     pbxprojPath: string,
     paths: string[],
     log: (message: string) => void,
-    identities: Identities,
+    identities: IdentityStore,
     renames: Rename[] = []
 ): Promise<void> {
-    const contents = await fsp.readFile(pbxprojPath, 'utf8');
+    const unique = [...new Set(paths)];
+    const filePaths = unique.filter(isSwiftPath);
+    const folderPaths = unique.filter((candidate) => !isSwiftPath(candidate));
+    const fileRenames = renames.filter(({ from, to }) => isSwiftPath(from) && isSwiftPath(to));
+    const folderRenames = renames.filter(({ from, to }) => !isSwiftPath(from) && !isSwiftPath(to));
+    let contents = await fsp.readFile(pbxprojPath, 'utf8');
+
+    if (folderPaths.length > 0 || folderRenames.length > 0) {
+        const pass = openPass(root, pbxprojPath, contents, log, identities);
+        if (!pass) { return; }
+        syncFolders(pass, folderPaths, folderRenames);
+        contents = await writePass(pass, pbxprojPath, contents);
+    }
+    if (filePaths.length === 0 && fileRenames.length === 0) { return; }
+
+    // The same text costs no second parse: the index is memoized per contents.
     const pass = openPass(root, pbxprojPath, contents, log, identities);
     if (!pass) { return; }
-
-    const unique = [...new Set(paths)];
-    const present = unique.filter((filePath) => fs.existsSync(filePath));
-    followRenames(pass, renames);
+    const present = filePaths.filter((filePath) => statOnce(pass, filePath) !== undefined);
+    followRenames(pass, fileRenames);
     pairByIdentity(pass, present);
     for (const filePath of present) {
         placePresentFile(pass, filePath);
     }
-    for (const filePath of unique.filter((candidate) => !present.includes(candidate))) {
+    for (const filePath of filePaths.filter((candidate) => !present.includes(candidate) && !fs.existsSync(candidate))) {
         await settleMissingFile(pass, filePath);
     }
-
-    if (pass.edit.contents !== contents) {
-        await fsp.writeFile(pbxprojPath, pass.edit.contents, 'utf8');
-        const written = readProject(pass.edit.contents);
-        if (typeof written !== 'string') { recordIdentities(identities, swiftReferences(written, root, pass.canonical)); }
-    }
+    await writePass(pass, pbxprojPath, contents);
 }
 
 /** Runs a job on the shared write queue and logs its failure, since nothing awaits it and enqueueWrite hands a rejection to its caller. */
@@ -526,7 +765,7 @@ export function createSwiftFileWatcher(
     }
 
     const root = canonicalPath(rootPath);
-    const identities: Identities = new Map();
+    const identities: IdentityStore = { files: new Map(), folders: new Map() };
     queueLogged(log, () => recordProjectIdentities(root, pbxprojPath, identities));
 
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.swift');
@@ -536,16 +775,34 @@ export function createSwiftFileWatcher(
     const onCreate = watcher.onDidCreate(queue);
     const onDelete = watcher.onDidDelete(queue);
     // An edit in place keeps the inode; only a replace folded into a change needs its identity taken again.
-    const onChange = watcher.onDidChange((uri) => refreshIdentitiesAt(identities, canonicalPath(uri.fsPath)));
+    const onChange = watcher.onDidChange((uri) => refreshIdentitiesAt(identities.files, canonicalPath(uri.fsPath)));
+
+    // Folder renames and moves arrive as one delete and one create of the folder, with nothing for its contents.
+    const folderWatcher = vscode.workspace.createFileSystemWatcher('**/*');
+    const folderCandidate = (uri: vscode.Uri): string | undefined => {
+        const folder = canonicalPath(uri.fsPath);
+        return isSwiftPath(folder) || isFilteredFolder(root, folder) ? undefined : folder;
+    };
+    const onFolderCreate = folderWatcher.onDidCreate((uri) => {
+        const folder = folderCandidate(uri);
+        if (folder !== undefined && identityOf(folder, true)) { batches.add(folder); }
+    });
+    const onFolderDelete = folderWatcher.onDidDelete((uri) => {
+        const folder = folderCandidate(uri);
+        if (folder !== undefined && hasRecordedFolder(identities, folder)) { batches.add(folder); }
+    });
 
     // Renames made in the editor pair exactly and run at once; the watcher's events for them arrive later and find nothing to do.
     const onRename = vscode.workspace.onDidRenameFiles((event) => {
         const reported = event.files
             .map(({ oldUri, newUri }) => ({ from: canonicalPath(oldUri.fsPath), to: canonicalPath(newUri.fsPath) }))
-            .filter(({ from, to }) => from.endsWith('.swift') && to.endsWith('.swift') &&
-                !isFilteredPath(root, from) && !isFilteredPath(root, to));
+            .filter(({ from, to }) => {
+                if (isSwiftPath(from) && isSwiftPath(to)) { return !isFilteredPath(root, from) && !isFilteredPath(root, to); }
+                if (!isSwiftPath(from) && !isSwiftPath(to)) { return !isFilteredFolder(root, from) && !isFilteredFolder(root, to); }
+                return false;
+            });
         if (reported.length === 0) { return; }
-        // A letter-case rename maps both paths to one on-disk path, which the batch's case fix handles without a pair.
+        // A letter-case rename maps both paths to one on-disk path, which the batch's case rules handle without a pair.
         const renames = reported.filter(({ from, to }) => from !== to);
         const paths = reported.flatMap(({ from, to }) => [from, to]);
         queueLogged(log, () => syncBatch(root, pbxprojPath, paths, log, identities, renames));
@@ -564,7 +821,10 @@ export function createSwiftFileWatcher(
     const onProjectCreate = projectWatcher.onDidCreate(onProjectEvent);
 
     log(`${LOG_PREFIX} Swift file watcher active`);
-    return [watcher, onCreate, onDelete, onChange, onRename, batches, projectWatcher, onProjectChange, onProjectCreate, records];
+    return [
+        watcher, onCreate, onDelete, onChange, folderWatcher, onFolderCreate, onFolderDelete, onRename, batches,
+        projectWatcher, onProjectChange, onProjectCreate, records
+    ];
 }
 
 function walkSwiftFiles(dir: string): Promise<string[]> {
@@ -592,7 +852,7 @@ export async function reconcileSwiftFiles(
     // Read pbxproj inside the lock so we pick up any adds the watcher just applied before computing what's missing.
     return enqueueWrite(async () => {
         const contents = await fsp.readFile(pbxprojPath, 'utf8');
-        const pass = openPass(root, pbxprojPath, contents, log, new Map());
+        const pass = openPass(root, pbxprojPath, contents, log, { files: new Map(), folders: new Map() });
         if (!pass || pass.mappings.length === 0) { return 0; }
 
         // Assign each file to its most-specific (longest-prefix) target so nested-target files don't land in the enclosing target; dedup files reachable under multiple mappings.

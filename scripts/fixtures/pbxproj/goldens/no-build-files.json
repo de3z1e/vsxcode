@@ -206,6 +206,13 @@
     "parseLinkedFrameworksForTarget B20000000000000000000702": [],
     "findFileReferencePath B20000000000000000000101": "README.md",
     "findBuildFileId B20000000000000000000101": null,
+    "folderSpellings": [
+      {
+        "id": "7F0000000000000000000010",
+        "position": 0,
+        "folder": "/project/EmptyKit"
+      }
+    ],
     "displayName B20000000000000000000101": "README.md",
     "buildFilesFor B20000000000000000000101": [],
     "phasesOf B20000000000000000000101": {},

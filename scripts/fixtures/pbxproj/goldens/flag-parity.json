@@ -293,6 +293,18 @@
     "findBuildFileId AA0000000000000000000002": "AA0000000000000000000001",
     "findFileReferencePath AA0000000000000000000012": "Inherited.swift",
     "findBuildFileId AA0000000000000000000012": "AA0000000000000000000011",
+    "folderSpellings": [
+      {
+        "id": "AA0000000000000000000006",
+        "position": 0,
+        "folder": "/project/FlagParityTarget"
+      },
+      {
+        "id": "AA0000000000000000000015",
+        "position": 0,
+        "folder": "/project/FlagParityInherited"
+      }
+    ],
     "displayName AA0000000000000000000002": "Covered.swift",
     "buildFilesFor AA0000000000000000000002": [
       "AA0000000000000000000001"

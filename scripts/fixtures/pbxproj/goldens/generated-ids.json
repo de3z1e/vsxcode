@@ -186,6 +186,18 @@
     "findBuildFileId OBJ_9": "OBJ_16",
     "findFileReferencePath OBJ_6": "Package.swift",
     "findBuildFileId OBJ_6": null,
+    "folderSpellings": [
+      {
+        "id": "OBJ_8",
+        "position": 0,
+        "folder": "/project/Sources"
+      },
+      {
+        "id": "OBJ_8",
+        "position": 1,
+        "folder": "/project/Sources/SampleKit"
+      }
+    ],
     "displayName OBJ_9": "SampleKit.swift",
     "buildFilesFor OBJ_9": [
       "OBJ_16"
@@ -309,6 +321,19 @@
         "+63: \t\t\t\tOBJ_9 /* Kit.swift */,",
         "-116: \t\t\t\tOBJ_16 /* SampleKit.swift in Sources */,",
         "+117: \t\t\t\tOBJ_16 /* Kit.swift in Sources */,"
+      ]
+    },
+    "writer setElementPaths Sources/SampleKit to Sources/Kit": {
+      "lint": "OK",
+      "diff": [
+        "-53: \t\t\t\tOBJ_8 /* SampleKit */,",
+        "+54: \t\t\t\tOBJ_8 /* Kit */,",
+        "-59: \t\tOBJ_8 /* SampleKit */ = {",
+        "+60: \t\tOBJ_8 /* Kit */ = {",
+        "-64: \t\t\tname = SampleKit;",
+        "-65: \t\t\tpath = Sources/SampleKit;",
+        "+66: \t\t\tname = Kit;",
+        "+66: \t\t\tpath = \"Sources/Kit\";"
       ]
     },
     "writer addGroupPath Sources/SampleKit/Feature": {

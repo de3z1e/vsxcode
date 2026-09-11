@@ -5,6 +5,7 @@ import * as fs from 'fs';
 
 import { parseNativeTargets, isTestTarget, parseBuildPhaseIds } from '../parsers/targets';
 import { parseGroups, findMainGroupId, resolveGroupForPath, buildGroupDirectories } from '../parsers/groups';
+import { isBundleName } from '../parsers/projectIndex';
 import { SPM_RESOURCE_DIR_EXTENSIONS } from '../types/constants';
 import { determineTargetPath } from '../utils/path';
 
@@ -178,6 +179,13 @@ export function isFilteredPath(root: string, filePath: string): boolean {
     if (relative === '' || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) { return true; }
     return relative.split(path.sep).slice(0, -1).some((folder) =>
         folder.startsWith('.') || RECONCILE_SKIP_DIRS.has(folder) || folder.endsWith('.xcodeproj'));
+}
+
+/** Whether folder sync never looks at a folder: `isFilteredPath` on its parents, or its own name is a skip folder, starts with `.`, ends in `.xcodeproj`, or is a bundle. */
+export function isFilteredFolder(root: string, folder: string): boolean {
+    if (isFilteredPath(root, folder)) { return true; }
+    const name = path.basename(folder);
+    return name.startsWith('.') || RECONCILE_SKIP_DIRS.has(name) || name.endsWith('.xcodeproj') || isBundleName(name);
 }
 
 /** Collects event paths into batches, dropping filtered ones before any timing, and runs each batch on the shared write queue. */

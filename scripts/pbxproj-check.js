@@ -16,7 +16,7 @@
  *
  *   VSXCODE_PBXPROJ_CORPUS=<file listing project.pbxproj paths>
  *   VSXCODE_PBXPROJ_CORPUS_GOLDENS=<directory outside this repository>
- *     also run the parsers and three writer edits over local projects. Output is counts and list indexes
+ *     also run the parsers and four writer edits over local projects. Output is counts and list indexes
  *     only, and the goldens directory must be outside the repository because it holds private project data.
  */
 'use strict';
@@ -52,9 +52,10 @@ const COMMENT_FREE = new Set([
     'parseGroups', 'findMainGroupId', 'buildGroupDirectories', 'resolveGroupForPath', 'parseVersionGroups',
     'findFileReferencePath', 'findBuildFileId',
     'displayName', 'buildFilesFor', 'phasesOf', 'locateList', 'locateListEntry',
-    'parentOf', 'resolvedPath', 'groupForFolder', 'targetOfPhase', 'locateKey',
+    'parentOf', 'resolvedPath', 'groupForFolder', 'targetOfPhase', 'locateKey', 'folderSpellings',
     'writer addSwiftFileToPbxproj', 'writer removeSwiftFile', 'writer rehomeSwiftFile', 'writer renameSwiftFile',
-    'writer setFileReferencePath', 'writer addGroupPath', 'writer addDataModelToPbxproj', 'writer updateVersionGroupVersions',
+    'writer setFileReferencePath', 'writer setElementPaths', 'writer moveElement', 'writer addGroupPath',
+    'writer addDataModelToPbxproj', 'writer updateVersionGroupVersions',
     'writer moveVersionGroupToGroup', 'writer removeDataModelFromPbxproj', 'writer updateBuildSetting'
 ]);
 
@@ -123,6 +124,13 @@ const FIXTURES = [
                 inSession(text, (edit) => writers.renameSwiftFile(edit, hexId('5A', '0107'), 'Heritage.swift')),
             'renameSwiftFile SharedModels.swift to Models.swift': (text) =>
                 inSession(text, (edit) => writers.renameSwiftFile(edit, hexId('C3', '0108'), 'Models.swift')),
+            // A group's own folder, the middle component of a file's two-component path, and a SOURCE_ROOT group moved.
+            'setElementPaths SampleApp/Views to Screens': (text) =>
+                inSession(text, (edit) => writers.setElementPaths(edit, [{ id: hexId('5A', '0011'), path: 'Screens' }])),
+            'setElementPaths Components to Parts': (text) =>
+                inSession(text, (edit) => writers.setElementPaths(edit, [{ id: hexId('5A', '0105'), path: 'Parts/Badge.swift' }])),
+            'moveElement Shared into Views': (text) =>
+                inSession(text, (edit) => writers.moveElement(edit, hexId('C3', '0014'), hexId('5A', '0011'), 'Shared', 'Shared', writers.anyEntry)),
             'addGroupPath SampleApp/Views/Cells/Compact': (text) =>
                 inSession(text, (edit) => writers.addGroupPath(edit, hexId('5A', '0011'), ['Cells', 'Compact'])),
             'addDataModelToPbxproj Added.xcdatamodeld': (text) =>
@@ -195,6 +203,9 @@ const FIXTURES = [
                 inSession(text, (edit) => writers.setFileReferencePath(edit, 'OBJ_9', 'samplekit.swift')),
             'renameSwiftFile OBJ_9 to Kit.swift': (text) =>
                 inSession(text, (edit) => writers.renameSwiftFile(edit, 'OBJ_9', 'Kit.swift')),
+            // A SOURCE_ROOT group whose `name` repeats its folder.
+            'setElementPaths Sources/SampleKit to Sources/Kit': (text) =>
+                inSession(text, (edit) => writers.setElementPaths(edit, [{ id: 'OBJ_8', path: 'Sources/Kit', name: 'Kit' }])),
             'addGroupPath Sources/SampleKit/Feature': (text) =>
                 inSession(text, (edit) => writers.addGroupPath(edit, 'OBJ_8', ['Feature'])),
             'updateBuildSetting SWIFT_VERSION': (text) =>
@@ -494,6 +505,7 @@ function parserEntries(text, inputs) {
     if (inputs.helpers) {
         const read = projectIndex.readProject(text);
         const withIndex = (compute) => () => (typeof read === 'string' ? read : compute(read));
+        record('folderSpellings', withIndex((index) => projectIndex.folderSpellings(index, PROJECT_DIR)));
         for (const fileReferenceId of inputs.fileReferenceIds) {
             record(`displayName ${fileReferenceId}`, withIndex((index) => projectIndex.displayName(index.object(fileReferenceId))));
             record(`buildFilesFor ${fileReferenceId}`, withIndex((index) => projectIndex.buildFilesFor(index, fileReferenceId)));
@@ -660,6 +672,12 @@ function corpusInputs(text) {
             inSession(input, (edit) => writers.removeSwiftFile(edit, swiftReferences[0]));
         edits['renameSwiftFile first Swift file'] = (input) =>
             inSession(input, (edit) => writers.renameSwiftFile(edit, swiftReferences[0], 'CorpusRenamed.swift'));
+    }
+    // The first group whose own path is one folder in the `<group>` tree, renamed the way a folder rename would.
+    const groupFolder = idsOf('PBXGroup').find((key) => objects[key].sourceTree === '<group>' && /^[^/]+$/.test(objects[key].path || ''));
+    if (groupFolder) {
+        edits['setElementPaths first group folder'] = (input) =>
+            inSession(input, (edit) => writers.setElementPaths(edit, [{ id: groupFolder, path: 'CorpusRenamed' }]));
     }
     return {
         targets: nativeTargets.map((target) => target.name),
