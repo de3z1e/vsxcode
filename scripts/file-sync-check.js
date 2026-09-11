@@ -4,7 +4,7 @@
  *
  * Runs the compiled Swift and Core Data sync watchers (out/sync/) in plain Node with `vscode` stubbed. Each scenario
  * lays the fixture project and its sources out in a fresh temp directory, applies real filesystem operations, fires the
- * watcher events VS Code would deliver, and reads the resulting project through plutil rather than the parsers under
+ * watcher and rename events VS Code would deliver, and reads the resulting project through plutil rather than the parsers under
  * test. The entries a scenario names must change as stated; every other Swift file reference and Core Data model must
  * come out unchanged, ids included, and the project must still lint.
  *
@@ -32,12 +32,17 @@ const SOURCES = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'sources.json'
 const SETTLE_MS = 500;
 
 // ── vscode stub ──────────────────────────────────────────────────────────────────────
-// The sync modules touch vscode only through workspace.createFileSystemWatcher.
+// The sync modules touch vscode only through workspace.createFileSystemWatcher and workspace.onDidRenameFiles.
 
 const watchers = new Set();
+const renameListeners = new Set();
 
 const vscodeStub = {
     workspace: {
+        onDidRenameFiles(listener) {
+            renameListeners.add(listener);
+            return { dispose: () => renameListeners.delete(listener) };
+        },
         createFileSystemWatcher(glob) {
             const pattern = /^\*\*\/\*([^*/]*)$/.exec(glob);
             if (!pattern) { throw new Error(`the vscode stub routes only **/*<suffix> globs, not ${glob}`); }
@@ -200,6 +205,8 @@ const NEW_ID = 'one id that was not in the project before';
 const ANY_ID = 'one id';
 // A fixture id (`AA`, 18 zeros, suffix), for entries that must keep theirs.
 const fixtureId = (suffix) => `AA${'0'.repeat(18)}${suffix}`;
+// The nth id a scenario draws from the pinned crypto.randomBytes.
+const pinnedId = (n) => `80${'0'.repeat(14)}${n.toString(16).toUpperCase().padStart(8, '0')}`;
 
 function entryMatches(actual, expected, idsBefore) {
     if (!actual || !expected) { return actual === expected; }
@@ -299,6 +306,13 @@ function deliver(kind, fsPath) {
     if (delivered === 0) { throw new Error(`no watcher listens for the ${kind} of ${fsPath}`); }
 }
 
+function deliverRename(from, to) {
+    if (renameListeners.size === 0) { throw new Error(`nothing listens for the rename of ${from}`); }
+    for (const listener of renameListeners) {
+        listener({ files: [{ oldUri: { fsPath: from }, newUri: { fsPath: to } }] });
+    }
+}
+
 function scenarioContext(root, log) {
     const at = (relative) => path.join(root, relative);
     const write = (relative, contents) => {
@@ -324,6 +338,10 @@ function scenarioContext(root, log) {
         fire: (kind, relative) => {
             deliver(kind, at(relative));
             context.lastEventAt = Date.now();
+        },
+        fireRename: (from, to) => {
+            deliverRename(at(from), at(to));
+            context.lastEventAt = Date.now();
         }
     };
     return context;
@@ -337,17 +355,6 @@ const moveModel = (s, from, to, order) => {
     } else {
         s.fire('delete', from);
         s.fire('create', to);
-    }
-};
-
-const renameSwift = (s, order) => {
-    s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift');
-    if (order === 'creates first') {
-        s.fire('create', 'MyApp/Views/Renamed.swift');
-        s.fire('delete', 'MyApp/Views/Rename.swift');
-    } else {
-        s.fire('delete', 'MyApp/Views/Rename.swift');
-        s.fire('create', 'MyApp/Views/Renamed.swift');
     }
 };
 
@@ -371,6 +378,9 @@ const moveSwift = async (s, from, to, order) => {
         fire();
     }
 };
+
+// Rename.swift's entry, AA…0113, following its file to Renamed.swift in the same folder.
+const RENAME_KEPT = { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Renamed.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } };
 
 const SCENARIOS = [
     {
@@ -408,11 +418,10 @@ const SCENARIOS = [
         // Both build files and both Sources entries go with the reference, so nothing dangles.
         changes: { swift: { 'Shared/SharedUtil.swift': null } }
     },
-    ...['creates first', 'deletes first'].map((order) => ({
-        name: `Swift file renamed in its folder, ${order}`,
-        run: (s) => renameSwift(s, order),
-        // Registered again under the new name; which ids it keeps is not asserted.
-        changes: { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Renamed.swift': { ids: ANY_ID, targets: ['MyApp'] } } }
+    ...EVENT_ORDERS.map((order) => ({
+        name: `Swift file renamed in its folder (S2), ${order}`,
+        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift', order),
+        changes: RENAME_KEPT
     })),
     ...EVENT_ORDERS.map((order) => ({
         name: `Swift file moved to another folder (S1), ${order}`,
@@ -432,7 +441,7 @@ const SCENARIOS = [
     ...EVENT_ORDERS.map((order) => ({
         name: `Swift file renamed to a name another target uses (S3), ${order}`,
         run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Constants.swift', order),
-        changes: { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Constants.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+        changes: { swift: { 'MyApp/Views/Rename.swift': null, 'MyApp/Views/Constants.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } }
     })),
     ...['once', 'twice'].map((times) => ({
         name: `one target's same-named Swift file deleted (S4), delete delivered ${times}`,
@@ -519,6 +528,186 @@ const SCENARIOS = [
         name: 'Swift file moved under its name into a group folder that is no target\'s',
         run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'Shared/Bar.swift', 'creates first'),
         changes: { swift: { 'MyApp/Views/Bar.swift': null, 'Shared/Bar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'Swift file compiled by two targets renamed (S5)',
+        run: (s) => moveSwift(s, 'Shared/SharedUtil.swift', 'Shared/SharedHelpers.swift', 'creates first'),
+        changes: {
+            swift: {
+                'Shared/SharedUtil.swift': null,
+                'Shared/SharedHelpers.swift': { ids: [fixtureId('0310')], targets: ['MyApp', 'MyKit {"COMPILER_FLAGS":"-DSHARED_UTIL"}'] }
+            }
+        }
+    },
+    {
+        name: 'Swift file renamed while moved to another folder',
+        run: (s) => moveSwift(s, 'MyApp/Views/ContentView.swift', 'MyApp/Models/HomeView.swift', 'creates first'),
+        changes: { swift: { 'MyApp/Views/ContentView.swift': null, 'MyApp/Models/HomeView.swift': { ids: [fixtureId('0111')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'Swift file renamed while moved into new folders, groups created',
+        run: (s) => moveSwift(s, 'MyApp/Views/Bar.swift', 'MyApp/Features/Home/HomeBar.swift', 'creates first'),
+        changes: { swift: { 'MyApp/Views/Bar.swift': null, 'MyApp/Features/Home/HomeBar.swift': { ids: [fixtureId('0112')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'Swift file renamed into another target\'s folder keeps its own target',
+        run: (s) => moveSwift(s, 'MyKit/Constants.swift', 'MyApp/Views/KitConstants.swift', 'creates first'),
+        changes: { swift: { 'MyKit/Constants.swift': null, 'MyApp/Views/KitConstants.swift': { ids: [fixtureId('0211')], targets: ['MyKit'] } } }
+    },
+    {
+        name: 'Swift file renamed out of known places, group created in the main group',
+        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'Tools/Renamed.swift', 'creates first'),
+        changes: { swift: { 'MyApp/Views/Rename.swift': null, 'Tools/Renamed.swift': { ids: [fixtureId('0113')], targets: ['MyApp'] } } }
+    },
+    {
+        name: 'a renamed file\'s identity wins over a missing entry with its new name',
+        run: (s) => {
+            s.move('MyApp/Helpers.swift', 'MyApp/Services/Constants.swift');
+            s.remove('MyKit/Constants.swift');
+            s.fire('create', 'MyApp/Services/Constants.swift');
+            s.fire('delete', 'MyApp/Helpers.swift');
+            s.fire('delete', 'MyKit/Constants.swift');
+        },
+        changes: {
+            swift: {
+                'MyApp/Helpers.swift': null,
+                'MyKit/Constants.swift': null,
+                'MyApp/Services/Constants.swift': { ids: [fixtureId('0110')], targets: ['MyApp'] }
+            }
+        }
+    },
+    {
+        name: 'two same-named Swift files moved in one batch keep their own entries',
+        run: (s) => {
+            s.move('MyApp/Helpers.swift', 'MyApp/Services/Helpers.swift');
+            s.move('MyKit/Helpers.swift', 'MyKit/Sub/Helpers.swift');
+            s.fire('create', 'MyApp/Services/Helpers.swift');
+            s.fire('create', 'MyKit/Sub/Helpers.swift');
+            s.fire('delete', 'MyApp/Helpers.swift');
+            s.fire('delete', 'MyKit/Helpers.swift');
+        },
+        changes: {
+            swift: {
+                'MyApp/Helpers.swift': null,
+                'MyKit/Helpers.swift': null,
+                'MyApp/Services/Helpers.swift': { ids: [fixtureId('0110')], targets: ['MyApp'] },
+                'MyKit/Sub/Helpers.swift': { ids: [fixtureId('0210')], targets: ['MyKit'] }
+            }
+        }
+    },
+    {
+        name: 'Swift file deleted as an unrelated one is created, not paired',
+        run: (s) => {
+            s.remove('MyApp/Helpers.swift');
+            s.write('MyApp/NewThing.swift', 'struct NewThing {}\n');
+            s.fire('create', 'MyApp/NewThing.swift');
+            s.fire('delete', 'MyApp/Helpers.swift');
+        },
+        changes: { swift: { 'MyApp/Helpers.swift': null, 'MyApp/NewThing.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: 'hard-linked new paths of a renamed Swift file, not paired',
+        run: (s) => {
+            fs.linkSync(path.join(s.root, 'MyApp/Views/Rename.swift'), path.join(s.root, 'MyApp/Views/RenameA.swift'));
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Views/RenameB.swift');
+            s.fire('create', 'MyApp/Views/RenameA.swift');
+            s.fire('create', 'MyApp/Views/RenameB.swift');
+            s.fire('delete', 'MyApp/Views/Rename.swift');
+        },
+        changes: {
+            swift: {
+                'MyApp/Views/Rename.swift': null,
+                'MyApp/Views/RenameA.swift': { ids: NEW_ID, targets: ['MyApp'] },
+                'MyApp/Views/RenameB.swift': { ids: NEW_ID, targets: ['MyApp'] }
+            }
+        }
+    },
+    {
+        name: 'Swift file renamed over a registered file',
+        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Bar.swift', 'creates first'),
+        changes: { swift: { 'MyApp/Views/Rename.swift': null } }
+    },
+    {
+        name: 'Swift file renamed into a synchronized root',
+        run: (s) => moveSwift(s, 'MyApp/Views/Rename.swift', 'SyncKit/Rename.swift', 'creates first'),
+        changes: { swift: { 'MyApp/Views/Rename.swift': null } }
+    },
+    {
+        name: 'Swift file renamed, create 500 ms after the delete',
+        run: async (s) => {
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift');
+            s.fire('delete', 'MyApp/Views/Rename.swift');
+            await s.wait(500);
+            s.fire('create', 'MyApp/Views/Renamed.swift');
+        },
+        changes: RENAME_KEPT
+    },
+    {
+        name: 'Swift file renamed in the editor, watcher events 136 ms later',
+        run: async (s) => {
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift');
+            s.fireRename('MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift');
+            await s.wait(136);
+            s.fire('create', 'MyApp/Views/Renamed.swift');
+            s.fire('delete', 'MyApp/Views/Rename.swift');
+        },
+        changes: RENAME_KEPT
+    },
+    {
+        name: 'Swift file renamed in the editor as a copy and delete, rename event only',
+        run: (s) => {
+            // A new inode, as a rename across volumes gives, so only the rename event can pair it.
+            fs.copyFileSync(path.join(s.root, 'MyApp/Views/Rename.swift'), path.join(s.root, 'MyApp/Views/Renamed.swift'));
+            s.remove('MyApp/Views/Rename.swift');
+            s.fireRename('MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift');
+        },
+        changes: RENAME_KEPT
+    },
+    {
+        name: 'Swift file renamed in the editor to a name that isn\'t Swift',
+        run: async (s) => {
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Rename.txt');
+            s.fireRename('MyApp/Views/Rename.swift', 'MyApp/Views/Rename.txt');
+            s.fire('delete', 'MyApp/Views/Rename.swift');
+            await s.wait(SETTLE_MS);
+            return s.projectText().includes('Rename.txt');
+        },
+        result: false,
+        changes: { swift: { 'MyApp/Views/Rename.swift': null } }
+    },
+    {
+        name: 'identities recorded between a rename and its events keep it pairable',
+        run: async (s) => {
+            s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift');
+            s.fire('change', 'FixtureApp.xcodeproj/project.pbxproj');
+            await s.wait(700);
+            s.fire('create', 'MyApp/Views/Renamed.swift');
+            s.fire('delete', 'MyApp/Views/Rename.swift');
+        },
+        changes: RENAME_KEPT
+    },
+    ...[['create', 600], ['change', 100]].map(([kind, pause]) => ({
+        name: `Swift file replaced (delivered as a ${kind}), then renamed`,
+        run: async (s) => {
+            // Write-then-rename-over, as an atomic save does: the path gets a new inode.
+            s.write('MyApp/Views/Rename.swift.tmp', 'struct Rename {}\n');
+            s.move('MyApp/Views/Rename.swift.tmp', 'MyApp/Views/Rename.swift');
+            s.fire(kind, 'MyApp/Views/Rename.swift');
+            await s.wait(pause);
+            await moveSwift(s, 'MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift', 'creates first');
+        },
+        changes: RENAME_KEPT
+    })),
+    {
+        name: 'Swift file added, then renamed in a later batch',
+        run: async (s) => {
+            s.write('MyApp/Views/NewView.swift', 'struct NewView {}\n');
+            s.fire('create', 'MyApp/Views/NewView.swift');
+            await s.wait(600);
+            await moveSwift(s, 'MyApp/Views/NewView.swift', 'MyApp/Views/NewScreen.swift', 'creates first');
+        },
+        // The add draws its build file's id first, so its reference has the second pinned id.
+        changes: { swift: { 'MyApp/Views/NewScreen.swift': { ids: [pinnedId(2)], targets: ['MyApp'] } } }
     },
     {
         name: 'Swift file deleted with its folder',
@@ -686,6 +875,8 @@ async function runScenario(scenario) {
         try {
             disposables.push(...createSwiftFileWatcher(root, log));
             disposables.push(...createDataModelWatcher(root, log, () => {}));
+            // The Swift watcher first records file identities on the write queue; a rename made before that couldn't pair.
+            await enqueueWrite(async () => {});
             result = await scenario.run(context);
             if (context.lastEventAt !== null) {
                 await sleep(Math.max(0, context.lastEventAt + SETTLE_MS - Date.now()));

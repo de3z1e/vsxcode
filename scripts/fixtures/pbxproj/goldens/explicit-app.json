@@ -966,6 +966,49 @@
         "-186: \t\t\t\t5A0000000000000000000107 /* Legacy.swift */,"
       ]
     },
+    "writer rehomeSwiftFile Legacy.swift into Views as Heritage.swift": {
+      "lint": "OK",
+      "diff": [
+        "-17: \t\t5A0000000000000000000207 /* Legacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000107 /* Legacy.swift */; };",
+        "+18: \t\t5A0000000000000000000207 /* Heritage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000107 /* Heritage.swift */; };",
+        "-56: \t\t5A0000000000000000000107 /* Legacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Legacy.swift; path = ../Legacy/Legacy.swift; sourceTree = \"<group>\"; };",
+        "+57: \t\t5A0000000000000000000107 /* Heritage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Heritage.swift; sourceTree = \"<group>\"; };",
+        "+159: \t\t\t\t5A0000000000000000000107 /* Heritage.swift */,",
+        "-186: \t\t\t\t5A0000000000000000000107 /* Legacy.swift */,",
+        "-353: \t\t\t\t5A0000000000000000000207 /* Legacy.swift in Sources */,",
+        "+354: \t\t\t\t5A0000000000000000000207 /* Heritage.swift in Sources */,"
+      ]
+    },
+    "writer renameSwiftFile Legacy.swift to Heritage.swift": {
+      "lint": "OK",
+      "diff": [
+        "-17: \t\t5A0000000000000000000207 /* Legacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000107 /* Legacy.swift */; };",
+        "+18: \t\t5A0000000000000000000207 /* Heritage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000107 /* Heritage.swift */; };",
+        "-56: \t\t5A0000000000000000000107 /* Legacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Legacy.swift; path = ../Legacy/Legacy.swift; sourceTree = \"<group>\"; };",
+        "+57: \t\t5A0000000000000000000107 /* Heritage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Heritage.swift; path = \"../Legacy/Heritage.swift\"; sourceTree = \"<group>\"; };",
+        "-186: \t\t\t\t5A0000000000000000000107 /* Legacy.swift */,",
+        "+187: \t\t\t\t5A0000000000000000000107 /* Heritage.swift */,",
+        "-353: \t\t\t\t5A0000000000000000000207 /* Legacy.swift in Sources */,",
+        "+354: \t\t\t\t5A0000000000000000000207 /* Heritage.swift in Sources */,"
+      ]
+    },
+    "writer renameSwiftFile SharedModels.swift to Models.swift": {
+      "lint": "OK",
+      "diff": [
+        "-18: \t\t5A0000000000000000000209 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; };",
+        "+19: \t\t5A0000000000000000000209 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* Models.swift */; };",
+        "-27: \t\tC30000000000000000000208 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* SharedModels.swift */; settings = {COMPILER_FLAGS = \"-DSHARED_MODELS\"; }; };",
+        "+28: \t\tC30000000000000000000208 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000108 /* Models.swift */; settings = {COMPILER_FLAGS = \"-DSHARED_MODELS\"; }; };",
+        "-69: \t\tC30000000000000000000108 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = \"<group>\"; };",
+        "+70: \t\tC30000000000000000000108 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = \"<group>\"; };",
+        "-195: \t\t\t\tC30000000000000000000108 /* SharedModels.swift */,",
+        "+196: \t\t\t\tC30000000000000000000108 /* Models.swift */,",
+        "-354: \t\t\t\tC30000000000000000000208 /* SharedModels.swift in Sources */,",
+        "+355: \t\t\t\tC30000000000000000000208 /* Models.swift in Sources */,",
+        "-373: \t\t\t\t5A0000000000000000000209 /* SharedModels.swift in Sources */,",
+        "+374: \t\t\t\t5A0000000000000000000209 /* Models.swift in Sources */,"
+      ]
+    },
     "writer addGroupPath SampleApp/Views/Cells/Compact": {
       "lint": "OK",
       "diff": [

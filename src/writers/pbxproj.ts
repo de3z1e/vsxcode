@@ -356,15 +356,104 @@ export function addSwiftFile(edit: ProjectEdit, fileName: string, groupId: strin
 
 // ── Moving a File ────────────────────────────────────────
 
-/** Moves a file reference into a group under its file name: `path` becomes the name, in the group's tree. Ids, build files and settings stay. */
+interface CommentText {
+    /** Where the comment's trimmed text starts. */
+    start: number;
+    /** Just past that text. */
+    end: number;
+    text: string;
+}
+
+/** Just past the token at `offset`, after any spaces or tabs: a quoted string, or a bare value ending where the index's tokenizer ends one. */
+function tokenEnd(contents: string, offset: number): number {
+    let position = offset;
+    while (contents[position] === ' ' || contents[position] === '\t') { position++; }
+    if (contents[position] === '"') {
+        for (position++; position < contents.length && contents[position] !== '"'; position++) {
+            if (contents[position] === '\\') { position++; }
+        }
+        return position + 1;
+    }
+    while (position < contents.length && !/[\s{}()=;,"]/.test(contents[position])) { position++; }
+    return position;
+}
+
+/** The trimmed text of the `/* … *\/` comment right after `offset`, with only spaces or tabs between; undefined when none follows. */
+function commentAfter(contents: string, offset: number): CommentText | undefined {
+    let position = offset;
+    while (contents[position] === ' ' || contents[position] === '\t') { position++; }
+    if (!contents.startsWith('/*', position)) { return undefined; }
+    const close = contents.indexOf('*/', position + 2);
+    if (close === -1) { return undefined; }
+    const inner = contents.slice(position + 2, close);
+    const text = inner.trim();
+    const start = position + 2 + inner.indexOf(text);
+    return { start, end: start + text.length, text };
+}
+
+/** Rewrites the comments showing a file reference's display name, in commented files; only a comment whose whole text is `from`, or `from in …`, changes. */
+function renameComments(edit: ProjectEdit, fileReferenceId: string, from: string, to: string): void {
+    if (!edit.commented || from === '' || from === to) { return; }
+    const contents = edit.contents;
+    const changes: CommentText[] = [];
+    const afterId = (offset: number | undefined): CommentText | undefined =>
+        offset === undefined ? undefined : commentAfter(contents, tokenEnd(contents, offset));
+    const name = (comment: CommentText | undefined): void => {
+        if (comment?.text === from) { changes.push({ ...comment, text: to }); }
+    };
+    const inPhase = (comment: CommentText | undefined): void => {
+        if (comment?.text.startsWith(`${from} in `)) { changes.push({ ...comment, text: `${to}${comment.text.slice(from.length)}` }); }
+    };
+
+    name(afterId(locateObject(contents, fileReferenceId)?.startIndex));
+    for (const ownerId of edit.index.ids) {
+        if (stringList(edit.index.objects[ownerId].children).includes(fileReferenceId)) {
+            name(afterId(locateListEntry(contents, ownerId, 'children', fileReferenceId)?.startIndex));
+        }
+    }
+    for (const buildFileId of buildFilesFor(edit.index, fileReferenceId)) {
+        inPhase(afterId(locateObject(contents, buildFileId)?.startIndex));
+        const fileRef = locateKey(contents, buildFileId, 'fileRef');
+        name(fileRef ? commentAfter(contents, fileRef.valueEnd) : undefined);
+        for (const phaseId of phasesOf(edit.index, buildFileId)) {
+            inPhase(afterId(locateListEntry(contents, phaseId, 'files', buildFileId)?.startIndex));
+        }
+    }
+    // Every offset was taken on one text, so the changes apply from the end, each once.
+    const ordered = changes.sort((a, b) => b.start - a.start).filter((change, position, all) => position === 0 || all[position - 1].start !== change.start);
+    for (const change of ordered) {
+        splice(edit, change.start, change.end, change.text);
+    }
+}
+
+/** Moves a file reference into a group under a file name: `path` becomes it, a `name` repeating the old or new file name goes, comments follow; ids, build files and settings stay. */
 export function rehomeSwiftFile(edit: ProjectEdit, fileReferenceId: string, groupId: string, fileName: string): void {
-    const recordedName = stringValue(edit.index.object(fileReferenceId)?.name);
-    const shownName = recordedName ?? fileName;
+    const object = edit.index.object(fileReferenceId);
+    const recordedName = stringValue(object?.name);
+    const oldFileName = stringValue(object?.path)?.split('/').pop();
+    const keepsName = recordedName !== undefined && recordedName !== fileName && recordedName !== oldFileName;
+    const shownName = keepsName && recordedName !== undefined ? recordedName : fileName;
+    renameComments(edit, fileReferenceId, displayName(object), shownName);
     removeFromLists(edit, fileReferenceId, 'children');
     insertListEntry(edit, groupId, 'children', fileReferenceId, shownName, shownName, isSwiftEntry);
-    if (recordedName === fileName) { removeKey(edit, fileReferenceId, 'name'); }
+    if (recordedName !== undefined && !keepsName) { removeKey(edit, fileReferenceId, 'name'); }
     setKey(edit, fileReferenceId, 'path', formatPath(fileName));
     setKey(edit, fileReferenceId, 'sourceTree', formatPath('<group>'));
+}
+
+/** Renames a file reference in place: its `path`'s last component, a `name` repeating the old file name, and its comments; ids, build files, settings and group position stay. */
+export function renameSwiftFile(edit: ProjectEdit, fileReferenceId: string, fileName: string): void {
+    const object = edit.index.object(fileReferenceId);
+    const ownPath = stringValue(object?.path);
+    if (ownPath === undefined) { return; }
+    const components = ownPath.split('/');
+    const oldFileName = components[components.length - 1];
+    components[components.length - 1] = fileName;
+    const recordedName = stringValue(object?.name);
+    const renamesName = recordedName === oldFileName;
+    renameComments(edit, fileReferenceId, displayName(object), recordedName === undefined || renamesName ? fileName : recordedName);
+    setKey(edit, fileReferenceId, 'path', formatPath(components.join('/')));
+    if (renamesName) { setKey(edit, fileReferenceId, 'name', formatPath(fileName)); }
 }
 
 /** Replaces a file reference's `path`. */

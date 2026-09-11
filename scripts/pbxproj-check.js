@@ -16,7 +16,7 @@
  *
  *   VSXCODE_PBXPROJ_CORPUS=<file listing project.pbxproj paths>
  *   VSXCODE_PBXPROJ_CORPUS_GOLDENS=<directory outside this repository>
- *     also run the parsers and two writer edits over local projects. Output is counts and list indexes
+ *     also run the parsers and three writer edits over local projects. Output is counts and list indexes
  *     only, and the goldens directory must be outside the repository because it holds private project data.
  */
 'use strict';
@@ -53,8 +53,8 @@ const COMMENT_FREE = new Set([
     'findFileReferencePath', 'findBuildFileId',
     'displayName', 'buildFilesFor', 'phasesOf', 'locateList', 'locateListEntry',
     'parentOf', 'resolvedPath', 'groupForFolder', 'targetOfPhase', 'locateKey',
-    'writer addSwiftFileToPbxproj', 'writer removeSwiftFile', 'writer rehomeSwiftFile', 'writer setFileReferencePath',
-    'writer addGroupPath', 'writer addDataModelToPbxproj', 'writer updateVersionGroupVersions',
+    'writer addSwiftFileToPbxproj', 'writer removeSwiftFile', 'writer rehomeSwiftFile', 'writer renameSwiftFile',
+    'writer setFileReferencePath', 'writer addGroupPath', 'writer addDataModelToPbxproj', 'writer updateVersionGroupVersions',
     'writer moveVersionGroupToGroup', 'writer removeDataModelFromPbxproj', 'writer updateBuildSetting'
 ]);
 
@@ -116,6 +116,13 @@ const FIXTURES = [
                 inSession(text, (edit) => writers.removeSwiftFile(edit, hexId('C3', '0108'))),
             'rehomeSwiftFile Legacy.swift into Views': (text) =>
                 inSession(text, (edit) => writers.rehomeSwiftFile(edit, hexId('5A', '0107'), hexId('5A', '0011'), 'Legacy.swift')),
+            'rehomeSwiftFile Legacy.swift into Views as Heritage.swift': (text) =>
+                inSession(text, (edit) => writers.rehomeSwiftFile(edit, hexId('5A', '0107'), hexId('5A', '0011'), 'Heritage.swift')),
+            // A reference with a `name` and a `../` path, and one compiled by two targets, one of them with settings.
+            'renameSwiftFile Legacy.swift to Heritage.swift': (text) =>
+                inSession(text, (edit) => writers.renameSwiftFile(edit, hexId('5A', '0107'), 'Heritage.swift')),
+            'renameSwiftFile SharedModels.swift to Models.swift': (text) =>
+                inSession(text, (edit) => writers.renameSwiftFile(edit, hexId('C3', '0108'), 'Models.swift')),
             'addGroupPath SampleApp/Views/Cells/Compact': (text) =>
                 inSession(text, (edit) => writers.addGroupPath(edit, hexId('5A', '0011'), ['Cells', 'Compact'])),
             'addDataModelToPbxproj Added.xcdatamodeld': (text) =>
@@ -186,6 +193,8 @@ const FIXTURES = [
                 inSession(text, (edit) => writers.removeSwiftFile(edit, 'OBJ_9')),
             'setFileReferencePath OBJ_9 samplekit.swift': (text) =>
                 inSession(text, (edit) => writers.setFileReferencePath(edit, 'OBJ_9', 'samplekit.swift')),
+            'renameSwiftFile OBJ_9 to Kit.swift': (text) =>
+                inSession(text, (edit) => writers.renameSwiftFile(edit, 'OBJ_9', 'Kit.swift')),
             'addGroupPath Sources/SampleKit/Feature': (text) =>
                 inSession(text, (edit) => writers.addGroupPath(edit, 'OBJ_8', ['Feature'])),
             'updateBuildSetting SWIFT_VERSION': (text) =>
@@ -241,6 +250,8 @@ const FIXTURES = [
                 writers.addSwiftFileToPbxproj(text, 'Zed.swift', hexId('AA', '0006'), hexId('AA', '000A')),
             [`removeSwiftFile ${hexId('AA', '0002')}`]: (text) =>
                 inSession(text, (edit) => writers.removeSwiftFile(edit, hexId('AA', '0002'))),
+            'renameSwiftFile Covered.swift to Uncovered.swift': (text) =>
+                inSession(text, (edit) => writers.renameSwiftFile(edit, hexId('AA', '0002'), 'Uncovered.swift')),
             'addGroupPath FlagParityTarget/Nested': (text) =>
                 inSession(text, (edit) => writers.addGroupPath(edit, hexId('AA', '0006'), ['Nested'])),
             'updateBuildSetting SWIFT_VERSION': (text) =>
@@ -647,6 +658,8 @@ function corpusInputs(text) {
     if (swiftReferences.length > 0) {
         edits['removeSwiftFile first Swift file'] = (input) =>
             inSession(input, (edit) => writers.removeSwiftFile(edit, swiftReferences[0]));
+        edits['renameSwiftFile first Swift file'] = (input) =>
+            inSession(input, (edit) => writers.renameSwiftFile(edit, swiftReferences[0], 'CorpusRenamed.swift'));
     }
     return {
         targets: nativeTargets.map((target) => target.name),

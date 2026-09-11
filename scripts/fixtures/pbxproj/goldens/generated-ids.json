@@ -298,6 +298,19 @@
         "+18: \t\tOBJ_9 /* SampleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = samplekit.swift; sourceTree = \"<group>\"; };"
       ]
     },
+    "writer renameSwiftFile OBJ_9 to Kit.swift": {
+      "lint": "OK",
+      "diff": [
+        "-12: \t\tOBJ_16 /* SampleKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_9 /* SampleKit.swift */; };",
+        "+13: \t\tOBJ_16 /* Kit.swift in Sources */ = {isa = PBXBuildFile; fileRef = OBJ_9 /* Kit.swift */; };",
+        "-17: \t\tOBJ_9 /* SampleKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleKit.swift; sourceTree = \"<group>\"; };",
+        "+18: \t\tOBJ_9 /* Kit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Kit.swift; sourceTree = \"<group>\"; };",
+        "-62: \t\t\t\tOBJ_9 /* SampleKit.swift */,",
+        "+63: \t\t\t\tOBJ_9 /* Kit.swift */,",
+        "-116: \t\t\t\tOBJ_16 /* SampleKit.swift in Sources */,",
+        "+117: \t\t\t\tOBJ_16 /* Kit.swift in Sources */,"
+      ]
+    },
     "writer addGroupPath Sources/SampleKit/Feature": {
       "lint": "OK",
       "diff": [

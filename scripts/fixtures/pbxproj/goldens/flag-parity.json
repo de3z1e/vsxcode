@@ -399,6 +399,19 @@
         "+93: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };"
       ]
     },
+    "writer renameSwiftFile Covered.swift to Uncovered.swift": {
+      "lint": "OK",
+      "diff": [
+        "-25: \t\tAA0000000000000000000001 /* Covered.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* Covered.swift */; };",
+        "+26: \t\tAA0000000000000000000001 /* Uncovered.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* Uncovered.swift */; };",
+        "-30: \t\tAA0000000000000000000002 /* Covered.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Covered.swift; sourceTree = \"<group>\"; };",
+        "+31: \t\tAA0000000000000000000002 /* Uncovered.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Uncovered.swift; sourceTree = \"<group>\"; };",
+        "-44: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Covered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "+45: \t\tAA0000000000000000000006 /* FlagParityTarget */ = {isa = PBXGroup; children = (AA0000000000000000000002 /* Uncovered.swift */, ); path = FlagParityTarget; sourceTree = \"<group>\"; };",
+        "-92: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Covered.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };",
+        "+93: \t\tAA000000000000000000000A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AA0000000000000000000001 /* Uncovered.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };"
+      ]
+    },
     "writer addGroupPath FlagParityTarget/Nested": {
       "lint": "OK",
       "diff": [
