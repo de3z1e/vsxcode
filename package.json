@@ -277,7 +277,8 @@
         "package": "vsce package",
         "test:flag-parity": "npm run compile && node scripts/flag-parity.js",
         "test:pbxproj": "npm run compile && node scripts/pbxproj-check.js",
-        "test:file-sync": "npm run compile && node scripts/file-sync-check.js"
+        "test:file-sync": "npm run compile && node scripts/file-sync-check.js",
+        "test:swiftpm-project": "npm run compile && node scripts/swiftpm-project-check.js"
     },
     "files": [
         "out",

@@ -1,9 +1,21 @@
 {
   "fixture": "scripts/fixtures/pbxproj/generated-ids.txt",
   "entries": {
-    "parseNativeTargets": [],
+    "parseNativeTargets": [
+      {
+        "name": "SampleKit",
+        "productName": "SampleKit",
+        "productType": "com.apple.product-type.framework",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "OBJ_12",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
     "parseTargetDependencies": [],
-    "parseBuildPhaseIds SampleKit": {},
+    "parseBuildPhaseIds SampleKit": {
+      "sourcesBuildPhaseId": "OBJ_15",
+      "frameworksBuildPhaseId": "OBJ_17"
+    },
     "parseExcludedFiles SampleKit": [],
     "parseBuildConfigurations": [
       [
@@ -109,6 +121,7 @@
       }
     ],
     "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": true,
     "parseFrameworksBuildPhase OBJ_17": [],
     "parseLinkedFrameworksForTarget OBJ_17": [],
     "findFileReferenceId SampleKit.swift": null,

@@ -13,6 +13,12 @@ Open a folder containing an `.xcodeproj` and the extension handles the rest:
 5. **Syncs project files to the Xcode project** — when `.swift` files or `.xcdatamodeld` model bundles are added or removed in a target directory, the `.xcodeproj` is updated automatically (build file, file reference, group, and Sources-phase entries — plus the XCVersionGroup for model bundles).
 6. **Resolves Core Data codegen in IntelliSense** — models using class/category codegen get their `NSManagedObject` subclasses generated with the same tool Xcode's build uses and fed to SourceKit-LSP, so generated types resolve without touching your model, project file, or repository — and regenerate automatically when you edit entities.
 
+**SwiftPM-generated projects** — an `.xcodeproj` made by `swift package generate-xcodeproj` (its object ids look like `OBJ_12`) sits beside the package's own `Package.swift`, so VSXcode asks when the folder opens, before changing anything. The dialog lists the exact files involved:
+
+- **Use VSXcode fully** first copies each of those files that exists — `Package.swift`, `.vscode/settings.json` (or your `.code-workspace` file), `.vscode/.swift-format` and `project.pbxproj` — to a backup beside it (`Package.swift_backup`, then `_backup-2`, `_backup-3`… so no earlier backup is overwritten), then turns everything above on.
+- **Keep it a SwiftPM package** leaves the workspace untouched and remembers the choice. The commands still work when you run them, and **Generate Package.swift** offers both options again, so you can switch later.
+- Closing the dialog changes nothing; it asks again the next time the folder opens.
+
 ### Sidebar
 
 The extension adds a panel to the Activity Bar with configurable build settings:
@@ -46,7 +52,7 @@ Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Files**, and 
 - Includes per-target swift settings (`.define`, `.unsafeFlags`, `.swiftLanguageMode`), linked system frameworks, resources, header search paths, target dependencies, and excluded files.
 - Runs Core Data class generation (momc) for targets with `.xcdatamodeld` models and wires the generated sources into the manifest, so codegen types resolve in IntelliSense.
 - Automatically configures SourceKit-LSP server arguments for the selected destination — the iOS simulator SDK (SDK path, target triple, framework search path), or the host macOS SDK when targeting My Mac.
-- Shows a diff view before overwriting when run manually from the command palette.
+- Shows a diff view before overwriting when run manually from the command palette — except right after choosing **Use VSXcode fully** for a SwiftPM-generated project, whose files were just backed up.
 
 ### Build Tasks
 

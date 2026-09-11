@@ -46,7 +46,7 @@ const writers = load('writers/pbxproj.js');
 
 // Entry families — the name before the first space, or `writer <function>` for edits — whose output on the
 // comment-stripped fixture must equal the commented golden.
-const COMMENT_FREE = new Set([]);
+const COMMENT_FREE = new Set(['parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds']);
 
 const CONFIGURATIONS = ['Debug', 'Release'];
 const MAX_DIFF_LINES = 500;
@@ -341,6 +341,7 @@ function parserEntries(text, inputs) {
     record('parseSwiftVersion', () => version.parseSwiftVersion(text));
     record('parseDeploymentTargets', () => project.parseDeploymentTargets(text));
     record('parseDefaultLocalization', () => project.parseDefaultLocalization(text));
+    record('usesSwiftPMObjectIds', () => project.usesSwiftPMObjectIds(text));
     for (const phaseId of inputs.frameworksPhases) {
         record(`parseFrameworksBuildPhase ${phaseId}`, () => frameworks.parseFrameworksBuildPhase(text, phaseId));
         record(`parseLinkedFrameworksForTarget ${phaseId}`, () => frameworks.parseLinkedFrameworksForTarget(text, phaseId));
@@ -563,6 +564,47 @@ function checkCorpus() {
     return failed ? 1 : 0;
 }
 
+// ── Project index cases ──────────────────────────────────────────────────────────────
+
+/** `text` padded with generated file references past `bytes`, so plutil's JSON outgrows execFileSync's default buffer. */
+function paddedProject(text, bytes) {
+    const marker = '/* End PBXFileReference section */';
+    const lines = [];
+    for (let n = 0, size = text.length; size < bytes; n++) {
+        const id = `F0${n.toString(16).toUpperCase().padStart(22, '0')}`;
+        const line = `\t\t${id} /* Padding${n}.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; ` +
+            `path = Padding${n}.swift; sourceTree = "<group>"; };\n`;
+        lines.push(line);
+        size += line.length;
+    }
+    return text.replace(marker, `${lines.join('')}${marker}`);
+}
+
+/** The target readers on a project too large for plutil's default output buffer, and on one plutil rejects. */
+function indexCaseProblems() {
+    const text = fs.readFileSync(path.join(FIXTURE_DIR, 'explicit-app.txt'), 'utf8');
+    const problems = [];
+
+    const expected = capture(() => targets.parseNativeTargets(text));
+    const large = paddedProject(text, 3 * 1024 * 1024);
+    const actual = capture(() => targets.parseNativeTargets(large));
+    if (!Array.isArray(actual) || actual.length === 0 || !sameValue(actual, expected)) {
+        problems.push({ key: `parseNativeTargets on explicit-app padded to ${(large.length / 1e6).toFixed(1)} MB`, expected, actual });
+    }
+
+    const conflicted = text.replace('\tobjects = {\n', '<<<<<<< HEAD\n\tobjects = {\n');
+    const empty = { parseNativeTargets: [], parseTargetDependencies: [], parseBuildPhaseIds: {} };
+    const read = capture(() => ({
+        parseNativeTargets: targets.parseNativeTargets(conflicted),
+        parseTargetDependencies: mapEntries(targets.parseTargetDependencies(conflicted)),
+        parseBuildPhaseIds: targets.parseBuildPhaseIds(conflicted, 'SampleApp')
+    }));
+    if (!sameValue(read, empty)) {
+        problems.push({ key: 'target readers on explicit-app with a merge conflict marker', expected: empty, actual: read });
+    }
+    return problems;
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────────────
 
 function main() {
@@ -571,6 +613,9 @@ function main() {
     for (const fixture of FIXTURES) {
         if (checkFixture(fixture, producedKeys) > 0) { failures++; }
     }
+    const indexProblems = indexCaseProblems();
+    report('project index cases', indexProblems, 'a 3 MB project and a merge-conflicted one');
+    if (indexProblems.length > 0) { failures++; }
     const families = new Set(producedKeys.map(entryFamily));
     const unknown = [...COMMENT_FREE].filter((family) => !families.has(family));
     if (unknown.length > 0) {

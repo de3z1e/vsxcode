@@ -28,6 +28,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   the watcher events VS Code would deliver (creates before deletes), and reads the result through
   `plutil`: the entries a scenario names must change as stated, and every other Swift file reference
   and Core Data model must stay unchanged, ids included.
+- `npm run test:swiftpm-project` — Run the compiled extension's `activate()` in plain Node against a
+  stubbed `vscode`, on temp workspaces, to check the SwiftPM-generated project prompt. A project with
+  SwiftPM's `OBJ_n` ids gets a modal choice before VSXcode changes anything: **Use VSXcode fully**
+  backs up the files VSXcode would change and turns everything on; **Keep it a SwiftPM package**
+  leaves the workspace untouched and is remembered; dismissing asks again on the next open. The Generate
+  command offers the same choice, and an ordinary project behaves as before, including one created deeper in
+  the tree after the folder opens. Requires a full Xcode, since activation runs `xcodebuild -list` and lists
+  simulators.
 
 No test framework or linter is configured; the checks are plain Node scripts.
 
@@ -44,7 +52,7 @@ find . -maxdepth 1 -name "*.vsix" -delete && npm run compile && npm run package 
 
 VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.swift` manifests and build/debug task configurations for iOS simulator development. Requires macOS with Xcode installed. No runtime dependencies — only VS Code API and Node.js built-ins.
 
-**Data flow**: Read `project.pbxproj` (ASCII plist) → regex-based parsing into structured data → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` via string manipulation.
+**Data flow**: Read `project.pbxproj` (ASCII plist) → structured data (targets, target dependencies and build phases through a `plutil`-backed object index; everything else through regex-based parsers) → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` via string manipulation.
 
 ### Entry Point
 
@@ -80,7 +88,10 @@ src/
 │   ├── base.ts                  — extractObjectBody (brace-matching), parsePackageRequirement, parseListValue
 │   ├── buildSettings.ts         — XCBuildConfiguration parsing, mergeWithInherited, project/target settings,
 │   │                              raw KEY=value capture for settings the typed fields don't name
-│   ├── targets.ts               — PBXNativeTarget parsing, isTestTarget, target dependencies, build phase IDs
+│   ├── projectIndex.ts          — plutil-backed object index (JSON graph, memoized per contents), definition
+│   │                              order from a one-pass tokenizer over the text, typed value helpers
+│   ├── targets.ts               — targets, target dependencies and build phase IDs read from the project index;
+│   │                              isTestTarget
 │   ├── packages.ts              — XCRemoteSwiftPackageReference + XCLocalSwiftPackageReference + product deps
 │   ├── frameworks.ts            — PBXFrameworksBuildPhase parsing, framework name extraction
 │   ├── resources.ts             — PBXResourcesBuildPhase parsing, resource type classification,
@@ -126,6 +137,8 @@ src/
     │                              (~/Library/Developer/VSCode/DerivedSources/<key>/) with
     │                              workspace keying + marker file; staging-dir swap
     ├── path.ts                  — Target path resolution (Sources/, Tests/, shared conventions)
+    ├── swiftPMProject.ts        — SwiftPM-generated project choice: files VSXcode changes, collision-safe
+    │                              backups, per-project decision (no vscode import)
     └── simulator.ts             — iOS simulator enumeration via xcrun simctl
 ```
 
@@ -141,6 +154,7 @@ src/
 - **Core Data codegen (SourceKit-LSP)**: models with class/category codegen get their NSManagedObject subclasses generated only by Xcode's build, so the SwiftPM-based LSP build can't resolve them. `generatePackageSwift` runs momc per target with a data model into `~/Library/Developer/VSCode/DerivedSources/<workspaceKey>/<Target>/` and folds the files into the module via an `.unsafeFlags` entry interpolating a `coreDataGenerated` preamble variable (`Context.environment["HOME"]` — documented PackageDescription API). SwiftPM folding positional source paths from unsafeFlags is undocumented behavior, accepted deliberately: the repository, the model file, and pbxproj stay untouched, so the Xcode build/archive pipeline can never be affected — the failure mode is LSP squiggles, never builds. momc failure → manifest emitted without flags. Regen triggers: activation, pbxproj changes, bundle create/delete, model-contents edits (`**/*.xcdatamodeld/**` watcher — entity edits never touch pbxproj), the manual Sync Files command, and Clean DerivedData (wipe + immediate regen). Manifest generation is serialized per workspace; codegen runs are serialized module-wide and land via staging-dir rename so the LSP never observes a half-populated directory. Each output dir carries a `manifest.json` recording what was emitted, and every generation pass garbage-collects stale outputs — a deleted/renamed input or disabled codegen removes its derived files (legacy all-`.swift` dirs included), an emptied tree is removed marker and all, and anything not recognizable as extension output is left in place and logged.
 - **Reconcile**: `vsxcode.syncProjectFiles` (and activation) catches up on changes the watchers missed. Swift files are add-only; Core Data models are also removed when the bundle is gone from disk, since a stale XCVersionGroup fails the build with momc's "No current version for model". Removal requires the model to be absent both at its resolved path and by name, so an unresolvable group tree is never read as a deletion.
 - **Auto-configure**: On activation, auto-detects first project/target/simulator and stores `BuildTaskConfig` to workspace state
+- **SwiftPM-generated projects**: a project whose object ids use SwiftPM's `OBJ_n` form (`swift package generate-xcodeproj`) sits beside the package's own Package.swift, so VSXcode asks before managing it. Before anything that writes, a modal dialog lists each file VSXcode would change — Package.swift, the workspace settings file (`.vscode/settings.json` or the open `.code-workspace`), `.vscode/.swift-format`, `project.pbxproj` — with the backup each would get. **Use VSXcode fully** copies each existing file to `<file>_backup` (then `_backup-2` and so on; an existing backup is never overwritten) and turns everything on. **Keep it a SwiftPM package** changes nothing — no Package.swift, settings, file sync, build tasks, swift-format profile or terminal skip list — and is remembered per project file under the workspace-state key `swiftPMProjectChoices`. Dismissing does nothing and asks again on the next open. The Generate commands offer the choice again, after their project pick. The decision logic is in `utils/swiftPMProject.ts`, which doesn't import `vscode`; `setupFullExtension` holds every automatic write until the workspace is managed. A silent regeneration checks that when its run starts, not when it is queued, and Keep from a Generate command applies inside the dialog callback, so a regeneration queued while the dialog was open never writes. Using VSXcode fully from a Generate command generates again once the workspace is managed, as activation does, so a project change saved while the dialog was open still reaches Package.swift
 - **Task chaining**: build-install completion triggers run-and-debug; debug session end kills debugserver
 - **Physical device support**: Build → install via devicectl → poll device ready → launch console → attach lldb-dap
 - **SourceKit-LSP**: Auto-configures `swift.sourcekit-lsp.serverArguments` with iOS simulator SDK paths for intellisense

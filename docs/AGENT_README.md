@@ -12,6 +12,8 @@ You are working in a workspace where the **VSXcode** VS Code extension is instal
 
 The extension activates on `workspaceContains:**/*.pbxproj` or `onDebug`. Once active in a workspace that contains an Xcode project, the following happen automatically. **If you find yourself about to do any of these manually, stop — the extension already handles it.**
 
+> **Exception — SwiftPM-generated projects.** If the project was made by `swift package generate-xcodeproj` (object ids like `OBJ_12`), none of the automatic writes below start until the user answers VSXcode's prompt. If they chose **Keep it a SwiftPM package**, nothing below happens in that workspace (no Package.swift generation, settings or pbxproj sync), and `Package.swift` is the package's own manifest: edit it as normal. If they chose **Use VSXcode fully**, VSXcode first backed up the files it changes beside the originals (`Package.swift_backup`, `.vscode/settings.json_backup`, `.vscode/.swift-format_backup`, `project.pbxproj_backup`, with `-2`, `-3`… for later backups), and everything below applies. In such a workspace, a `Package.swift` without the "Managed by VSXcode" header is the package's own manifest.
+
 ### Package.swift generation
 - **What**: A `Package.swift` file in the workspace root, generated from `<project>.xcodeproj/project.pbxproj`. The generated file contains a "Managed by VSXcode — changes will be overwritten" header.
 - **Trigger**: First-time generation on activation, then re-generation whenever `project.pbxproj` changes (a `FileSystemWatcher` fires).

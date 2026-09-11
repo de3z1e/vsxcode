@@ -19,7 +19,9 @@ import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
 import { getBuildSettingsForTarget, getProjectBuildSettings, resolveConfigurationListId, platformsSupported } from './parsers/buildSettings';
-import { parseDefaultLocalization, parseDeploymentTargets, parseExcludedFiles } from './parsers/project';
+import { parseDefaultLocalization, parseDeploymentTargets, parseExcludedFiles, usesSwiftPMObjectIds } from './parsers/project';
+import { createSwiftPMProjects } from './utils/swiftPMProject';
+import type { SwiftPMProjectChoice, SwiftPMProjectDecision, SwiftPMProjectPrompt } from './utils/swiftPMProject';
 import { parseLinkedFrameworksForTarget } from './parsers/frameworks';
 import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resources';
 import { generateSwiftSettings, effectiveSwiftMajor } from './generators/swiftSettings';
@@ -184,17 +186,27 @@ async function reconfigureSourceKitLSP(projectRoot: string, config: BuildTaskCon
 // Serialized per workspace: momc is awaited between the pbxproj read and the Package.swift write, so concurrent runs would let a stale read win.
 const packageGenerationChains = new Map<string, Promise<void>>();
 
-function generatePackageSwift(rootPath: string, configurationName: string = 'Debug', silent: boolean = false, destinationType: DestinationType = 'simulator', logger: (message: string) => void = () => {}): Promise<void> {
+interface GenerationOptions {
+    /** Settles a SwiftPM-generated project before a Generate command writes anything. */
+    swiftPMChoice?: (projectFile: string) => Promise<SwiftPMProjectDecision>;
+    /** Checked when the run starts, after any run queued ahead of it; false skips the run. */
+    onlyIf?: () => boolean;
+}
+
+function generatePackageSwift(rootPath: string, configurationName: string = 'Debug', silent: boolean = false, destinationType: DestinationType = 'simulator', logger: (message: string) => void = () => {}, options: GenerationOptions = {}): Promise<void> {
     const key = path.resolve(rootPath);
     const previous = packageGenerationChains.get(key) ?? Promise.resolve();
     const run = previous.then(() =>
-        generatePackageSwiftSerialized(rootPath, configurationName, silent, destinationType, logger)
+        generatePackageSwiftSerialized(rootPath, configurationName, silent, destinationType, logger, options)
     );
     packageGenerationChains.set(key, run.then(() => undefined, () => undefined));
     return run;
 }
 
-async function generatePackageSwiftSerialized(rootPath: string, configurationName: string, silent: boolean, destinationType: DestinationType, logger: (message: string) => void): Promise<void> {
+async function generatePackageSwiftSerialized(rootPath: string, configurationName: string, silent: boolean, destinationType: DestinationType, logger: (message: string) => void, options: GenerationOptions): Promise<void> {
+    if (options.onlyIf && !options.onlyIf()) {
+        return;
+    }
     const entries = await fsp.readdir(rootPath, { withFileTypes: true });
     const xcodeProjects = entries.filter(
         (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
@@ -222,6 +234,17 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
     } catch (error) {
         const message = (error as { message?: string }).message;
         throw new Error(`Unable to read ${pbxprojPath}: ${message}`);
+    }
+
+    // A SwiftPM-generated project sits beside the package's own manifest, so a Generate command settles that first.
+    let overwriteApproved = false;
+    if (!silent && options.swiftPMChoice && usesSwiftPMObjectIds(pbxContents)) {
+        const decision = await options.swiftPMChoice(selectedProject);
+        if (decision.outcome === 'keep' || decision.outcome === 'dismissed') {
+            return;
+        }
+        // The files it would change were just backed up, so the overwrite prompt below would only repeat the question.
+        overwriteApproved = decision.outcome === 'full';
     }
 
     const swiftVersion =
@@ -484,7 +507,7 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
             return;
         }
 
-        if (!silent) {
+        if (!silent && !overwriteApproved) {
             const existingUri = vscode.Uri.file(packagePath);
             const previewUri = vscode.Uri.parse(`untitled:Package.swift.preview`);
             const previewDoc = await vscode.workspace.openTextDocument(previewUri);
@@ -967,18 +990,17 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     const projectRoot = workspaceFolders[0].uri.fsPath;
 
-    function hasXcodeProject(): boolean {
+    /** The first `.xcodeproj` in the workspace root: the project that generation, file sync and build-task setup read. */
+    function firstXcodeProject(): string | undefined {
         try {
-            const entries = fs.readdirSync(projectRoot, { withFileTypes: true });
-            return entries.some(
-                (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
-            );
+            return fs.readdirSync(projectRoot, { withFileTypes: true })
+                .find((entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj'))?.name;
         } catch {
-            return false;
+            return undefined;
         }
     }
 
-    if (!hasXcodeProject()) {
+    if (!firstXcodeProject()) {
         noProjectConfirmed = true;
         noProjectEmitter.fire();
         // Watch for .xcodeproj creation, then fully activate
@@ -1012,20 +1034,29 @@ export function activate(context: vscode.ExtensionContext): void {
     const codeQualityViewDisposable = vscode.window.registerWebviewViewProvider('vsxcode.codeFormat', codeQualityProvider);
     context.subscriptions.push(codeQualityViewDisposable, swiftFormatProvider, formatterEditProvider);
 
-    swiftFormatProvider.resolvePathAndVersion().then(async () => {
-        await swiftFormatProvider.syncFromConfigFile();
-        if (!swiftFormatProvider.isProfileModeExplicit()) {
-            if (swiftFormatProvider.hasWorkspaceConfig() || swiftFormatProvider.hasConfigFile()) {
-                await swiftFormatProvider.setProfileMode('local');
-            } else {
-                await swiftFormatProvider.setProfileMode('global');
-            }
-        }
-        codeQualityProvider.refresh();
-    }).catch((e) => {
+    // Profile setup can rewrite .vscode/.swift-format, so it waits for a managed workspace; the binary lookup only reads.
+    const swiftFormatResolved = swiftFormatProvider.resolvePathAndVersion().then(() => true, (e) => {
         log(`[swift-format] resolvePathAndVersion failed: ${e}`);
         codeQualityProvider.refresh();
+        return false;
     });
+    void swiftFormatResolved.then((resolved) => { if (resolved) { codeQualityProvider.refresh(); } });
+    const initializeSwiftFormatProfile = async (): Promise<void> => {
+        if (!await swiftFormatResolved) { return; }
+        try {
+            await swiftFormatProvider.syncFromConfigFile();
+            if (!swiftFormatProvider.isProfileModeExplicit()) {
+                if (swiftFormatProvider.hasWorkspaceConfig() || swiftFormatProvider.hasConfigFile()) {
+                    await swiftFormatProvider.setProfileMode('local');
+                } else {
+                    await swiftFormatProvider.setProfileMode('global');
+                }
+            }
+        } catch (e) {
+            log(`[swift-format] profile setup failed: ${e}`);
+        }
+        codeQualityProvider.refresh();
+    };
 
     swiftFormatProvider.onDidSyncConfig(() => codeQualityProvider.refresh());
 
@@ -1036,14 +1067,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     // Ensure Cmd+R and Cmd+Shift+B bypass terminal input (Kitty protocol in VS Code 1.109+ broke auto-skip)
-    const termConfig = vscode.workspace.getConfiguration('terminal.integrated');
-    const inspected = termConfig.inspect<string[]>('commandsToSkipShell');
-    const userSkipList = inspected?.globalValue || [];
-    const cmdsToSkip = ['vsxcode.sidebar.buildAndRun', 'vsxcode.sidebar.build'];
-    const missing = cmdsToSkip.filter((cmd) => !userSkipList.includes(cmd));
-    if (missing.length > 0) {
-        termConfig.update('commandsToSkipShell', [...userSkipList, ...missing], vscode.ConfigurationTarget.Global);
-    }
+    const ensureTerminalSkipsBuildCommands = (): void => {
+        const termConfig = vscode.workspace.getConfiguration('terminal.integrated');
+        const inspected = termConfig.inspect<string[]>('commandsToSkipShell');
+        const userSkipList = inspected?.globalValue || [];
+        const cmdsToSkip = ['vsxcode.sidebar.buildAndRun', 'vsxcode.sidebar.build'];
+        const missing = cmdsToSkip.filter((cmd) => !userSkipList.includes(cmd));
+        if (missing.length > 0) {
+            termConfig.update('commandsToSkipShell', [...userSkipList, ...missing], vscode.ConfigurationTarget.Global);
+        }
+    };
 
     // Register TaskProvider and DebugConfigurationProvider
     const buildTaskProvider = new XcodeBuildTaskProvider(context.workspaceState);
@@ -1056,12 +1089,167 @@ export function activate(context: vscode.ExtensionContext): void {
     // Register test controller (Testing sidebar integration)
     const testController = new XCTestController(context.workspaceState, projectRoot);
 
-    // Auto-configure on activation, then generate Package.swift for the resolved
+    // ── Project file sync ─────────────────────────────────────
+    // Automatic writes wait until the workspace is managed: not SwiftPM-generated, or chosen to be managed fully. This
+    // section comes before the activation block below, which can start file sync before its first await.
+    let workspaceManaged = false;
+
+    // Package.swift's resource list is derived from disk, so any project or bundle change needs a regen.
+    const regeneratePackageSwift = (source: string): void => {
+        const wsFolders = vscode.workspace.workspaceFolders;
+        if (!wsFolders || wsFolders.length === 0) { return; }
+        generatePackageSwift(wsFolders[0].uri.fsPath, 'Debug', true, currentDestinationType(context.workspaceState), log, { onlyIf: () => workspaceManaged }).catch((error) => {
+            const message = (error as { message?: string }).message || String(error);
+            log(`${source} Package.swift regen failed: ${message}`);
+        });
+    };
+
+    // Editing entities rewrites only files inside the bundle, which the bundle-level watcher never sees and pbxproj never records — so nothing else re-runs codegen.
+    const watchModelContents = (): vscode.Disposable[] => {
+        const modelContentsWatcher = vscode.workspace.createFileSystemWatcher('**/*.xcdatamodeld/**');
+        let modelContentsTimer: ReturnType<typeof setTimeout> | undefined;
+        const onModelContentsEvent = (): void => {
+            if (modelContentsTimer) { clearTimeout(modelContentsTimer); }
+            // Xcode rewrites several inner files per edit.
+            modelContentsTimer = setTimeout(() => {
+                modelContentsTimer = undefined;
+                regeneratePackageSwift('[model-contents]');
+            }, 500);
+        };
+        return [
+            modelContentsWatcher,
+            modelContentsWatcher.onDidChange(onModelContentsEvent),
+            modelContentsWatcher.onDidCreate(onModelContentsEvent),
+            modelContentsWatcher.onDidDelete(onModelContentsEvent),
+            { dispose: () => { if (modelContentsTimer) { clearTimeout(modelContentsTimer); } } }
+        ];
+    };
+
+    // Catch-up scan for files added or removed while the watchers weren't live (VS Code closed, git checkout, external tooling).
+    const reconcileProjectFiles = async (): Promise<string | null> => {
+        const swiftAdded = await reconcileSwiftFiles(projectRoot, log);
+        const dataModels = await reconcileDataModels(projectRoot, log);
+
+        const changes: string[] = [];
+        if (swiftAdded > 0) { changes.push(`added ${swiftAdded} Swift file(s)`); }
+        if (dataModels.added > 0) { changes.push(`added ${dataModels.added} Core Data model(s)`); }
+        if (dataModels.updated > 0) { changes.push(`refreshed ${dataModels.updated} Core Data model(s)`); }
+        if (dataModels.removed > 0) { changes.push(`removed ${dataModels.removed} stale Core Data model(s)`); }
+        if (changes.length === 0) { return null; }
+
+        regeneratePackageSwift('[project-sync]');
+        return `VSXcode: ${changes.join(', ')} in the Xcode project.`;
+    };
+
+    let projectFileSync: vscode.Disposable[] = [];
+    const startProjectFileSync = (): void => {
+        if (projectFileSync.length > 0) { return; }
+        projectFileSync = [
+            ...createSwiftFileWatcher(projectRoot, log),
+            ...createDataModelWatcher(projectRoot, log, () => regeneratePackageSwift('[datamodel-sync]')),
+            ...watchModelContents()
+        ];
+        reconcileProjectFiles()
+            .then((summary) => {
+                if (summary) {
+                    vscode.window.showInformationMessage(summary);
+                }
+            })
+            .catch((error) => {
+                const message = (error as { message?: string }).message || String(error);
+                log(`[project-sync] reconcile failed: ${message}`);
+            });
+    };
+    const stopProjectFileSync = (): void => {
+        for (const disposable of projectFileSync) { disposable.dispose(); }
+        projectFileSync = [];
+    };
+    context.subscriptions.push({ dispose: stopProjectFileSync });
+
+    // ── SwiftPM-generated projects ────────────────────────────
+
+    const askAboutSwiftPMProject = async ({ projectFile, entries }: SwiftPMProjectPrompt): Promise<SwiftPMProjectChoice | undefined> => {
+        const fully = 'Use VSXcode fully';
+        const keep = 'Keep it a SwiftPM package';
+        const listing = entries.length > 0
+            ? entries.map(({ file, backup }) => `${file}\n    → ${path.basename(backup)}`)
+            : ['None of these files exist yet, so nothing needs a backup.'];
+        const choice = await vscode.window.showWarningMessage(
+            `${projectFile} was generated by SwiftPM. How should VSXcode treat this workspace?`,
+            {
+                modal: true,
+                detail: [
+                    `${fully}: first copies each of these files to a backup beside it, then turns on everything — a generated Package.swift, SourceKit-LSP settings, build tasks and file sync.`,
+                    '',
+                    ...listing,
+                    '',
+                    `${keep}: VSXcode changes nothing in this workspace and remembers your choice. Its commands still work if you run them yourself, and the Generate Package.swift command offers these options again.`
+                ].join('\n')
+            },
+            fully,
+            keep
+        );
+        return choice === fully ? 'full' : choice === keep ? 'keep' : undefined;
+    };
+
+    const swiftPMProjects = createSwiftPMProjects({
+        projectRoot,
+        store: context.workspaceState,
+        workspaceSettingsFile: () => {
+            const workspaceFile = vscode.workspace.workspaceFile;
+            return workspaceFile && workspaceFile.scheme === 'file'
+                ? workspaceFile.fsPath
+                : path.join(projectRoot, '.vscode', 'settings.json');
+        },
+        ask: askAboutSwiftPMProject,
+        log
+    });
+
+    /** Asks about a SwiftPM-generated project; undefined when backing up failed, which leaves the workspace unchanged. */
+    const decideSwiftPMProject = async (projectFile: string, askEvenIfChosen: boolean): Promise<SwiftPMProjectDecision | undefined> => {
+        try {
+            const decision = await swiftPMProjects.decide(projectFile, askEvenIfChosen);
+            if (decision.backups.length > 0) {
+                const names = decision.backups.map((backup) => path.relative(projectRoot, backup)).join(', ');
+                vscode.window.showInformationMessage(`VSXcode backed up ${names} before managing ${projectFile}.`);
+            }
+            return decision;
+        } catch (error) {
+            const message = (error as { message?: string }).message || String(error);
+            log(`[swiftpm] ${projectFile}: ${message}`);
+            vscode.window.showErrorMessage(`VSXcode left ${projectFile} unchanged because backing up its files failed: ${message}`);
+            return undefined;
+        }
+    };
+
+    /** Turns on what VSXcode does on its own; Package.swift generation stays with the caller. */
+    const manageWorkspace = async (): Promise<void> => {
+        if (workspaceManaged) { return; }
+        workspaceManaged = true;
+        void initializeSwiftFormatProfile();
+        ensureTerminalSkipsBuildCommands();
+        startProjectFileSync();
+        await autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
+    };
+
+    const leaveWorkspaceUnmanaged = (): void => {
+        workspaceManaged = false;
+        stopProjectFileSync();
+    };
+
+    // Once the workspace is managed, auto-configure, then generate Package.swift for the resolved
     // destination — sequenced so SourceKit-LSP matches the auto-picked device
     // (e.g. cleared to the host SDK for a macOS-only project). Non-blocking.
     void (async () => {
-        await autoConfigureBuildTasks(context.workspaceState, sidebarProvider);
-        await generatePackageSwift(projectRoot, 'Debug', true, currentDestinationType(context.workspaceState), log).catch(() => {});
+        // With no project at the root (one created deeper in the tree started this setup), there is nothing to ask about.
+        const projectFile = firstXcodeProject();
+        if (projectFile) {
+            const decision = await decideSwiftPMProject(projectFile, false);
+            if (!decision || decision.outcome === 'keep' || decision.outcome === 'dismissed') { return; }
+        }
+        await manageWorkspace();
+        // A Generate command can switch the workspace to keep while build tasks are configured, so the run checks again.
+        await generatePackageSwift(projectRoot, 'Debug', true, currentDestinationType(context.workspaceState), log, { onlyIf: () => workspaceManaged }).catch(() => {});
     })();
 
     // Seed the rename detector so the very next pbxproj edit can be
@@ -1092,6 +1280,31 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Package.swift commands ────────────────────────────────
 
+    /** A SwiftPM-generated project asks first, and the answer then applies to the workspace. */
+    const generateFromCommand = async (rootPath: string, configurationName: string): Promise<void> => {
+        const asked: { decision?: SwiftPMProjectDecision } = {};
+        const generation = generatePackageSwift(rootPath, configurationName, false, currentDestinationType(context.workspaceState), log, {
+            swiftPMChoice: async (projectFile) => {
+                // A failed backup leaves the workspace as it was, like a dismissed dialog.
+                asked.decision = (await decideSwiftPMProject(projectFile, true)) ?? { outcome: 'dismissed', backups: [] };
+                // Keep applies before this run ends, so a regeneration queued behind it finds the workspace unmanaged.
+                if (asked.decision.outcome === 'keep') { leaveWorkspaceUnmanaged(); }
+                return asked.decision;
+            }
+        });
+        // Using VSXcode fully applies even when generation fails afterwards; the failure still reaches the command's error message.
+        await generation.catch(() => undefined);
+        if (asked.decision?.outcome === 'full') {
+            await manageWorkspace();
+            // As at activation, generate again once managed. This run reads the project fresh, so a change saved while the
+            // dialog was open (whose own regeneration was skipped) is included, and it uses the destination that build
+            // tasks may only now have picked.
+            await generatePackageSwift(rootPath, configurationName, true, currentDestinationType(context.workspaceState), log, { onlyIf: () => workspaceManaged })
+                .catch((error) => log(`[swiftpm] Package.swift regen failed: ${(error as { message?: string }).message || String(error)}`));
+        }
+        await generation;
+    };
+
     const generateCommand = vscode.commands.registerCommand(
         'vsxcode.createFromXcodeproj',
         async () => {
@@ -1100,7 +1313,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!workspaceFolders || workspaceFolders.length === 0) {
                     throw new Error('Open a workspace folder before running this command.');
                 }
-                await generatePackageSwift(workspaceFolders[0].uri.fsPath, 'Debug', false, currentDestinationType(context.workspaceState), log);
+                await generateFromCommand(workspaceFolders[0].uri.fsPath, 'Debug');
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
                 vscode.window.showErrorMessage(message);
@@ -1120,7 +1333,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     placeHolder: 'Select build configuration for settings extraction'
                 });
                 if (!config) { return; }
-                await generatePackageSwift(workspaceFolders[0].uri.fsPath, config, false, currentDestinationType(context.workspaceState), log);
+                await generateFromCommand(workspaceFolders[0].uri.fsPath, config);
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
                 vscode.window.showErrorMessage(message);
@@ -2204,16 +2417,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── File watcher ──────────────────────────────────────────
 
-    // Package.swift's resource list is derived from disk, so any project or bundle change needs a regen.
-    const regeneratePackageSwift = (source: string): void => {
-        const wsFolders = vscode.workspace.workspaceFolders;
-        if (!wsFolders || wsFolders.length === 0) { return; }
-        generatePackageSwift(wsFolders[0].uri.fsPath, 'Debug', true, currentDestinationType(context.workspaceState), log).catch((error) => {
-            const message = (error as { message?: string }).message || String(error);
-            log(`${source} Package.swift regen failed: ${message}`);
-        });
-    };
-
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.pbxproj');
     const onProjectChange = watcher.onDidChange(async () => {
         sidebarProvider.refresh();
@@ -2225,63 +2428,7 @@ export function activate(context: vscode.ExtensionContext): void {
             .catch((error) => log(`[pbxproj-watcher] rename check failed: ${error}`));
     });
 
-    // ── Project file watchers (auto-sync to pbxproj) ──────────
-
-    const swiftWatcherDisposables = createSwiftFileWatcher(projectRoot, log);
-    context.subscriptions.push(...swiftWatcherDisposables);
-
-    const dataModelWatcherDisposables = createDataModelWatcher(
-        projectRoot,
-        log,
-        () => regeneratePackageSwift('[datamodel-sync]')
-    );
-    context.subscriptions.push(...dataModelWatcherDisposables);
-
-    // Editing entities rewrites only files inside the bundle, which the bundle-level watcher never sees and pbxproj never records — so nothing else re-runs codegen.
-    const modelContentsWatcher = vscode.workspace.createFileSystemWatcher('**/*.xcdatamodeld/**');
-    let modelContentsTimer: ReturnType<typeof setTimeout> | undefined;
-    const onModelContentsEvent = (): void => {
-        if (modelContentsTimer) { clearTimeout(modelContentsTimer); }
-        // Xcode rewrites several inner files per edit.
-        modelContentsTimer = setTimeout(() => {
-            modelContentsTimer = undefined;
-            regeneratePackageSwift('[model-contents]');
-        }, 500);
-    };
-    context.subscriptions.push(
-        modelContentsWatcher,
-        modelContentsWatcher.onDidChange(onModelContentsEvent),
-        modelContentsWatcher.onDidCreate(onModelContentsEvent),
-        modelContentsWatcher.onDidDelete(onModelContentsEvent),
-        { dispose: () => { if (modelContentsTimer) { clearTimeout(modelContentsTimer); } } }
-    );
-
-    // Catch-up scan for files added or removed while the watchers weren't live (VS Code closed, git checkout, external tooling).
-    const reconcileProjectFiles = async (): Promise<string | null> => {
-        const swiftAdded = await reconcileSwiftFiles(projectRoot, log);
-        const dataModels = await reconcileDataModels(projectRoot, log);
-
-        const changes: string[] = [];
-        if (swiftAdded > 0) { changes.push(`added ${swiftAdded} Swift file(s)`); }
-        if (dataModels.added > 0) { changes.push(`added ${dataModels.added} Core Data model(s)`); }
-        if (dataModels.updated > 0) { changes.push(`refreshed ${dataModels.updated} Core Data model(s)`); }
-        if (dataModels.removed > 0) { changes.push(`removed ${dataModels.removed} stale Core Data model(s)`); }
-        if (changes.length === 0) { return null; }
-
-        regeneratePackageSwift('[project-sync]');
-        return `VSXcode: ${changes.join(', ')} in the Xcode project.`;
-    };
-
-    reconcileProjectFiles()
-        .then((summary) => {
-            if (summary) {
-                vscode.window.showInformationMessage(summary);
-            }
-        })
-        .catch((error) => {
-            const message = (error as { message?: string }).message || String(error);
-            log(`[project-sync] reconcile failed: ${message}`);
-        });
+    // ── Sync Files command ────────────────────────────────────
 
     const syncProjectFilesCmd = vscode.commands.registerCommand('vsxcode.syncProjectFiles', async () => {
         try {

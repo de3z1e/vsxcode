@@ -2,6 +2,7 @@ import type { PlatformName, DeploymentTarget } from '../types/interfaces';
 import { PLATFORM_KEYS, DEFAULT_PLATFORM } from '../types/constants';
 import { cleanup, compareVersions } from '../utils/version';
 import { extractObjectBody } from './base';
+import { readProject } from './projectIndex';
 
 export function parseDefaultLocalization(pbxContents: string): string | null {
     const projectRegex = /\/\* Begin PBXProject section \*\/([\s\S]*?)\/\* End PBXProject section \*\//;
@@ -81,4 +82,10 @@ export function parseExcludedFiles(pbxContents: string, targetName: string): str
         }
     }
     return excluded;
+}
+
+/** Whether the project uses SwiftPM's `OBJ_<n>` object ids, the form `swift package generate-xcodeproj` writes. */
+export function usesSwiftPMObjectIds(pbxContents: string): boolean {
+    const index = readProject(pbxContents);
+    return typeof index !== 'string' && Object.keys(index.objects).some((id) => /^OBJ_\d+$/.test(id));
 }
