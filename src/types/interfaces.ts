@@ -115,10 +115,10 @@ export interface BuildSettings {
     configurationName: string;
     targetId: string | null;
     /**
-     * Every `KEY = value;` pair, `cleanup()`-ed only — `$(inherited)` and parenthesised
-     * list literals survive verbatim, so callers run `parseListValue` themselves.
+     * Every string or list setting as plutil reads it: unquoted and unescaped, a list literal as a list,
+     * `$(inherited)` kept, keys in code-point order. Callers run `parseListValue` themselves.
      */
-    raw: Record<string, string>;
+    raw: Record<string, string | string[]>;
     swiftVersion?: string;
     strictConcurrency?: string;
     swiftActiveCompilationConditions?: string[];

@@ -19,7 +19,7 @@
     "parseExcludedFiles SampleKit": [],
     "parseBuildConfigurations": [
       [
-        "13",
+        "OBJ_13",
         {
           "configurationName": "Debug",
           "targetId": null,
@@ -35,7 +35,7 @@
         }
       ],
       [
-        "14",
+        "OBJ_14",
         {
           "configurationName": "Release",
           "targetId": null,
@@ -51,7 +51,7 @@
         }
       ],
       [
-        "3",
+        "OBJ_3",
         {
           "configurationName": "Debug",
           "targetId": null,
@@ -60,7 +60,11 @@
             "DEBUG_INFORMATION_FORMAT": "dwarf",
             "MACOSX_DEPLOYMENT_TARGET": "10.13",
             "SDKROOT": "macosx",
-            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\tSWIFT_PACKAGE,\n\t\t\t\t\tDEBUG,\n\t\t\t\t)",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": [
+              "$(inherited)",
+              "SWIFT_PACKAGE",
+              "DEBUG"
+            ],
             "SWIFT_VERSION": "5.0"
           },
           "swiftVersion": "5.0",
@@ -74,7 +78,7 @@
         }
       ],
       [
-        "4",
+        "OBJ_4",
         {
           "configurationName": "Release",
           "targetId": null,
@@ -83,7 +87,10 @@
             "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
             "MACOSX_DEPLOYMENT_TARGET": "10.13",
             "SDKROOT": "macosx",
-            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\tSWIFT_PACKAGE,\n\t\t\t\t)",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": [
+              "$(inherited)",
+              "SWIFT_PACKAGE"
+            ],
             "SWIFT_VERSION": "5.0"
           },
           "swiftVersion": "5.0",
@@ -96,14 +103,132 @@
         }
       ]
     ],
-    "resolveConfigurationListId OBJ_2": [],
-    "getBuildSettingsForTarget OBJ_2 Debug": null,
-    "getBuildSettingsForTarget OBJ_2 Release": null,
-    "resolveConfigurationListId OBJ_12": [],
-    "getBuildSettingsForTarget OBJ_12 Debug": null,
-    "getBuildSettingsForTarget OBJ_12 Release": null,
-    "getProjectBuildSettings Debug": null,
-    "getProjectBuildSettings Release": null,
+    "resolveConfigurationListId OBJ_2": [
+      "OBJ_3",
+      "OBJ_4"
+    ],
+    "getBuildSettingsForTarget OBJ_2 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": [
+          "$(inherited)",
+          "SWIFT_PACKAGE",
+          "DEBUG"
+        ],
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE",
+        "DEBUG"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
+    "getBuildSettingsForTarget OBJ_2 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": [
+          "$(inherited)",
+          "SWIFT_PACKAGE"
+        ],
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
+    "resolveConfigurationListId OBJ_12": [
+      "OBJ_13",
+      "OBJ_14"
+    ],
+    "getBuildSettingsForTarget OBJ_12 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "SampleKit",
+        "PRODUCT_NAME": "$(TARGET_NAME:c99extidentifier)",
+        "SWIFT_VERSION": "5.0",
+        "TARGET_NAME": "SampleKit"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "SampleKit",
+      "productName": "$(TARGET_NAME:c99extidentifier)"
+    },
+    "getBuildSettingsForTarget OBJ_12 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "SampleKit",
+        "PRODUCT_NAME": "$(TARGET_NAME:c99extidentifier)",
+        "SWIFT_VERSION": "5.0",
+        "TARGET_NAME": "SampleKit"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "SampleKit",
+      "productName": "$(TARGET_NAME:c99extidentifier)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": [
+          "$(inherited)",
+          "SWIFT_PACKAGE",
+          "DEBUG"
+        ],
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE",
+        "DEBUG"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": [
+          "$(inherited)",
+          "SWIFT_PACKAGE"
+        ],
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
     "parseSwiftPackageReferences": [],
     "parseSwiftPackageProductDependencies": [],
     "parseGroups": [

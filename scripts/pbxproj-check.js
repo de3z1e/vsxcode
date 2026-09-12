@@ -41,7 +41,6 @@ const frameworks = load('parsers/frameworks.js');
 const resources = load('parsers/resources.js');
 const versionGroups = load('parsers/versionGroups.js');
 const project = load('parsers/project.js');
-const version = load('utils/version.js');
 const projectIndex = load('parsers/projectIndex.js');
 const writers = load('writers/pbxproj.js');
 
@@ -51,6 +50,8 @@ const COMMENT_FREE = new Set([
     'parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds',
     'parseGroups', 'findMainGroupId', 'buildGroupDirectories', 'resolveGroupForPath', 'parseVersionGroups',
     'findFileReferencePath', 'findBuildFileId',
+    'parseBuildConfigurations', 'resolveConfigurationListId', 'getBuildSettingsForTarget', 'getProjectBuildSettings',
+    'parseSwiftVersion', 'parseDeploymentTargets', 'parseDefaultLocalization',
     'displayName', 'buildFilesFor', 'phasesOf', 'locateList', 'locateListEntry',
     'parentOf', 'resolvedPath', 'groupForFolder', 'targetOfPhase', 'locateKey', 'folderSpellings',
     'writer addSwiftFileToPbxproj', 'writer removeSwiftFile', 'writer rehomeSwiftFile', 'writer renameSwiftFile',
@@ -485,7 +486,7 @@ function parserEntries(text, inputs) {
     }
     record('parseVersionGroups', () => versionGroups.parseVersionGroups(text));
     record('findVersionGroupSection', () => versionGroups.findVersionGroupSection(text));
-    record('parseSwiftVersion', () => version.parseSwiftVersion(text));
+    record('parseSwiftVersion', () => project.parseSwiftVersion(text));
     record('parseDeploymentTargets', () => project.parseDeploymentTargets(text));
     record('parseDefaultLocalization', () => project.parseDefaultLocalization(text));
     record('usesSwiftPMObjectIds', () => project.usesSwiftPMObjectIds(text));

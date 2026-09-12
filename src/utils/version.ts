@@ -28,16 +28,6 @@ export function compareVersions(left: string, right: string): number {
     return 0;
 }
 
-export function parseSwiftVersion(pbxContents: string): string | null {
-    const matches = [...pbxContents.matchAll(/SWIFT_VERSION = ([^;]+);/g)];
-    const versions = matches
-        .map((match) => cleanup(match[1]))
-        .filter((value) => value.length > 0);
-    const unique = [...new Set(versions)];
-    unique.sort((a, b) => compareVersions(b, a));
-    return unique[0] || null;
-}
-
 export function parseSwiftToolsVersion(output: string | null | undefined): string | null {
     if (!output) {
         return null;

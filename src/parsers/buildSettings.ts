@@ -1,129 +1,70 @@
 import type { BuildSettings } from '../types/interfaces';
-import { cleanup } from '../utils/version';
 import { parseListValue } from './base';
+import { readProject, stringList, stringValue } from './projectIndex';
+import type { ProjectObject } from './projectIndex';
 
-// A value runs to the first line-final `;`, so multi-line parenthesised lists (whose items
-// end in `,`) are captured whole; a quoted value ending in `;` would truncate. Xcode quotes
-// the whole key when it carries an SDK condition, so the quotes are optional on both sides
-// and the condition stays part of the key — folding it onto the bare name would shadow the
-// unconditional value. One setting per line, as Xcode writes them.
-const RAW_SETTING_REGEX = /^[\t ]*"?([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?)"?\s*=\s*([\s\S]*?);[\t ]*$/gm;
+/** Set in this order, which callers comparing serialized settings see; `listLiteral` ignores a string value, as the regex it replaces did. */
+const TYPED_FIELDS: ReadonlyArray<[keyof BuildSettings, string, 'scalar' | 'list' | 'listLiteral']> = [
+    ['swiftVersion', 'SWIFT_VERSION', 'scalar'],
+    ['strictConcurrency', 'SWIFT_STRICT_CONCURRENCY', 'scalar'],
+    ['swiftActiveCompilationConditions', 'SWIFT_ACTIVE_COMPILATION_CONDITIONS', 'list'],
+    ['otherSwiftFlags', 'OTHER_SWIFT_FLAGS', 'list'],
+    ['gccPreprocessorDefinitions', 'GCC_PREPROCESSOR_DEFINITIONS', 'listLiteral'],
+    ['headerSearchPaths', 'HEADER_SEARCH_PATHS', 'listLiteral'],
+    ['bundleIdentifier', 'PRODUCT_BUNDLE_IDENTIFIER', 'scalar'],
+    ['productName', 'PRODUCT_NAME', 'scalar'],
+    ['supportedPlatforms', 'SUPPORTED_PLATFORMS', 'scalar'],
+    ['sdkRoot', 'SDKROOT', 'scalar'],
+    ['macosxDeploymentTarget', 'MACOSX_DEPLOYMENT_TARGET', 'scalar']
+];
 
-function parseRawSettings(settingsBlock: string): Record<string, string> {
-    const raw: Record<string, string> = {};
-    const regex = new RegExp(RAW_SETTING_REGEX.source, RAW_SETTING_REGEX.flags);
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(settingsBlock)) !== null) {
-        raw[match[1]] = cleanup(match[2]);
+/** `raw` keys are sorted to restore the order Xcode writes them in, which plutil's JSON doesn't keep. */
+function settingsOf(object: ProjectObject, configurationName: string): BuildSettings {
+    const raw: Record<string, string | string[]> = {};
+    const dictionary = object.buildSettings;
+    if (dictionary && typeof dictionary === 'object' && !Array.isArray(dictionary)) {
+        const entries = dictionary as Record<string, unknown>;
+        for (const key of Object.keys(entries).sort()) {
+            const value = entries[key];
+            if (typeof value === 'string') {
+                raw[key] = value;
+            } else if (Array.isArray(value)) {
+                raw[key] = stringList(value);
+            }
+        }
     }
-    return raw;
+    const settings: BuildSettings = { configurationName, targetId: null, raw };
+    for (const [field, key, kind] of TYPED_FIELDS) {
+        const value = raw[key];
+        let typed: string | string[] | undefined;
+        if (kind === 'scalar') {
+            typed = typeof value === 'string' ? value : undefined;
+        } else if (kind === 'list') {
+            typed = value === undefined ? undefined : parseListValue(value);
+        } else {
+            typed = Array.isArray(value) ? parseListValue(value) : undefined;
+        }
+        if (typed !== undefined) { (settings as unknown as Record<string, unknown>)[field] = typed; }
+    }
+    return settings;
 }
 
+/** Every XCBuildConfiguration with a name, by id, in definition order; empty when plutil can't read the text. */
 export function parseBuildConfigurations(pbxContents: string): Map<string, BuildSettings> {
     const configs = new Map<string, BuildSettings>();
-
-    const sectionRegex =
-        /\/\* Begin XCBuildConfiguration section \*\/([\s\S]*?)\/\* End XCBuildConfiguration section \*\//;
-    const sectionMatch = sectionRegex.exec(pbxContents);
-    if (!sectionMatch) {
-        return configs;
+    const index = readProject(pbxContents);
+    if (typeof index === 'string') { return configs; }
+    for (const { id, object } of index.objectsOfIsa('XCBuildConfiguration')) {
+        const name = stringValue(object.name);
+        if (name !== undefined) { configs.set(id, settingsOf(object, name)); }
     }
-    const section = sectionMatch[1];
-
-    // `[^{}]*?` spans the keys Xcode interposes between `isa` and `buildSettings` — chiefly
-    // `baseConfigurationReference` on any .xcconfig-backed configuration. Braces are excluded so a
-    // configuration lacking `buildSettings` can't swallow the next block's settings under its own id.
-    const configRegex =
-        /([A-F0-9]+)\s*\/\*\s*([^*]+)\s*\*\/\s*=\s*\{\s*isa\s*=\s*XCBuildConfiguration;[^{}]*?buildSettings\s*=\s*\{([\s\S]*?)\};\s*name\s*=\s*([^;]+);/g;
-    let match: RegExpExecArray | null;
-    while ((match = configRegex.exec(section)) !== null) {
-        const configId = match[1];
-        const configurationName = cleanup(match[4]);
-        const settingsBlock = match[3];
-
-        const settings: BuildSettings = {
-            configurationName,
-            targetId: null,
-            raw: parseRawSettings(settingsBlock)
-        };
-
-        const swiftVersionMatch = /SWIFT_VERSION = ([^;]+);/.exec(settingsBlock);
-        if (swiftVersionMatch) {
-            settings.swiftVersion = cleanup(swiftVersionMatch[1]);
-        }
-
-        const strictConcurrencyMatch = /SWIFT_STRICT_CONCURRENCY = ([^;]+);/.exec(settingsBlock);
-        if (strictConcurrencyMatch) {
-            settings.strictConcurrency = cleanup(strictConcurrencyMatch[1]);
-        }
-
-        const compilationConditionsMatch = /SWIFT_ACTIVE_COMPILATION_CONDITIONS = ([^;]+);/.exec(settingsBlock);
-        if (compilationConditionsMatch) {
-            settings.swiftActiveCompilationConditions = parseListValue(compilationConditionsMatch[1]);
-        }
-
-        const otherSwiftFlagsMatch = /OTHER_SWIFT_FLAGS = ([^;]+);/.exec(settingsBlock);
-        if (otherSwiftFlagsMatch) {
-            settings.otherSwiftFlags = parseListValue(otherSwiftFlagsMatch[1]);
-        }
-
-        const gccMatch = /GCC_PREPROCESSOR_DEFINITIONS = \(([\s\S]*?)\);/.exec(settingsBlock);
-        if (gccMatch) {
-            settings.gccPreprocessorDefinitions = parseListValue(`(${gccMatch[1]})`);
-        }
-
-        const headerPathsMatch = /HEADER_SEARCH_PATHS = \(([\s\S]*?)\);/.exec(settingsBlock);
-        if (headerPathsMatch) {
-            settings.headerSearchPaths = parseListValue(`(${headerPathsMatch[1]})`);
-        }
-
-        const bundleIdMatch = /PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/.exec(settingsBlock);
-        if (bundleIdMatch) {
-            settings.bundleIdentifier = cleanup(bundleIdMatch[1]);
-        }
-
-        const productNameSettingMatch = /PRODUCT_NAME = ([^;]+);/.exec(settingsBlock);
-        if (productNameSettingMatch) {
-            settings.productName = cleanup(productNameSettingMatch[1]);
-        }
-
-        const supportedPlatformsMatch = /SUPPORTED_PLATFORMS = ([^;]+);/.exec(settingsBlock);
-        if (supportedPlatformsMatch) {
-            settings.supportedPlatforms = cleanup(supportedPlatformsMatch[1]);
-        }
-
-        const sdkRootMatch = /SDKROOT = ([^;]+);/.exec(settingsBlock);
-        if (sdkRootMatch) {
-            settings.sdkRoot = cleanup(sdkRootMatch[1]);
-        }
-
-        const macDeploymentMatch = /MACOSX_DEPLOYMENT_TARGET = ([^;]+);/.exec(settingsBlock);
-        if (macDeploymentMatch) {
-            settings.macosxDeploymentTarget = cleanup(macDeploymentMatch[1]);
-        }
-
-        configs.set(configId, settings);
-    }
-
     return configs;
 }
 
+/** The configuration ids of a configuration list; empty for an unknown list or unreadable text. */
 export function resolveConfigurationListId(pbxContents: string, listId: string): string[] {
-    const listRegex = new RegExp(
-        listId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
-        /\s*\/\*[^*]*\*\/\s*=\s*\{[^}]*buildConfigurations = \(([\s\S]*?)\);/.source
-    );
-    const listMatch = listRegex.exec(pbxContents);
-    if (!listMatch) {
-        return [];
-    }
-    const ids: string[] = [];
-    const idRegex = /([A-F0-9]{24})/g;
-    let idMatch: RegExpExecArray | null;
-    while ((idMatch = idRegex.exec(listMatch[1])) !== null) {
-        ids.push(idMatch[1]);
-    }
-    return ids;
+    const index = readProject(pbxContents);
+    return typeof index === 'string' ? [] : stringList(index.object(listId)?.buildConfigurations);
 }
 
 export function getBuildSettingsForTarget(
@@ -147,18 +88,10 @@ export function getProjectBuildSettings(
     pbxContents: string,
     configurationName: string
 ): BuildSettings | null {
-    const projectSectionRegex =
-        /\/\* Begin PBXProject section \*\/([\s\S]*?)\/\* End PBXProject section \*\//;
-    const projectMatch = projectSectionRegex.exec(pbxContents);
-    if (!projectMatch) {
-        return null;
-    }
-    const projectSection = projectMatch[1];
-    const buildConfigListMatch = /buildConfigurationList = ([A-F0-9]+)/.exec(projectSection);
-    if (!buildConfigListMatch) {
-        return null;
-    }
-    return getBuildSettingsForTarget(pbxContents, buildConfigListMatch[1], configurationName);
+    const index = readProject(pbxContents);
+    if (typeof index === 'string') { return null; }
+    const listId = stringValue(index.project?.buildConfigurationList);
+    return listId === undefined ? null : getBuildSettingsForTarget(pbxContents, listId, configurationName);
 }
 
 /**

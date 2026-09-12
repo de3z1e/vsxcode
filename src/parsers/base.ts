@@ -45,7 +45,11 @@ export function parsePackageRequirement(block: string): PackageRequirement {
     return requirement;
 }
 
-export function parseListValue(raw: string): string[] {
+/** The items of a list setting: a plist list's items as they are (empty ones dropped), or a string split as Xcode's editor writes it. */
+export function parseListValue(raw: string | string[]): string[] {
+    if (Array.isArray(raw)) {
+        return raw.filter((item) => item.length > 0);
+    }
     const trimmed = raw.trim();
     if (trimmed.startsWith('(')) {
         const inner = trimmed.replace(/^\(\s*/, '').replace(/\s*\)$/, '');

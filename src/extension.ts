@@ -14,12 +14,12 @@ import type {
     SwiftPackageProductDependency
 } from './types/interfaces';
 import { DEFAULT_SWIFT_VERSION } from './types/constants';
-import { detectSwiftToolsVersion, detectMacOSVersion, parseSwiftVersion, isXcodeFirstLaunchNeeded, isXcodeFirstLaunchComplete } from './utils/version';
+import { detectSwiftToolsVersion, detectMacOSVersion, isXcodeFirstLaunchNeeded, isXcodeFirstLaunchComplete } from './utils/version';
 import { determineTargetPath } from './utils/path';
 import { parseNativeTargets, isTestTarget, mapProductType, parseTargetDependencies, parseBuildPhaseIds } from './parsers/targets';
 import { parseSwiftPackageReferences, parseSwiftPackageProductDependencies } from './parsers/packages';
 import { getBuildSettingsForTarget, getProjectBuildSettings, resolveConfigurationListId, platformsSupported } from './parsers/buildSettings';
-import { parseDefaultLocalization, parseDeploymentTargets, parseExcludedFiles, usesSwiftPMObjectIds } from './parsers/project';
+import { parseDefaultLocalization, parseDeploymentTargets, parseExcludedFiles, parseSwiftVersion, usesSwiftPMObjectIds } from './parsers/project';
 import { createSwiftPMProjects } from './utils/swiftPMProject';
 import type { SwiftPMProjectChoice, SwiftPMProjectDecision, SwiftPMProjectPrompt } from './utils/swiftPMProject';
 import { parseLinkedFrameworksForTarget } from './parsers/frameworks';

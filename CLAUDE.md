@@ -52,7 +52,7 @@ find . -maxdepth 1 -name "*.vsix" -delete && npm run compile && npm run package 
 
 VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.swift` manifests and build/debug task configurations for iOS simulator development. Requires macOS with Xcode installed. No runtime dependencies — only VS Code API and Node.js built-ins.
 
-**Data flow**: Read `project.pbxproj` (ASCII plist) → structured data (targets, target dependencies, build phases, groups and version groups through a `plutil`-backed object index; everything else through regex-based parsers) → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` by editing entries located by id, with or without comments and section markers.
+**Data flow**: Read `project.pbxproj` (ASCII plist) → structured data (targets, target dependencies, build phases, groups, version groups, build settings and the project-level fields through a `plutil`-backed object index; packages, frameworks, resources and folder exceptions through regex-based parsers) → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` by editing entries located by id, with or without comments and section markers.
 
 ### Entry Point
 
@@ -85,9 +85,11 @@ src/
 │                                  Swift.xcspec; per-row value map, resolved default, language-mode
 │                                  gate, approachable-concurrency umbrella flag, ignore list
 ├── parsers/
-│   ├── base.ts                  — extractObjectBody (brace-matching), parsePackageRequirement, parseListValue
-│   ├── buildSettings.ts         — XCBuildConfiguration parsing, mergeWithInherited, project/target settings,
-│   │                              raw KEY=value capture for settings the typed fields don't name
+│   ├── base.ts                  — extractObjectBody (brace-matching), parsePackageRequirement, parseListValue (a
+│   │                              plist list's items, or a string split as Xcode's editor writes it)
+│   ├── buildSettings.ts         — XCBuildConfiguration settings from the project index: typed fields plus every
+│   │                              string or list setting in `raw` (keys in code-point order, values as plutil
+│   │                              unquotes them), configuration lists, project/target settings, mergeWithInherited
 │   ├── projectIndex.ts          — plutil-backed object index (JSON graph, memoized per contents); definition
 │   │                              order and text locators (locateObject, locateList, locateDictionary,
 │   │                              locateKey) from a one-pass tokenizer over the text; displayName,
@@ -103,8 +105,8 @@ src/
 │   ├── groups.ts                — PBXGroup hierarchy from the project index; group folders (buildGroupDirectories,
 │   │                              from resolvedPath); name-segment path-to-group matching, which decides which
 │   │                              targets sync
-│   ├── project.ts               — project-level fields: default localization, deployment targets,
-│   │                              synchronized-folder exclusions
+│   ├── project.ts               — project-level fields from the index: default localization, highest Swift
+│   │                              version, deployment targets; synchronized-folder exclusions (regex)
 │   └── versionGroups.ts         — XCVersionGroups (.xcdatamodeld bundles) from the project index: children,
 │                                  currentVersion, entry offsets; section bounds
 ├── generators/
@@ -161,7 +163,7 @@ src/
 
 ### Key Patterns
 
-- **Build settings inheritance**: Debug/Release configs merge with project-level defaults via `mergeWithInherited`, respecting `$(inherited)`. Configurations backed by an `.xcconfig` carry a `baseConfigurationReference` between `isa` and `buildSettings`; the config regex spans it, but the `.xcconfig` file's own contents are never read
+- **Build settings inheritance**: Debug/Release configs merge with project-level defaults via `mergeWithInherited`, respecting `$(inherited)`. Settings are read from the project index, so a configuration's other keys (a `baseConfigurationReference` on an `.xcconfig`-backed one, say) don't matter, but the `.xcconfig` file's own contents are never read. `raw` holds plist lists as lists; the generator presents a list to a scalar row as `(a, b)`, which no row value matches
 - **Swift settings translation**: the target's Swift build settings become `swiftSettings` so SourceKit-LSP typechecks under the same language semantics `xcodebuild` uses — before this, settings like `SWIFT_DEFAULT_ACTOR_ISOLATION` were dropped and the editor reported errors on code that built clean. The mapping in `types/swiftSettingFlags.ts` is transcribed from Xcode's own `Swift.xcspec` (the file the build system evaluates), not from documentation: it is the only source that gets the divergent feature spellings right (`SWIFT_UPCOMING_FEATURE_IMPORT_OBJC_FORWARD_DECLS` → `ImportObjcForwardDeclarations`) and that records which settings Xcode consults only below language mode 6. Defaults are transcribed **already resolved** — the spec writes them as `$(…)` expressions, and `SWIFT_STRICT_CONCURRENCY`'s would otherwise fall through its `<<otherwise>>` branch and hand every Swift 5 target a `StrictConcurrency` it never asked for. `SWIFT_APPROACHABLE_CONCURRENCY` has no flags of its own; it supplies the default for five upcoming features, three of which are suppressed at language mode 6. First-class `SwiftSetting` factories are used when the emitted `swift-tools-version` allows them (`.defaultIsolation` and `.strictMemorySafety` need 6.2), else the raw flag goes through `.unsafeFlags`. Scalar settings resolve target-then-project — including `SWIFT_VERSION`, so a project that hoists it to the project configuration still gets the right language mode and the right version gate; only the gate falls back to the toolchain version, never the language mode, which must not declare a version the project never named. Settings with no mapping are logged rather than silently dropped. After an Xcode upgrade, run `npm run test:flag-parity` and refresh the table by re-reading `Swift.xcspec` (`plutil -convert json`, `Options` of `com.apple.xcode.tools.swift.compiler`); the file header records the path
 - **Resource classification**: Files classified as `.process` (compilable: xcassets, storyboard, xib, strings, xcdatamodeld) or `.copy` (everything else)
 - **Filesystem scanning**: After pbxproj parsing, `scanForUnhandledFiles` walks target directories to auto-exclude Xcode-specific files (Info.plist, .entitlements, .pch) and auto-include bundle-like resource directories (.xcdatamodeld, .xcassets, .lproj, etc.) that SPM can't auto-categorize

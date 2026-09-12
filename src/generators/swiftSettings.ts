@@ -90,6 +90,11 @@ function flagsToSwiftSetting(flags: string[], toolsVersion: string): string {
     return unsafeFlags(flags);
 }
 
+/** A raw value as text: a list becomes `(a, b)`, the list-literal form the scalar rows never match. */
+function scalarForm(value: string | string[] | undefined): string | undefined {
+    return Array.isArray(value) ? `(${value.join(', ')})` : value;
+}
+
 /** Target value wins, else the project's — the scalar half of `$(inherited)`. An empty
  *  target value falls through rather than suppressing the project's, matching Xcode. */
 function resolveRawSetting(
@@ -97,7 +102,7 @@ function resolveRawSetting(
     targetSettings: BuildSettings | null,
     key: string
 ): string | undefined {
-    return targetSettings?.raw?.[key] || projectSettings?.raw?.[key];
+    return scalarForm(targetSettings?.raw?.[key]) || scalarForm(projectSettings?.raw?.[key]);
 }
 
 /** Xcode's editor writes list values as `"$(inherited) Unsafe"`, so the project's items merge
@@ -107,7 +112,7 @@ function listItemsForRow(
     projectSettings: BuildSettings | null,
     targetSettings: BuildSettings | null
 ): string[] {
-    const parse = (value: string | undefined) => (value === undefined ? undefined : parseListValue(value));
+    const parse = (value: string | string[] | undefined) => (value === undefined ? undefined : parseListValue(value));
     const merged = mergeWithInherited(
         parse(projectSettings?.raw?.[row.setting]),
         parse(targetSettings?.raw?.[row.setting])

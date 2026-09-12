@@ -99,9 +99,12 @@
           "raw": {
             "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
             "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
-            "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+            "HEADER_SEARCH_PATHS": [
+              "$(inherited)",
+              "$(SRCROOT)/Vendor/include"
+            ],
             "INFOPLIST_FILE": "SampleApp/Info.plist",
-            "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+            "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
             "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
             "PRODUCT_NAME": "$(TARGET_NAME)",
             "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
@@ -110,8 +113,8 @@
           "strictConcurrency": "targeted",
           "otherSwiftFlags": [
             "$(inherited)",
-            "\\\"-D\\\"",
-            "\\\"SAMPLE_FLAG\\"
+            "\"-D\"",
+            "\"SAMPLE_FLAG"
           ],
           "headerSearchPaths": [
             "$(inherited)",
@@ -162,7 +165,10 @@
             "ALWAYS_SEARCH_USER_PATHS": "NO",
             "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
             "DEBUG_INFORMATION_FORMAT": "dwarf",
-            "GCC_PREPROCESSOR_DEFINITIONS": "(\n\t\t\t\t\t\"DEBUG=1\",\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t)",
+            "GCC_PREPROCESSOR_DEFINITIONS": [
+              "DEBUG=1",
+              "$(inherited)"
+            ],
             "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
             "MACOSX_DEPLOYMENT_TARGET": "14.0",
             "ONLY_ACTIVE_ARCH": "YES",
@@ -192,17 +198,20 @@
           "raw": {
             "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
             "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
-            "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+            "HEADER_SEARCH_PATHS": [
+              "$(inherited)",
+              "$(SRCROOT)/Vendor/include"
+            ],
             "INFOPLIST_FILE": "SampleApp/Info.plist",
-            "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+            "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
             "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
             "PRODUCT_NAME": "$(TARGET_NAME)",
             "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator"
           },
           "otherSwiftFlags": [
             "$(inherited)",
-            "\\\"-D\\\"",
-            "\\\"SAMPLE_FLAG\\"
+            "\"-D\"",
+            "\"SAMPLE_FLAG"
           ],
           "headerSearchPaths": [
             "$(inherited)",
@@ -256,7 +265,10 @@
         "ALWAYS_SEARCH_USER_PATHS": "NO",
         "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
         "DEBUG_INFORMATION_FORMAT": "dwarf",
-        "GCC_PREPROCESSOR_DEFINITIONS": "(\n\t\t\t\t\t\"DEBUG=1\",\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t)",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
         "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
         "MACOSX_DEPLOYMENT_TARGET": "14.0",
         "ONLY_ACTIVE_ARCH": "YES",
@@ -304,9 +316,12 @@
       "raw": {
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
         "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
-        "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "$(SRCROOT)/Vendor/include"
+        ],
         "INFOPLIST_FILE": "SampleApp/Info.plist",
-        "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+        "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
@@ -315,8 +330,8 @@
       "strictConcurrency": "targeted",
       "otherSwiftFlags": [
         "$(inherited)",
-        "\\\"-D\\\"",
-        "\\\"SAMPLE_FLAG\\"
+        "\"-D\"",
+        "\"SAMPLE_FLAG"
       ],
       "headerSearchPaths": [
         "$(inherited)",
@@ -332,17 +347,20 @@
       "raw": {
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
         "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
-        "HEADER_SEARCH_PATHS": "(\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t\t\"$(SRCROOT)/Vendor/include\",\n\t\t\t\t)",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "$(SRCROOT)/Vendor/include"
+        ],
         "INFOPLIST_FILE": "SampleApp/Info.plist",
-        "OTHER_SWIFT_FLAGS": "$(inherited) \\\"-D\\\" \\\"SAMPLE_FLAG\\",
+        "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator"
       },
       "otherSwiftFlags": [
         "$(inherited)",
-        "\\\"-D\\\"",
-        "\\\"SAMPLE_FLAG\\"
+        "\"-D\"",
+        "\"SAMPLE_FLAG"
       ],
       "headerSearchPaths": [
         "$(inherited)",
@@ -417,7 +435,10 @@
         "ALWAYS_SEARCH_USER_PATHS": "NO",
         "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
         "DEBUG_INFORMATION_FORMAT": "dwarf",
-        "GCC_PREPROCESSOR_DEFINITIONS": "(\n\t\t\t\t\t\"DEBUG=1\",\n\t\t\t\t\t\"$(inherited)\",\n\t\t\t\t)",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
         "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
         "MACOSX_DEPLOYMENT_TARGET": "14.0",
         "ONLY_ACTIVE_ARCH": "YES",
