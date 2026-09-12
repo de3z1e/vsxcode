@@ -6,7 +6,7 @@ import {
     SPM_AUTO_EXCLUDE_EXTENSIONS,
     SPM_RESOURCE_DIR_EXTENSIONS
 } from '../types/constants';
-import { cleanup } from '../utils/version';
+import { phaseFileNames, readProject } from './projectIndex';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -15,35 +15,13 @@ export function determineResourceType(filePath: string): '.process' | '.copy' {
     return PROCESSABLE_RESOURCE_EXTENSIONS.has(ext) ? '.process' : '.copy';
 }
 
+/** The names of a resources phase's files in list order: `Assets.xcassets`, a storyboard, a variant group's name. */
 export function parseResourcesBuildPhase(
     pbxContents: string,
     resourcesBuildPhaseId: string
 ): string[] {
-    if (!resourcesBuildPhaseId) {
-        return [];
-    }
-
-    const phaseRegex = new RegExp(
-        resourcesBuildPhaseId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
-        /\s*\/\*\s*Resources\s*\*\/\s*=\s*\{[^}]*files = \(([\s\S]*?)\);/.source
-    );
-    const phaseMatch = phaseRegex.exec(pbxContents);
-    if (!phaseMatch) {
-        return [];
-    }
-
-    const fileRefs: string[] = [];
-    const fileRefRegex = /([A-F0-9]{24})\s*\/\*\s*([^*]+)\s*\*\//g;
-    let match: RegExpExecArray | null;
-    while ((match = fileRefRegex.exec(phaseMatch[1])) !== null) {
-        const fileName = cleanup(match[2]);
-        if (fileName.includes(' in Resources')) {
-            const resourceName = fileName.replace(' in Resources', '').trim();
-            fileRefs.push(resourceName);
-        }
-    }
-
-    return fileRefs;
+    const index = readProject(pbxContents);
+    return typeof index === 'string' ? [] : phaseFileNames(index, resourcesBuildPhaseId, 'PBXResourcesBuildPhase');
 }
 
 function findFileInDirectory(dir: string, fileName: string): string | null {

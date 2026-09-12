@@ -117,6 +117,24 @@ export function targetOfPhase(index: ProjectIndex, phaseId: string): string | un
     return index.ids.find((id) => stringList(index.objects[id].buildPhases).includes(phaseId));
 }
 
+/**
+ * The names of a build phase's files in list order — each build file's element display name, or its package product's
+ * name — skipping build files with neither; empty unless the phase has the isa, so a Sources phase id reads nothing.
+ */
+export function phaseFileNames(index: ProjectIndex, phaseId: string, isa: string): string[] {
+    const phase = index.object(phaseId);
+    if (phase?.isa !== isa) { return []; }
+    const names: string[] = [];
+    for (const buildFileId of stringList(phase.files)) {
+        const buildFile = index.object(buildFileId);
+        const name = buildFile?.fileRef !== undefined
+            ? displayName(index.object(buildFile.fileRef))
+            : stringValue(index.object(buildFile?.productRef)?.productName) ?? '';
+        if (name) { names.push(name); }
+    }
+    return names;
+}
+
 // ── Element paths ────────────────────────────────────────
 
 interface Relations {

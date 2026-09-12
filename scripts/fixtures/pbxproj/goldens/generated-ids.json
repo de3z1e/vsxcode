@@ -295,7 +295,6 @@
     "resolveGroupForPath Sources": "OBJ_7",
     "resolveGroupForPath SampleKit": null,
     "parseVersionGroups": [],
-    "findVersionGroupSection": null,
     "parseSwiftVersion": "5.0",
     "parseDeploymentTargets": [
       {

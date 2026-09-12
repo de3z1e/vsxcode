@@ -1,35 +1,13 @@
 import { IMPLICIT_FRAMEWORKS } from '../types/constants';
-import { cleanup } from '../utils/version';
+import { phaseFileNames, readProject } from './projectIndex';
 
+/** The names of a frameworks phase's files in list order: `UIKit.framework`, `libz.tbd`, a package product's name. */
 export function parseFrameworksBuildPhase(
     pbxContents: string,
     frameworksBuildPhaseId: string
 ): string[] {
-    if (!frameworksBuildPhaseId) {
-        return [];
-    }
-
-    const phaseRegex = new RegExp(
-        frameworksBuildPhaseId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
-        /\s*\/\*\s*Frameworks\s*\*\/\s*=\s*\{[^}]*files = \(([\s\S]*?)\);/.source
-    );
-    const phaseMatch = phaseRegex.exec(pbxContents);
-    if (!phaseMatch) {
-        return [];
-    }
-
-    const fileIds: string[] = [];
-    const fileIdRegex = /([A-F0-9]{24})\s*\/\*\s*([^*]+)\s*\*\//g;
-    let match: RegExpExecArray | null;
-    while ((match = fileIdRegex.exec(phaseMatch[1])) !== null) {
-        const fileName = cleanup(match[2]);
-        if (fileName.includes(' in Frameworks')) {
-            const frameworkName = fileName.replace(' in Frameworks', '').trim();
-            fileIds.push(frameworkName);
-        }
-    }
-
-    return fileIds;
+    const index = readProject(pbxContents);
+    return typeof index === 'string' ? [] : phaseFileNames(index, frameworksBuildPhaseId, 'PBXFrameworksBuildPhase');
 }
 
 export function extractFrameworkNames(rawNames: string[]): string[] {

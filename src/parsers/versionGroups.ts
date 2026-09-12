@@ -20,29 +20,6 @@ export interface XCVersionGroupInfo {
     endIndex: number;
 }
 
-export interface VersionGroupSection {
-    /** Offset of the `/* Begin ... *\/` marker. */
-    beginIndex: number;
-    /** Offset just past the begin marker's line break — where entries start. */
-    bodyStart: number;
-    /** Offset of the `/* End ... *\/` marker — where entries stop. */
-    bodyEnd: number;
-}
-
-export function findVersionGroupSection(pbxContents: string): VersionGroupSection | null {
-    const beginIndex = pbxContents.indexOf(VERSION_GROUP_SECTION_BEGIN);
-    if (beginIndex === -1) { return null; }
-    const bodyEnd = pbxContents.indexOf(VERSION_GROUP_SECTION_END, beginIndex);
-    if (bodyEnd === -1) { return null; }
-
-    const newlineIndex = pbxContents.indexOf('\n', beginIndex);
-    const bodyStart = newlineIndex === -1 || newlineIndex > bodyEnd
-        ? beginIndex + VERSION_GROUP_SECTION_BEGIN.length
-        : newlineIndex + 1;
-
-    return { beginIndex, bodyStart, bodyEnd };
-}
-
 /** Every XCVersionGroup in the file, in definition order. */
 export function parseVersionGroups(pbxContents: string): XCVersionGroupInfo[] {
     const index = readProject(pbxContents);

@@ -223,7 +223,6 @@
     "resolveGroupForPath SyncApp": "A10000000000000000000010",
     "resolveGroupForPath Extras": "A10000000000000000000012",
     "parseVersionGroups": [],
-    "findVersionGroupSection": null,
     "parseSwiftVersion": "6.0",
     "parseDeploymentTargets": [
       {

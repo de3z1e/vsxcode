@@ -11,11 +11,6 @@ export interface DeploymentTarget {
     version: string;
 }
 
-export interface ExtractObjectBodyResult {
-    body: string;
-    endIndex: number;
-}
-
 export type PackageRequirement = Record<string, string>;
 
 export interface NativeTarget {

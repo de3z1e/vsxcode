@@ -192,7 +192,6 @@
     ],
     "resolveGroupForPath EmptyKit": "7F0000000000000000000010",
     "parseVersionGroups": [],
-    "findVersionGroupSection": null,
     "parseSwiftVersion": "5.0",
     "parseDeploymentTargets": [
       {

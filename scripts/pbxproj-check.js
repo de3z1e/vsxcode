@@ -7,8 +7,8 @@
  * so a change that shifts parser output or corrupts an edit fails a command instead of surfacing later as a
  * wrong Package.swift or a damaged project.
  *
- * Every fixture must also lint with its comments stripped, entries named in COMMENT_FREE must reproduce the
- * commented golden there, and every writer edit's output must lint.
+ * Every fixture must also lint with its comments stripped, every entry must reproduce the commented golden there
+ * (COMMENT_FREE lists the entry families and must cover every one recorded), and every writer edit's output must lint.
  *
  * Usage:
  *   npm run test:pbxproj                  compare with the goldens
@@ -45,13 +45,16 @@ const projectIndex = load('parsers/projectIndex.js');
 const writers = load('writers/pbxproj.js');
 
 // Entry families — the name before the first space, or `writer <function>` for edits — whose output on the
-// comment-stripped fixture must equal the commented golden.
+// comment-stripped fixture must equal the commented golden. Every recorded family must be here: a new entry can't
+// quietly depend on comments.
 const COMMENT_FREE = new Set([
     'parseNativeTargets', 'parseTargetDependencies', 'parseBuildPhaseIds', 'usesSwiftPMObjectIds',
     'parseGroups', 'findMainGroupId', 'buildGroupDirectories', 'resolveGroupForPath', 'parseVersionGroups',
     'findFileReferencePath', 'findBuildFileId',
     'parseBuildConfigurations', 'resolveConfigurationListId', 'getBuildSettingsForTarget', 'getProjectBuildSettings',
-    'parseSwiftVersion', 'parseDeploymentTargets', 'parseDefaultLocalization',
+    'parseSwiftVersion', 'parseDeploymentTargets', 'parseDefaultLocalization', 'parseExcludedFiles',
+    'parseSwiftPackageReferences', 'parseSwiftPackageProductDependencies',
+    'parseFrameworksBuildPhase', 'parseLinkedFrameworksForTarget', 'parseResourcesBuildPhase', 'parseResourcesForTarget',
     'displayName', 'buildFilesFor', 'phasesOf', 'locateList', 'locateListEntry',
     'parentOf', 'resolvedPath', 'groupForFolder', 'targetOfPhase', 'locateKey', 'folderSpellings',
     'writer addSwiftFileToPbxproj', 'writer removeSwiftFile', 'writer rehomeSwiftFile', 'writer renameSwiftFile',
@@ -485,7 +488,6 @@ function parserEntries(text, inputs) {
             withGroups((groupMap, mainGroupId) => groups.resolveGroupForPath(groupMap, mainGroupId, relativePath)));
     }
     record('parseVersionGroups', () => versionGroups.parseVersionGroups(text));
-    record('findVersionGroupSection', () => versionGroups.findVersionGroupSection(text));
     record('parseSwiftVersion', () => project.parseSwiftVersion(text));
     record('parseDeploymentTargets', () => project.parseDeploymentTargets(text));
     record('parseDefaultLocalization', () => project.parseDefaultLocalization(text));
@@ -818,6 +820,11 @@ function main() {
     const unknown = [...COMMENT_FREE].filter((family) => !families.has(family));
     if (unknown.length > 0) {
         console.log(`\n  FAIL  COMMENT_FREE names entry families no fixture produces: ${unknown.join(', ')}`);
+        failures++;
+    }
+    const unchecked = [...families].filter((family) => !COMMENT_FREE.has(family));
+    if (unchecked.length > 0) {
+        console.log(`\n  FAIL  entry families missing from COMMENT_FREE, so their comment-free output goes unchecked: ${unchecked.join(', ')}`);
         failures++;
     }
     failures += checkCorpus();

@@ -718,11 +718,6 @@
         "endIndex": 26070
       }
     ],
-    "findVersionGroupSection": {
-      "beginIndex": 25303,
-      "bodyStart": 25338,
-      "bodyEnd": 26070
-    },
     "parseSwiftVersion": "6.0",
     "parseDeploymentTargets": [
       {

@@ -16,8 +16,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test:pbxproj` — Run every exported pbxproj parser, plus a fixed set of pbxproj writer
   edits, over the fixtures in `scripts/fixtures/pbxproj/` and diff the results against the
   reviewed goldens in `scripts/fixtures/pbxproj/goldens/`. Each fixture must pass `plutil -lint`
-  with and without its comments, entries in the script's `COMMENT_FREE` table must reproduce
-  the commented golden when the comments are stripped, and every writer edit's output must lint. `npm run test:pbxproj -- --update` rewrites
+  with and without its comments, every entry must reproduce the commented golden when the comments
+  are stripped (the script's `COMMENT_FREE` table lists the entry families and must cover every one
+  recorded), and every writer edit's output must lint. `npm run test:pbxproj -- --update` rewrites
   the goldens — review that diff. Setting `VSXCODE_PBXPROJ_CORPUS=<file listing project.pbxproj
   paths>` and `VSXCODE_PBXPROJ_CORPUS_GOLDENS=<directory outside the repo>` also runs the parsers
   and four writer edits over local projects, printing counts and list indexes only; those goldens
@@ -52,7 +53,7 @@ find . -maxdepth 1 -name "*.vsix" -delete && npm run compile && npm run package 
 
 VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.swift` manifests and build/debug task configurations for iOS simulator development. Requires macOS with Xcode installed. No runtime dependencies — only VS Code API and Node.js built-ins.
 
-**Data flow**: Read `project.pbxproj` (ASCII plist) → structured data (targets, target dependencies, build phases, groups, version groups, build settings and the project-level fields through a `plutil`-backed object index; packages, frameworks, resources and folder exceptions through regex-based parsers) → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` by editing entries located by id, with or without comments and section markers.
+**Data flow**: Read `project.pbxproj` (ASCII plist) → structured data through a `plutil`-backed object index (targets, target dependencies, build phases, groups, version groups, build settings, packages, frameworks, resources, folder exceptions and the project-level fields; nothing is read from the file's comments) → formatted Swift/JSON output → diff view → user confirmation → write file. Bidirectional: `.swift` file additions/removals are synced back into `project.pbxproj` by editing entries located by id, with or without comments and section markers.
 
 ### Entry Point
 
@@ -85,30 +86,31 @@ src/
 │                                  Swift.xcspec; per-row value map, resolved default, language-mode
 │                                  gate, approachable-concurrency umbrella flag, ignore list
 ├── parsers/
-│   ├── base.ts                  — extractObjectBody (brace-matching), parsePackageRequirement, parseListValue (a
-│   │                              plist list's items, or a string split as Xcode's editor writes it)
+│   ├── base.ts                  — parseListValue (a plist list's items, or a string split as Xcode's editor
+│   │                              writes it)
 │   ├── buildSettings.ts         — XCBuildConfiguration settings from the project index: typed fields plus every
 │   │                              string or list setting in `raw` (keys in code-point order, values as plutil
 │   │                              unquotes them), configuration lists, project/target settings, mergeWithInherited
 │   ├── projectIndex.ts          — plutil-backed object index (JSON graph, memoized per contents); definition
 │   │                              order and text locators (locateObject, locateList, locateDictionary,
 │   │                              locateKey) from a one-pass tokenizer over the text; displayName,
-│   │                              buildFilesFor, phasesOf, targetOfPhase; element paths: parentOf, ownersOf,
+│   │                              buildFilesFor, phasesOf, targetOfPhase, phaseFileNames; element paths: parentOf, ownersOf,
 │   │                              resolvedPath (Xcode's source trees), baseFolder, groupForFolder,
 │   │                              folderSpellings (which path components name which folder); typed value helpers
 │   ├── targets.ts               — targets, target dependencies and build phase IDs read from the project index;
 │   │                              isTestTarget
-│   ├── packages.ts              — XCRemoteSwiftPackageReference + XCLocalSwiftPackageReference + product deps
-│   ├── frameworks.ts            — PBXFrameworksBuildPhase parsing, framework name extraction
-│   ├── resources.ts             — PBXResourcesBuildPhase parsing, resource type classification,
-│   │                              scanForUnhandledFiles (filesystem scan for SPM compatibility)
+│   ├── packages.ts              — XCRemote/XCLocalSwiftPackageReference and product dependencies from the project
+│   │                              index; a package's name from its repository URL or relative path
+│   ├── frameworks.ts            — PBXFrameworksBuildPhase file names from the project index, framework name extraction
+│   ├── resources.ts             — PBXResourcesBuildPhase file names from the project index, resource type
+│   │                              classification, scanForUnhandledFiles (filesystem scan for SPM compatibility)
 │   ├── groups.ts                — PBXGroup hierarchy from the project index; group folders (buildGroupDirectories,
 │   │                              from resolvedPath); name-segment path-to-group matching, which decides which
 │   │                              targets sync
 │   ├── project.ts               — project-level fields from the index: default localization, highest Swift
-│   │                              version, deployment targets; synchronized-folder exclusions (regex)
+│   │                              version, deployment targets; synchronized-folder exclusions by target
 │   └── versionGroups.ts         — XCVersionGroups (.xcdatamodeld bundles) from the project index: children,
-│                                  currentVersion, entry offsets; section bounds
+│                                  currentVersion, entry offsets; the section marker text the writers keep
 ├── generators/
 │   ├── packageSwift.ts          — Main Package.swift builder (platforms, products, deps, targets)
 │   ├── swiftSettings.ts         — swiftSettings entries from build settings: language mode, .define(),
