@@ -198,4 +198,4 @@ Before doing one of these manually, check the table:
 
 ## Version
 
-This document describes VSXcode v3.8.2. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
+This document describes VSXcode v3.9.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
