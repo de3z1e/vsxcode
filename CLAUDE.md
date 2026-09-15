@@ -37,6 +37,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   command offers the same choice, and an ordinary project behaves as before, including one created deeper in
   the tree after the folder opens. Requires a full Xcode, since activation runs `xcodebuild -list` and lists
   simulators.
+- `npm run test:toolchain` — Run the compiled toolchain helpers in plain Node under every Xcode found among
+  `/Applications/Xcode.app` and `/Applications/Xcode_26.app` (override with a colon-separated
+  `VSXCODE_XCODE_APPS`), selecting each through `DEVELOPER_DIR`: the detected version, the simulator UI it
+  picks (Device Hub from Xcode 27, Simulator.app before) and the reveal snippet's shape; devicectl device-list
+  parsing over placeholder documents in both JSON shapes; and the supported-language-mode probe under both
+  compiler wordings, live and recorded. Requires a full Xcode. **Re-run after every Xcode upgrade** together
+  with `test:flag-parity`.
 
 No test framework or linter is configured; the checks are plain Node scripts.
 
@@ -160,7 +167,16 @@ src/
     ├── path.ts                  — Target path resolution (Sources/, Tests/, shared conventions)
     ├── swiftPMProject.ts        — SwiftPM-generated project choice: files VSXcode changes, collision-safe
     │                              backups, per-project decision (no vscode import)
-    └── simulator.ts             — iOS simulator enumeration via xcrun simctl
+    ├── xcodeToolchain.ts        — The selected Xcode (developer dir, version, simulator UI app) and the
+    │                              simulator reveal: Device Hub's `devices://` URL handed to the selected
+    │                              bundle on Xcode 27+, Simulator.app by path before; cached per developer
+    │                              dir + version.plist mtime (no vscode import)
+    ├── bundleId.ts              — Bundle id resolution (Info.plist, pbxproj), Dev Bundle ID suffix, installed
+    │                              simulator apps via simctl
+    ├── destination.ts           — Destination type, DerivedData paths, xcodebuild -sdk/-destination flags
+    └── simulator.ts             — Simulators via xcrun simctl; physical devices via devicectl, read from the
+                                   JSON v5 `properties` dictionary (Xcode 27) or the older top-level keys,
+                                   simulators excluded; simulator app process discovery
 ```
 
 ### Key Patterns
@@ -177,7 +193,8 @@ src/
 - **Auto-configure**: On activation, auto-detects first project/target/simulator and stores `BuildTaskConfig` to workspace state
 - **SwiftPM-generated projects**: a project whose object ids use SwiftPM's `OBJ_n` form (`swift package generate-xcodeproj`) sits beside the package's own Package.swift, so VSXcode asks before managing it. Before anything that writes, a modal dialog lists each file VSXcode would change — Package.swift, the workspace settings file (`.vscode/settings.json` or the open `.code-workspace`), `.vscode/.swift-format`, `project.pbxproj` — with the backup each would get. **Use VSXcode fully** copies each existing file to `<file>_backup` (then `_backup-2` and so on; an existing backup is never overwritten) and turns everything on. **Keep it a SwiftPM package** changes nothing — no Package.swift, settings, file sync, build tasks, swift-format profile or terminal skip list — and is remembered per project file under the workspace-state key `swiftPMProjectChoices`. Dismissing does nothing and asks again on the next open. The Generate commands offer the choice again, after their project pick. The decision logic is in `utils/swiftPMProject.ts`, which doesn't import `vscode`; `setupFullExtension` holds every automatic write until the workspace is managed. A silent regeneration checks that when its run starts, not when it is queued, and Keep from a Generate command applies inside the dialog callback, so a regeneration queued while the dialog was open never writes. Using VSXcode fully from a Generate command generates again once the workspace is managed, as activation does, so a project change saved while the dialog was open still reaches Package.swift
 - **Task chaining**: build-install completion triggers run-and-debug; debug session end kills debugserver
-- **Physical device support**: Build → install via devicectl → poll device ready → launch console → attach lldb-dap
+- **Physical device support**: Build → install via devicectl → poll device ready → launch console → attach lldb-dap. Device listing reads devicectl's JSON version 5 `properties` dictionary when `info.jsonVersion` is 5 or later (Xcode 27's CoreDevice, which every installed Xcode's devicectl uses and which also lists simulators with `reality: "simulated"`) and the deprecated top-level keys otherwise; both branches share one inclusion rule, and simulators stay sourced from simctl
+- **Xcode version gating**: `utils/xcodeToolchain.ts` describes the selected Xcode once per developer directory (re-detected when `xcode-select -p` or the bundle's `version.plist` changes) and the simulator UI choice branches on its version; the other Xcode 27 differences key on their own signals (devicectl's `info.jsonVersion`, the compiler note's wording). Xcode 27 removed Simulator.app, so from major 27 the simulator is revealed by handing Device Hub's `devices://device/open?id=<udid>` URL to the selected bundle (`open -a <DeviceHub.app> <url>`, falling back to opening the bundle), and before that by opening `Simulator.app` under the developer directory — never `open -a Simulator`, which LaunchServices resolves to whichever Xcode registered last. The supported-language-mode probe accepts both compiler wordings (`-swift-version` up to Swift 6.3, `-language-mode` from 6.4). Older Xcodes keep their previous behaviour on every path
 - **SourceKit-LSP**: Auto-configures `swift.sourcekit-lsp.serverArguments` with iOS simulator SDK paths for intellisense
 - **swift-format**: Auto-detects binary, discovers workspace/project config files, format-on-save via DocumentFormattingEditProvider, webview UI for rule configuration in sidebar
 - **XCTest integration**: Discovers test targets from pbxproj, runs via xcodebuild, parses results (xcresulttool), xccov code coverage
@@ -190,4 +207,4 @@ Swift settings (.define, .unsafeFlags, .swiftLanguageMode), linked frameworks (.
 
 ### Build & Debug Features
 
-Custom `xcode-build` task type with build/build-install/run-and-debug/test subtasks, lldb-dap debug attachment, simulator boot + app install via xcrun simctl, physical device support via devicectl, DerivedData isolation per scheme, Cmd+R and Cmd+Shift+B keybindings, sidebar UI for configuration management, XCTest controller with code coverage.
+Custom `xcode-build` task type with build/build-install/run-and-debug/test subtasks, lldb-dap debug attachment, simulator boot + app install via xcrun simctl with the simulator revealed in Device Hub (Xcode 27+) or Simulator.app (earlier), physical device support via devicectl, DerivedData isolation per scheme, Cmd+R and Cmd+Shift+B keybindings, sidebar UI for configuration management, XCTest controller with code coverage.

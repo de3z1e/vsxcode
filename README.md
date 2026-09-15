@@ -60,8 +60,8 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 
 - Uses VS Code's `TaskProvider` API to provide build, build-install, and run-and-debug tasks.
 - Full debug support with breakpoints and `print()` console output for **simulator**, **physical device**, and **macOS** builds. Simulator and device output streams into the task terminal (the same panel as the build output), with each line prefixed by a wall-clock timestamp; the Debug Console shows only LLDB messages on those runs.
-- Simulator debugging uses `simctl launch --console-pty --wait-for-debugger` with LLDB DAP attach.
-- Physical device debugging uses `devicectl --console --start-stopped` with LLDB DAP remote-ios attach. Supports USB and Wi-Fi connected devices (requires Xcode 15+). Code signing uses the project's existing settings from Xcode.
+- Simulator debugging uses `simctl launch --console-pty --wait-for-debugger` with LLDB DAP attach. The simulator's screen is shown in **Device Hub** on Xcode 27 and later (the device is brought to the front through Device Hub's `devices://` URL) and in **Simulator.app** on Xcode 26 and earlier, whichever the selected Xcode ships.
+- Physical device debugging uses `devicectl --console --start-stopped` with LLDB DAP remote-ios attach. Supports USB and Wi-Fi connected devices (requires Xcode 15+). Code signing uses the project's existing settings from Xcode. Xcode 27's devicectl lists simulators alongside hardware in its JSON version 5 output; VSXcode reads that format and keeps only physical devices, and reads earlier devicectl output as before.
 - macOS debugging launches the built `.app` directly under LLDB DAP (`request: launch`) — no simulator boot or install step; the app's output streams to the Debug Console.
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
@@ -107,7 +107,7 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.9.0.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.10.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -115,5 +115,5 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.9.0.vsix
+code --install-extension vsxcode-3.10.0.vsix
 ```

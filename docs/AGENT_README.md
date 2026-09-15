@@ -138,7 +138,7 @@ When the user asks to change build configuration, suggest the sidebar instead of
 ### Console output
 
 - **`print()` output is supported.** Whatever the app writes to stdout/stderr is captured on every build-and-run (`Cmd+R` / `vsxcode.sidebar.buildAndRun`) with no setup:
-  - **Simulator** — the app is launched with `xcrun simctl launch --console-pty --wait-for-debugger`; its output streams into the shared task terminal, the same panel that showed the `Build and Install` output.
+  - **Simulator** — the app is launched with `xcrun simctl launch --console-pty --wait-for-debugger`; its output streams into the shared task terminal, the same panel that showed the `Build and Install` output. The simulator's screen appears in Device Hub on Xcode 27 and later (VSXcode asks Device Hub to bring that device to the front) and in Simulator.app on earlier Xcodes (VSXcode opens it).
   - **Physical device** — same terminal, via `xcrun devicectl device process launch --console`.
   - **macOS** — the app runs directly under lldb-dap, so its output goes to the **Debug Console** instead of a task terminal.
 - For simulator and device runs the **Debug Console** carries only lldb messages — the app's own output is in the task terminal, not there.
@@ -198,4 +198,4 @@ Before doing one of these manually, check the table:
 
 ## Version
 
-This document describes VSXcode v3.9.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
+This document describes VSXcode v3.10.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
