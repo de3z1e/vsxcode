@@ -52,7 +52,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 No test framework or linter is configured; the checks are plain Node scripts.
 
-**Version bumps**: When bumping the version number, update it in **all** locations: `package.json`, `README.md`, and any other files that reference the version. Search the repo to ensure nothing is missed.
+**Version bumps**: When bumping the version number, update it in **all** locations: `package.json`, `README.md`, and any other files that reference the version. Search the repo to ensure nothing is missed. The README's **What's new in x.y.z** section describes only the current release: rewrite its heading and bullets for what changed since the last version, in user-facing terms, on every bump.
 
 **Important**: After every code change, always compile, package, and install the extension into VS Code:
 ```

@@ -2,6 +2,12 @@
 
 Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on simulators, physical devices, and your Mac, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS and macOS apps directly from VS Code.
 
+### What's new in 3.10.0
+
+**Xcode 27 support.** Xcode 27 replaced Simulator.app with **Device Hub**, and VSXcode works with it: simulator runs bring the device up in Device Hub, while Xcode 26 and earlier keep using Simulator.app. The device picker keeps simulators out of the physical-device list now that Xcode 27's device list includes them, and the Swift Language Version picker works with Swift 6.4.
+
+Also in this release: **Step Over, Step Into and Pause** now stop where you expect on simulators and physical devices. Previously the debugger resumed the app.
+
 ### How It Works
 
 Open a folder containing an `.xcodeproj` and the extension handles the rest:
