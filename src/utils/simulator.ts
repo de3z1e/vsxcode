@@ -157,6 +157,90 @@ export async function checkDeviceReady(deviceId: string): Promise<{ ready: boole
     }
 }
 
+type Json = Record<string, unknown>;
+
+/** A JSON object, or an empty one for anything else, so nested reads never throw. */
+function record(value: unknown): Json {
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Json : {};
+}
+
+function text(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+/** devicectl's JSON document version; 5 (Xcode 27's CoreDevice) moved every device field under `properties`. */
+const PROPERTIES_JSON_VERSION = 5;
+
+/** The physical iOS devices a devicectl `list devices` document describes; pre-v5 documents fall back to the keys v5 deprecates. */
+export function parsePhysicalDevices(document: unknown): PhysicalDevice[] {
+    const parsed = record(document);
+    const jsonVersion = Number(record(parsed.info).jsonVersion) || 0;
+    const entries = record(parsed.result).devices;
+    const devices: PhysicalDevice[] = [];
+    for (const entry of Array.isArray(entries) ? entries : []) {
+        const device = record(entry);
+        const properties = record(device.properties);
+        const parsedDevice = jsonVersion >= PROPERTIES_JSON_VERSION && Object.keys(properties).length > 0
+            ? physicalDeviceFromProperties(device, properties)
+            : physicalDeviceFromLegacyKeys(device);
+        if (parsedDevice) {
+            devices.push(parsedDevice);
+        }
+    }
+    return devices;
+}
+
+/**
+ * Reachable iOS hardware: paired with a transport (a paired device with no transport can't be
+ * built to). CoreDevice lists simulators too (`reality: "simulated"`, in both the new and the
+ * deprecated hardware block); simctl remains their source, and an entry with no `reality` is kept.
+ */
+function isReachablePhysicalIOS(hardware: Json, connection: Json): boolean {
+    return hardware.platform === 'iOS'
+        && connection.pairingState === 'paired'
+        && text(connection.transportType).length > 0
+        && hardware.reality !== 'simulated';
+}
+
+function physicalDeviceFromProperties(device: Json, properties: Json): PhysicalDevice | null {
+    const hardware = record(properties.hardware);
+    const connection = record(properties.connection);
+    const software = record(properties.software);
+    const state = record(properties.state);
+    if (!isReachablePhysicalIOS(hardware, connection)) {
+        return null;
+    }
+    const transportType = text(connection.transportType);
+    return {
+        name: text(state.name) || 'Unknown Device',
+        udid: text(hardware.udid) || text(device.identifier),
+        deviceIdentifier: text(device.identifier),
+        osVersion: text(record(software.osVersionNumber).stringValue),
+        connectionType: transportType,
+        productType: text(hardware.productType),
+        osBuildVersion: text(record(record(software.osBuildVersions).buildVersion).name),
+    };
+}
+
+function physicalDeviceFromLegacyKeys(device: Json): PhysicalDevice | null {
+    const hardware = record(device.hardwareProperties);
+    const connection = record(device.connectionProperties);
+    const deviceProperties = record(device.deviceProperties);
+    if (!isReachablePhysicalIOS(hardware, connection)) {
+        return null;
+    }
+    const transportType = text(connection.transportType);
+    return {
+        name: text(deviceProperties.name) || 'Unknown Device',
+        udid: text(hardware.udid) || text(device.identifier),
+        deviceIdentifier: text(device.identifier),
+        osVersion: text(deviceProperties.osVersionNumber),
+        connectionType: transportType,
+        productType: text(hardware.productType),
+        osBuildVersion: text(deviceProperties.osBuildUpdate),
+    };
+}
+
 export async function listPhysicalDevices(): Promise<PhysicalDevice[]> {
     // devicectl also wedges until first-launch completes — same gate.
     if (!(await isXcodeFirstLaunchComplete())) { return []; }
@@ -168,28 +252,7 @@ export async function listPhysicalDevices(): Promise<PhysicalDevice[]> {
             { encoding: 'utf8' }
         );
         const content = await fsp.readFile(tmpFile, 'utf8');
-        const parsed = JSON.parse(content);
-        const devices: PhysicalDevice[] = [];
-
-        for (const device of parsed.result?.devices || []) {
-            const platform = device.hardwareProperties?.platform;
-            const pairingState = device.connectionProperties?.pairingState;
-            const transportType = device.connectionProperties?.transportType;
-            // Devices with no transport are paired but unreachable — can't build/run to them.
-            if (platform === 'iOS' && pairingState === 'paired' && transportType) {
-                devices.push({
-                    name: device.deviceProperties?.name || 'Unknown Device',
-                    udid: device.hardwareProperties?.udid || device.identifier || '',
-                    deviceIdentifier: device.identifier || '',
-                    osVersion: device.deviceProperties?.osVersionNumber || '',
-                    connectionType: transportType,
-                    productType: device.hardwareProperties?.productType || '',
-                    osBuildVersion: device.deviceProperties?.osBuildUpdate || '',
-                });
-            }
-        }
-
-        return devices;
+        return parsePhysicalDevices(JSON.parse(content));
     } catch {
         return [];
     } finally {
