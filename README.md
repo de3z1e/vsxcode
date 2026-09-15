@@ -4,7 +4,7 @@ Lightweight Xcode project integration for VS Code — IntelliSense, build tasks,
 
 ### What's new in 3.10.0
 
-**Xcode 27 support.** Xcode 27 replaced Simulator.app with **Device Hub**, and VSXcode works with it: simulator runs bring the device up in Device Hub, while Xcode 26 and earlier keep using Simulator.app. The device picker keeps simulators out of the physical-device list now that Xcode 27's device list includes them, and the Swift Language Version picker works with Swift 6.4.
+**Xcode 27 support.** Xcode 27 replaced Simulator.app with **Device Hub**, and VSXcode works with it: simulator runs bring the device up in Device Hub, while Xcode 26 and earlier keep using Simulator.app. The device picker keeps simulators out of the physical-device list now that Xcode 27's device list includes them, and the Swift Language Version picker works with Swift 6.4. Xcode 26 remains supported; the Xcode 27 behavior applies only when Xcode 27 is the selected toolchain.
 
 Also in this release: **Step Over, Step Into and Pause** now stop where you expect on simulators and physical devices. Previously the debugger resumed the app.
 
