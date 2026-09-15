@@ -279,7 +279,8 @@
         "test:pbxproj": "npm run compile && node scripts/pbxproj-check.js",
         "test:file-sync": "npm run compile && node scripts/file-sync-check.js",
         "test:swiftpm-project": "npm run compile && node scripts/swiftpm-project-check.js",
-        "test:toolchain": "npm run compile && node scripts/toolchain-check.js"
+        "test:toolchain": "npm run compile && node scripts/toolchain-check.js",
+        "test:debug-stops": "npm run compile && node scripts/debug-stops-check.js"
     },
     "files": [
         "out",

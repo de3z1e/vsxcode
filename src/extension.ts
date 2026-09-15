@@ -31,6 +31,8 @@ import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDe
 import type { SimulatorAppQuery, SimulatorAppProcess } from './utils/simulator';
 import { getDestinationType, builtAppPath, derivedDataBasePath } from './utils/destination';
 import { detectXcodeToolchain, revealSimulator } from './utils/xcodeToolchain';
+import { classifyStop, pendingUserStopAfterRequest } from './utils/debugStops';
+import type { PendingUserStop, StoppedEventBody } from './utils/debugStops';
 import {
     derivedSourcesHomeRelativePath,
     derivedSourcesPathForWorkspace,
@@ -2502,19 +2504,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Auto-continue past debugger-internal stops ──────────────
     //
-    // Physical-device launches with --start-stopped generate several stops
-    // that must be silently continued:
-    //
-    // 1. Initial attach stop (reason=none) — lldb-dap reports a stop with
-    //    no reason during attach. Usually handled internally via
-    //    configurationDone, but can leak through afterward.
-    //
-    // 2. SIGSTOP from --start-stopped (reason=exception,
-    //    description="signal SIGSTOP") — delivered during early dyld
-    //    execution (lldb_image_notifier / start).
-    //
-    // 3. Internal breakpoint stops (negative IDs in LLDB). This is a
-    //    lldb-dap bug (fixed in LLVM PR #173848, not yet in Xcode).
+    // Physical-device launches with --start-stopped generate stops that must be
+    // silently continued; utils/debugStops.ts holds the rules that tell them from
+    // the user's own stops.
     //
     // Gate: auto-continue only fires AFTER the `configurationDone` response
     // is sent by the adapter. Stops arriving before that are part of
@@ -2523,10 +2515,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // (observed on USB, where low latency causes `stopped` events to
     // arrive before configurationDone; Wi-Fi latency usually hides it).
     //
-    // Post-configurationDone classification:
-    //   • SIGSTOP exception  → continue (debugger artifact)
-    //   • All-negative bp IDs → continue (internal breakpoint)
-    //   • No IDs / no reason → continue (leaked initial attach)
+    // The tracker also watches the client's requests, because a user pause is
+    // indistinguishable from the launch SIGSTOP without knowing what was asked for.
 
     const dyldTracker = vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', {
         createDebugAdapterTracker(session) {
@@ -2538,7 +2528,14 @@ export function activate(context: vscode.ExtensionContext): void {
                 return undefined;
             }
             let configDoneAck = false;
+            let pending: PendingUserStop = null;
             return {
+                onWillReceiveMessage(message: any) {
+                    // The tracker's own `continue` passes through here too and clears the mark, as intended.
+                    if (message.type === 'request' && typeof message.command === 'string') {
+                        pending = pendingUserStopAfterRequest(message.command, pending);
+                    }
+                },
                 onDidSendMessage(message: any) {
                     // Unlock auto-continue once lldb-dap confirms configurationDone.
                     if (message.type === 'response' && message.command === 'configurationDone' && message.success) {
@@ -2551,38 +2548,17 @@ export function activate(context: vscode.ExtensionContext): void {
                     // Pre-launch stops are owned by lldb-dap. Leave them alone.
                     if (!configDoneAck) return;
 
-                    const body = message.body || {};
-                    const ids: number[] = body.hitBreakpointIds ?? [];
-                    const desc: string = body.description ?? '';
-
-                    // SIGSTOP from --start-stopped is a debugger artifact, not a crash.
-                    if (body.reason === 'exception' && desc.startsWith('signal SIGSTOP')) {
-                        log('[debug-tracker] auto-continuing past SIGSTOP');
-                        Promise.resolve(session.customRequest('continue', {
-                            threadId: body.threadId ?? 1,
-                        })).catch(() => {});
+                    const body: StoppedEventBody = message.body || {};
+                    const verdict = classifyStop(body, pending);
+                    // A mark applies to exactly the next stop.
+                    pending = null;
+                    if (verdict.action === 'leave') {
+                        if (verdict.kind === 'unrecognized') {
+                            log(`[debug-tracker] leaving stop alone (${verdict.why})`);
+                        }
                         return;
                     }
-
-                    // Real exceptions (EXC_BAD_ACCESS, SIGABRT, etc.) — never swallow
-                    if (body.reason === 'exception') return;
-
-                    // Internal breakpoints have negative IDs in LLDB
-                    // (LLDB_BREAK_ID_IS_INTERNAL(bid) = bid < 0).
-                    // If ANY hitBreakpointIds is >= 0, a user breakpoint was hit.
-                    if (ids.length > 0 && ids.some((id) => id >= 0)) return;
-
-                    // Stops with all-negative IDs are internal (dyld) — resume.
-                    if (ids.length > 0) {
-                        log('[debug-tracker] auto-continuing past internal breakpoint');
-                        Promise.resolve(session.customRequest('continue', {
-                            threadId: body.threadId ?? 1,
-                        })).catch(() => {});
-                        return;
-                    }
-
-                    // Leaked initial-attach stop after configurationDone.
-                    log('[debug-tracker] auto-continuing past initial attach stop');
+                    log(`[debug-tracker] auto-continuing past ${verdict.why}`);
                     Promise.resolve(session.customRequest('continue', {
                         threadId: body.threadId ?? 1,
                     })).catch(() => {});

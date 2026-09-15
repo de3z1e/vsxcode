@@ -44,6 +44,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   parsing over placeholder documents in both JSON shapes; and the supported-language-mode probe under both
   compiler wordings, live and recorded. Requires a full Xcode. **Re-run after every Xcode upgrade** together
   with `test:flag-parity`.
+- `npm run test:debug-stops` — Run the compiled lldb-dap stop classifier (`src/utils/debugStops.ts`) over stop
+  bodies recorded from real sessions: the device-launch artifacts it must resume (SIGSTOP, negative-id internal
+  breakpoints, a no-reason initial-attach stop) and the user stops it must never resume (breakpoint, step, a pause
+  that lldb-dap reports exactly like the launch SIGSTOP, crashes, anything unrecognized), plus the pending-request
+  transitions. Needs no Xcode.
 
 No test framework or linter is configured; the checks are plain Node scripts.
 
@@ -174,6 +179,10 @@ src/
     ├── bundleId.ts              — Bundle id resolution (Info.plist, pbxproj), Dev Bundle ID suffix, installed
     │                              simulator apps via simctl
     ├── destination.ts           — Destination type, DerivedData paths, xcodebuild -sdk/-destination flags
+    ├── debugStops.ts            — lldb-dap `stopped` classification for the attach tracker: launch artifacts
+    │                              (SIGSTOP, negative-id breakpoints, no reason) are resumed; breakpoint, step,
+    │                              pause (told apart from the launch SIGSTOP by the client's last request),
+    │                              exception and unknown stops stay (no vscode import)
     └── simulator.ts             — Simulators via xcrun simctl; physical devices via devicectl, read from the
                                    JSON v5 `properties` dictionary (Xcode 27) or the older top-level keys,
                                    simulators excluded; simulator app process discovery
