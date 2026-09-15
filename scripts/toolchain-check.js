@@ -193,6 +193,28 @@ function checkDevicectlParsing() {
     report(same(parsePhysicalDevices({ result: { devices: 'nope' } }), []), 'malformed devices list → no devices');
 }
 
+// ── Supported Swift language modes ───────────────────────────────────────────────────
+//
+// Swift 6.4 renamed the option in the note `swiftc -swift-version invalid` rejects with, so both wordings must parse.
+
+const NOTE_SWIFT_6_4 = `<unknown>:0: error: version component contains non-numeric characters
+<unknown>:0: error: invalid value 'invalid' in '-swift-version invalid'
+<unknown>:0: note: valid arguments to '-language-mode' are '4', '4.2', '5', '6'
+`;
+const NOTE_SWIFT_6_3 = `<unknown>:0: error: version component contains non-numeric characters
+<unknown>:0: error: invalid value 'invalid' in '-swift-version invalid'
+<unknown>:0: note: valid arguments to '-swift-version' are '4', '4.2', '5', '6'
+`;
+
+function checkSwiftVersionParsing() {
+    console.log('supported Swift language modes');
+    const { parseSupportedSwiftVersions } = require(path.join(OUT, 'utils/version.js'));
+    const expected = JSON.stringify(['6', '5', '4.2', '4']);
+    report(JSON.stringify(parseSupportedSwiftVersions(NOTE_SWIFT_6_4)) === expected, "Swift 6.4 wording ('-language-mode') parses, newest first");
+    report(JSON.stringify(parseSupportedSwiftVersions(NOTE_SWIFT_6_3)) === expected, "Swift 6.3 wording ('-swift-version') parses, newest first");
+    report(JSON.stringify(parseSupportedSwiftVersions('<unknown>:0: error: something else entirely\n')) === '[]', 'unrecognized output yields no versions');
+}
+
 // ── Each installed Xcode ─────────────────────────────────────────────────────────────
 
 async function checkXcode(appPath) {
@@ -222,11 +244,17 @@ async function checkXcode(appPath) {
         report(snippet === `open '${detected.simulatorUI.appPath}'`, 'snippet opens Simulator.app by path', snippet);
     }
     report(!/open -a '?Simulator'?\b|open -a '?DeviceHub'?\b/.test(snippet), 'snippet never opens by name');
+
+    const { detectSupportedSwiftVersions, compareVersions } = require(path.join(OUT, 'utils/version.js'));
+    const versions = await detectSupportedSwiftVersions();
+    const newestFirst = versions.every((v, i) => i === 0 || compareVersions(versions[i - 1], v) >= 0);
+    report(versions.includes('5') && versions.includes('6') && newestFirst, 'live swiftc probe lists language modes, newest first', JSON.stringify(versions));
 }
 
 async function main() {
     checkHelpers();
     checkDevicectlParsing();
+    checkSwiftVersionParsing();
     const installed = XCODE_APPS.filter((app) => fs.existsSync(path.join(app, 'Contents', 'Developer')));
     if (installed.length === 0) {
         console.log('  FAIL  no Xcode found among ' + XCODE_APPS.join(', '));

@@ -58,6 +58,15 @@ export async function detectSwiftToolsVersion(): Promise<string | null> {
     return null;
 }
 
+/** Newest first. Swift 6.4 (Xcode 27) names the option `-language-mode` in the rejection note; earlier compilers say `-swift-version`. */
+export function parseSupportedSwiftVersions(stderr: string): string[] {
+    const match = stderr.match(/valid arguments to '-(?:swift-version|language-mode)' are ([^\n]+)/);
+    if (!match) { return []; }
+    const versions = [...match[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+    versions.sort((a, b) => compareVersions(b, a));
+    return versions;
+}
+
 export async function detectSupportedSwiftVersions(): Promise<string[]> {
     const tmpFile = path.join(os.tmpdir(), 'vsxcode-probe.swift');
     try {
@@ -65,12 +74,7 @@ export async function detectSupportedSwiftVersions(): Promise<string[]> {
         await execFile('xcrun', ['swiftc', '-swift-version', 'invalid', '-typecheck', tmpFile], { encoding: 'utf8' });
         return [];
     } catch (e: unknown) {
-        const stderr = (e as { stderr?: string }).stderr || '';
-        const match = stderr.match(/valid arguments to '-swift-version' are ([^\n]+)/);
-        if (!match) { return []; }
-        const versions = [...match[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
-        versions.sort((a, b) => compareVersions(b, a));
-        return versions;
+        return parseSupportedSwiftVersions((e as { stderr?: string }).stderr || '');
     } finally {
         fsp.unlink(tmpFile).catch(() => {});
     }
