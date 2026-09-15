@@ -39,7 +39,7 @@ The extension adds a panel to the Activity Bar with configurable build settings:
 
 > **Note:** the suffix applies to every target the scheme builds. Projects with embedded app extensions (whose bundle ids must stay prefixed by the host app's) will be warned once, as those targets may fail to build or install. On physical devices the new id needs provisioning — automatic signing handles it via `-allowProvisioningUpdates`; manual profiles must cover the `-dev` id.
 
-Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Files**, and **Clean DerivedData** (deletes the current scheme's build cache — or all schemes — along with the workspace's Core Data codegen when present, reports the disk space reclaimed, and regenerates the codegen immediately).
+Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Project Files to Xcode Project**, and **Clean DerivedData** (deletes the current scheme's build cache — or all schemes — along with the workspace's Core Data codegen when present, reports the disk space reclaimed, and regenerates the codegen immediately).
 
 ### Commands
 
@@ -48,6 +48,7 @@ Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Files**, and 
 | **Swift: Generate Package.swift from Xcode Project** | Generates `Package.swift` using the Debug configuration with a diff view. |
 | **Swift: Generate Package.swift from Xcode Project (with Options)** | Same as above but lets you choose Debug or Release configuration. |
 | **Swift: Configure Build Tasks** | Manually configure build target, scheme, and device/simulator (bundle id is read from pbxproj). |
+| **Swift: Sync Project Files to Xcode Project** | Catches the `.xcodeproj` up with Swift files and Core Data models added, removed, renamed or moved while the watchers weren't running, asking before it removes entries whose files are gone. |
 
 ### Package.swift Generation
 
@@ -55,7 +56,7 @@ Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Files**, and 
 - Extracts Swift tools version, platform deployment targets, targets, and product metadata.
 - Resolves target source paths on disk, including `productName` directory lookup.
 - Resolves resource file paths on disk relative to the target directory.
-- Includes per-target swift settings (`.define`, `.unsafeFlags`, `.swiftLanguageMode`), linked system frameworks, resources, header search paths, target dependencies, and excluded files.
+- Includes per-target Swift settings translated from the target's build settings — `.swiftLanguageMode`, `.define`, `.enableUpcomingFeature`, `.enableExperimentalFeature`, `.defaultIsolation`, `.strictMemorySafety`, `.treatWarning`, `.treatAllWarnings` and `.interoperabilityMode`, falling back to `.unsafeFlags` where the tools version has no first-class form — plus linked system frameworks, resources, header search paths, target dependencies, and excluded files.
 - Runs Core Data class generation (momc) for targets with `.xcdatamodeld` models and wires the generated sources into the manifest, so codegen types resolve in IntelliSense.
 - Automatically configures SourceKit-LSP server arguments for the selected destination — the iOS simulator SDK (SDK path, target triple, framework search path), or the host macOS SDK when targeting My Mac.
 - Shows a diff view before overwriting when run manually from the command palette — except right after choosing **Use VSXcode fully** for a SwiftPM-generated project, whose files were just backed up.
@@ -64,7 +65,7 @@ Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Files**, and 
 
 Build tasks are integrated directly into the extension — no shell scripts, `tasks.json`, or `launch.json` files are written to the workspace.
 
-- Uses VS Code's `TaskProvider` API to provide build, build-install, and run-and-debug tasks.
+- Uses VS Code's `TaskProvider` API to provide build, build-install, run-and-debug, and test tasks.
 - Full debug support with breakpoints and `print()` console output for **simulator**, **physical device**, and **macOS** builds. Simulator and device output streams into the task terminal (the same panel as the build output), with each line prefixed by a wall-clock timestamp; the Debug Console shows only LLDB messages on those runs.
 - Simulator debugging uses `simctl launch --console-pty --wait-for-debugger` with LLDB DAP attach. The simulator's screen is shown in **Device Hub** on Xcode 27 and later (the device is brought to the front through Device Hub's `devices://` URL) and in **Simulator.app** on Xcode 26 and earlier, whichever the selected Xcode ships.
 - Physical device debugging uses `devicectl --console --start-stopped` with LLDB DAP remote-ios attach. Supports USB and Wi-Fi connected devices (requires Xcode 15+). Code signing uses the project's existing settings from Xcode. Xcode 27's devicectl lists simulators alongside hardware in its JSON version 5 output; VSXcode reads that format and keeps only physical devices, and reads earlier devicectl output as before.
@@ -91,7 +92,7 @@ A dedicated Code Format panel in the sidebar provides native [swift-format](http
 XCTest integration via the VS Code Testing sidebar — tests are discovered from the Xcode project and run with `xcodebuild`.
 
 - **Run, Debug, and Coverage** profiles in the Testing sidebar, powered by `xcodebuild test`.
-- **Test debugging with breakpoints** — the Debug profile builds for testing, attaches LLDB DAP with `--waitfor`, then runs `test-without-building` so the debugger catches the test host at launch.
+- **Test debugging with breakpoints** — the Debug profile builds for testing, arms an LLDB DAP attach, then runs `test-without-building` so the debugger catches the test host as it launches: by process id on simulators, by name with `--waitfor` on physical devices. Tests on My Mac run without a debugger.
 - **Code coverage** — the Coverage profile enables `xcodebuild -enableCodeCoverage`, then parses the xcresult via `xcrun xccov` to show per-file percentages and per-line green/red gutter annotations.
 - **Test results** in the Testing sidebar with pass/fail status, durations, and assertion failure messages with source locations.
 
@@ -99,7 +100,7 @@ XCTest integration via the VS Code Testing sidebar — tests are discovered from
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
-| ⌘R | — | Build, install, and launch with debugger attached |
+| ⌘R | Build tasks configured | Build, install, and launch with debugger attached |
 | ⌘⇧B | Build tasks configured | Build (or build-for-testing when a test target is selected) |
 
 ### AI agent usage
