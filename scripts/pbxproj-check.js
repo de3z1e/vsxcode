@@ -272,6 +272,64 @@ const FIXTURES = [
             'updateBuildSetting SWIFT_VERSION': (text) =>
                 writers.updateBuildSetting(text, hexId('AA', '000F'), 'SWIFT_VERSION', '5.0')
         }
+    },
+    {
+        // objectVersion 90 as Xcode 27's SwiftUI App template writes it: one synchronized root, zero-pattern ids,
+        // no PBXBuildFile section, an empty Sources phase.
+        name: 'xcode27-swiftui',
+        file: path.join(FIXTURE_DIR, 'xcode27-swiftui.txt'),
+        targets: ['SwiftUISample', 'NoSuchTarget'],
+        configurationLists: ['000000000000000010000000', '000000000000000110000000'],
+        frameworksPhases: ['000000000000000130000000'],
+        resourcesPhases: ['000000000000000140000000'],
+        groupPaths: ['SwiftUISample'],
+        fileReferenceIds: ['000000000000000000000120'],
+        helpers: {
+            lists: [['000000000000000000000001', 'children', '000000000000000000000010'], ['000000000000000120000000', 'files']],
+            elements: ['000000000000000000000001', '000000000000000000000010', '000000000000000000000120'],
+            phases: ['000000000000000120000000'],
+            folders: ['', 'SwiftUISample'],
+            keys: [['000000000000000000000010', 'path'], ['000000000000000000000120', 'explicitFileType']]
+        },
+        writers: {
+            'addSwiftFileToPbxproj Added.swift': (text) =>
+                writers.addSwiftFileToPbxproj(text, 'Added.swift', '000000000000000000000001', '000000000000000120000000'),
+            'addGroupPath Features at the project root': (text) =>
+                inSession(text, (edit) => writers.addGroupPath(edit, '000000000000000000000001', ['Features'])),
+            'updateBuildSetting existing key': (text) =>
+                writers.updateBuildSetting(text, '000000000000000111000000', 'SWIFT_VERSION', '6.0'),
+            'updateBuildSetting new key': (text) =>
+                writers.updateBuildSetting(text, '000000000000000011000000', 'SWIFT_STRICT_CONCURRENCY', 'complete')
+        }
+    },
+    {
+        // objectVersion 110 as Xcode 27's UIKit storyboard template writes it: three synchronized roots, an
+        // exception set, target dependencies, and the root-level `validationLevel = 1;` key Xcode 26 can't open.
+        name: 'xcode27-storyboard',
+        file: path.join(FIXTURE_DIR, 'xcode27-storyboard.txt'),
+        targets: ['StoryboardSample', 'StoryboardSampleTests', 'StoryboardSampleUITests', 'NoSuchTarget'],
+        configurationLists: ['2091ECE6305908C90023A3C6', '2091ED12305908CA0023A3C6', '2091ED17305908CA0023A3C6', '2091ED1A305908CA0023A3C6'],
+        frameworksPhases: ['2091ECE8305908C90023A3C6', '2091ECFE305908CA0023A3C6', '2091ED08305908CA0023A3C6'],
+        resourcesPhases: ['2091ECE9305908C90023A3C6', '2091ECFF305908CA0023A3C6', '2091ED09305908CA0023A3C6'],
+        groupPaths: ['StoryboardSample', 'StoryboardSampleTests'],
+        fileReferenceIds: ['2091ECEB305908C90023A3C6', '2091ED01305908CA0023A3C6', '2091ED0B305908CA0023A3C6'],
+        helpers: {
+            lists: [['2091ECE2305908C90023A3C6', 'children', '2091ECED305908C90023A3C6'], ['2091ECE7305908C90023A3C6', 'files']],
+            elements: ['2091ECE2305908C90023A3C6', '2091ECED305908C90023A3C6', '2091ED11305908CA0023A3C6', '2091ECEB305908C90023A3C6'],
+            phases: ['2091ECE7305908C90023A3C6', '2091ECFD305908CA0023A3C6', '2091ED07305908CA0023A3C6'],
+            folders: ['', 'StoryboardSample'],
+            keys: [['2091ECED305908C90023A3C6', 'path'], ['2091ECEB305908C90023A3C6', 'explicitFileType']]
+        },
+        writers: {
+            'addSwiftFileToPbxproj Added.swift': (text) =>
+                writers.addSwiftFileToPbxproj(text, 'Added.swift', '2091ECE2305908C90023A3C6', '2091ECE7305908C90023A3C6'),
+            'addGroupPath Features at the project root': (text) =>
+                inSession(text, (edit) => writers.addGroupPath(edit, '2091ECE2305908C90023A3C6', ['Features'])),
+            'updateBuildSetting existing key': (text) =>
+                writers.updateBuildSetting(text, '2091ED13305908CA0023A3C6', 'SWIFT_VERSION', '6.0'),
+            'updateBuildSetting new key': (text) =>
+                writers.updateBuildSetting(text, '2091ED15305908CA0023A3C6', 'SWIFT_STRICT_CONCURRENCY', 'complete')
+        }
     }
 ];
 

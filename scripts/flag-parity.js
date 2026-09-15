@@ -88,11 +88,14 @@ const VALUED_NOISE = new Set([
     '-new-driver-path', '-plugin-path', '-external-plugin-path', '-in-process-plugin-server-path',
     '-file-compilation-dir', '-target-sdk-version', '-target-sdk-name', '-working-directory',
     '-num-threads', '-primary-file', '-supplementary-output-file-map', '-stats-output-dir',
-    '-Xcc', '-Xllvm', '-Xfrontend', '-frontend-parseable-output'
+    '-Xcc', '-Xllvm', '-Xfrontend', '-frontend-parseable-output',
+    // Xcode 27 output plumbing, each followed by a path.
+    '-const-gather-protocols-list', '-dependency-scan-serialize-diagnostics-path'
 ]);
 
-// SwiftPM injects these into every package build; they say nothing about the manifest.
-const SWIFTPM_INJECTED_DEFINES = new Set(['SWIFT_PACKAGE', 'SWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE']);
+// SwiftPM injects these into every package build; they say nothing about the manifest. `Xcode` arrived with
+// SwiftPM 6.4 (Xcode 27).
+const SWIFTPM_INJECTED_DEFINES = new Set(['SWIFT_PACKAGE', 'SWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE', 'Xcode']);
 // SwiftPM plumbing with no xcodebuild counterpart at this level.
 const SWIFTPM_ONLY_FLAGS = new Set(['-enable-testing', '-v', '-frontend', '-empty-abi-descriptor',
     '-enable-objc-interop', '-stack-check', '-enable-anonymous-context-mangled-names',

@@ -1,0 +1,1081 @@
+{
+  "fixture": "scripts/fixtures/pbxproj/xcode27-storyboard.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "StoryboardSample",
+        "productName": "StoryboardSample",
+        "productType": "com.apple.product-type.application",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "2091ED12305908CA0023A3C6",
+        "fileSystemSynchronizedGroupIds": [
+          "2091ECED305908C90023A3C6"
+        ]
+      },
+      {
+        "name": "StoryboardSampleTests",
+        "productName": "StoryboardSampleTests",
+        "productType": "com.apple.product-type.bundle.unit-test",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "2091ED17305908CA0023A3C6",
+        "fileSystemSynchronizedGroupIds": [
+          "2091ED04305908CA0023A3C6"
+        ]
+      },
+      {
+        "name": "StoryboardSampleUITests",
+        "productName": "StoryboardSampleUITests",
+        "productType": "com.apple.product-type.bundle.ui-testing",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "2091ED1A305908CA0023A3C6",
+        "fileSystemSynchronizedGroupIds": [
+          "2091ED0E305908CA0023A3C6"
+        ]
+      }
+    ],
+    "parseTargetDependencies": [
+      [
+        "StoryboardSampleTests",
+        [
+          {
+            "targetId": "2091ED03305908CA0023A3C6",
+            "targetName": "StoryboardSample"
+          }
+        ]
+      ],
+      [
+        "StoryboardSampleUITests",
+        [
+          {
+            "targetId": "2091ED0D305908CA0023A3C6",
+            "targetName": "StoryboardSample"
+          }
+        ]
+      ]
+    ],
+    "parseBuildPhaseIds StoryboardSample": {
+      "sourcesBuildPhaseId": "2091ECE7305908C90023A3C6",
+      "frameworksBuildPhaseId": "2091ECE8305908C90023A3C6",
+      "resourcesBuildPhaseId": "2091ECE9305908C90023A3C6"
+    },
+    "parseExcludedFiles StoryboardSample": [
+      "Info.plist"
+    ],
+    "parseBuildPhaseIds StoryboardSampleTests": {
+      "sourcesBuildPhaseId": "2091ECFD305908CA0023A3C6",
+      "frameworksBuildPhaseId": "2091ECFE305908CA0023A3C6",
+      "resourcesBuildPhaseId": "2091ECFF305908CA0023A3C6"
+    },
+    "parseExcludedFiles StoryboardSampleTests": [],
+    "parseBuildPhaseIds StoryboardSampleUITests": {
+      "sourcesBuildPhaseId": "2091ED07305908CA0023A3C6",
+      "frameworksBuildPhaseId": "2091ED08305908CA0023A3C6",
+      "resourcesBuildPhaseId": "2091ED09305908CA0023A3C6"
+    },
+    "parseExcludedFiles StoryboardSampleUITests": [],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "2091ED13305908CA0023A3C6",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+            "CODE_SIGN_STYLE": "Automatic",
+            "CURRENT_PROJECT_VERSION": "1",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            "INFOPLIST_FILE": "StoryboardSample/Info.plist",
+            "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
+            "INFOPLIST_KEY_UILaunchStoryboardName": "LaunchScreen",
+            "INFOPLIST_KEY_UIMainStoryboardFile": "Main",
+            "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+            "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+            "LD_RUNPATH_SEARCH_PATHS": [
+              "$(inherited)",
+              "@executable_path/Frameworks"
+            ],
+            "MARKETING_VERSION": "1.0",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSample",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
+            "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+            "SWIFT_EMIT_LOC_STRINGS": "YES",
+            "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+            "SWIFT_VERSION": "5.0",
+            "TARGETED_DEVICE_FAMILY": "1,2"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "com.example.StoryboardSample",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "2091ED14305908CA0023A3C6",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+            "CODE_SIGN_STYLE": "Automatic",
+            "CURRENT_PROJECT_VERSION": "1",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            "INFOPLIST_FILE": "StoryboardSample/Info.plist",
+            "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
+            "INFOPLIST_KEY_UILaunchStoryboardName": "LaunchScreen",
+            "INFOPLIST_KEY_UIMainStoryboardFile": "Main",
+            "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+            "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+            "LD_RUNPATH_SEARCH_PATHS": [
+              "$(inherited)",
+              "@executable_path/Frameworks"
+            ],
+            "MARKETING_VERSION": "1.0",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSample",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
+            "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+            "SWIFT_EMIT_LOC_STRINGS": "YES",
+            "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+            "SWIFT_VERSION": "5.0",
+            "TARGETED_DEVICE_FAMILY": "1,2"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "com.example.StoryboardSample",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "2091ED15305908CA0023A3C6",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "ALWAYS_SEARCH_USER_PATHS": "NO",
+            "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
+            "CLANG_ANALYZER_NONNULL": "YES",
+            "CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION": "YES_AGGRESSIVE",
+            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20",
+            "CLANG_ENABLE_MODULES": "YES",
+            "CLANG_ENABLE_OBJC_ARC": "YES",
+            "CLANG_ENABLE_OBJC_WEAK": "YES",
+            "CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING": "YES",
+            "CLANG_WARN_BOOL_CONVERSION": "YES",
+            "CLANG_WARN_COMMA": "YES",
+            "CLANG_WARN_CONSTANT_CONVERSION": "YES",
+            "CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS": "YES",
+            "CLANG_WARN_DIRECT_OBJC_ISA_USAGE": "YES_ERROR",
+            "CLANG_WARN_DOCUMENTATION_COMMENTS": "YES",
+            "CLANG_WARN_EMPTY_BODY": "YES",
+            "CLANG_WARN_ENUM_CONVERSION": "YES",
+            "CLANG_WARN_INFINITE_RECURSION": "YES",
+            "CLANG_WARN_INT_CONVERSION": "YES",
+            "CLANG_WARN_NON_LITERAL_NULL_CONVERSION": "YES",
+            "CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF": "YES",
+            "CLANG_WARN_OBJC_LITERAL_CONVERSION": "YES",
+            "CLANG_WARN_OBJC_ROOT_CLASS": "YES_ERROR",
+            "CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "YES",
+            "CLANG_WARN_RANGE_LOOP_ANALYSIS": "YES",
+            "CLANG_WARN_STRICT_PROTOTYPES": "YES",
+            "CLANG_WARN_SUSPICIOUS_MOVE": "YES",
+            "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE",
+            "CLANG_WARN_UNREACHABLE_CODE": "YES",
+            "CLANG_WARN__DUPLICATE_METHOD_MATCH": "YES",
+            "COPY_PHASE_STRIP": "NO",
+            "DEBUG_INFORMATION_FORMAT": "dwarf",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "ENABLE_STRICT_OBJC_MSGSEND": "YES",
+            "ENABLE_TESTABILITY": "YES",
+            "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+            "GCC_C_LANGUAGE_STANDARD": "gnu17",
+            "GCC_DYNAMIC_NO_PIC": "NO",
+            "GCC_NO_COMMON_BLOCKS": "YES",
+            "GCC_OPTIMIZATION_LEVEL": "0",
+            "GCC_PREPROCESSOR_DEFINITIONS": [
+              "DEBUG=1",
+              "$(inherited)"
+            ],
+            "GCC_WARN_64_TO_32_BIT_CONVERSION": "YES",
+            "GCC_WARN_ABOUT_RETURN_TYPE": "YES_ERROR",
+            "GCC_WARN_UNDECLARED_SELECTOR": "YES",
+            "GCC_WARN_UNINITIALIZED_AUTOS": "YES_AGGRESSIVE",
+            "GCC_WARN_UNUSED_FUNCTION": "YES",
+            "GCC_WARN_UNUSED_VARIABLE": "YES",
+            "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+            "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
+            "MTL_ENABLE_DEBUG_INFO": "INCLUDE_SOURCE",
+            "MTL_FAST_MATH": "YES",
+            "ONLY_ACTIVE_ARCH": "YES",
+            "SDKROOT": "iphoneos",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+            "SWIFT_OPTIMIZATION_LEVEL": "-Onone"
+          },
+          "swiftActiveCompilationConditions": [
+            "DEBUG",
+            "$(inherited)"
+          ],
+          "gccPreprocessorDefinitions": [
+            "DEBUG=1",
+            "$(inherited)"
+          ],
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "2091ED16305908CA0023A3C6",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "ALWAYS_SEARCH_USER_PATHS": "NO",
+            "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
+            "CLANG_ANALYZER_NONNULL": "YES",
+            "CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION": "YES_AGGRESSIVE",
+            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20",
+            "CLANG_ENABLE_MODULES": "YES",
+            "CLANG_ENABLE_OBJC_ARC": "YES",
+            "CLANG_ENABLE_OBJC_WEAK": "YES",
+            "CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING": "YES",
+            "CLANG_WARN_BOOL_CONVERSION": "YES",
+            "CLANG_WARN_COMMA": "YES",
+            "CLANG_WARN_CONSTANT_CONVERSION": "YES",
+            "CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS": "YES",
+            "CLANG_WARN_DIRECT_OBJC_ISA_USAGE": "YES_ERROR",
+            "CLANG_WARN_DOCUMENTATION_COMMENTS": "YES",
+            "CLANG_WARN_EMPTY_BODY": "YES",
+            "CLANG_WARN_ENUM_CONVERSION": "YES",
+            "CLANG_WARN_INFINITE_RECURSION": "YES",
+            "CLANG_WARN_INT_CONVERSION": "YES",
+            "CLANG_WARN_NON_LITERAL_NULL_CONVERSION": "YES",
+            "CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF": "YES",
+            "CLANG_WARN_OBJC_LITERAL_CONVERSION": "YES",
+            "CLANG_WARN_OBJC_ROOT_CLASS": "YES_ERROR",
+            "CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "YES",
+            "CLANG_WARN_RANGE_LOOP_ANALYSIS": "YES",
+            "CLANG_WARN_STRICT_PROTOTYPES": "YES",
+            "CLANG_WARN_SUSPICIOUS_MOVE": "YES",
+            "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE",
+            "CLANG_WARN_UNREACHABLE_CODE": "YES",
+            "CLANG_WARN__DUPLICATE_METHOD_MATCH": "YES",
+            "COPY_PHASE_STRIP": "NO",
+            "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "ENABLE_NS_ASSERTIONS": "NO",
+            "ENABLE_STRICT_OBJC_MSGSEND": "YES",
+            "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+            "GCC_C_LANGUAGE_STANDARD": "gnu17",
+            "GCC_NO_COMMON_BLOCKS": "YES",
+            "GCC_WARN_64_TO_32_BIT_CONVERSION": "YES",
+            "GCC_WARN_ABOUT_RETURN_TYPE": "YES_ERROR",
+            "GCC_WARN_UNDECLARED_SELECTOR": "YES",
+            "GCC_WARN_UNINITIALIZED_AUTOS": "YES_AGGRESSIVE",
+            "GCC_WARN_UNUSED_FUNCTION": "YES",
+            "GCC_WARN_UNUSED_VARIABLE": "YES",
+            "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+            "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
+            "MTL_ENABLE_DEBUG_INFO": "NO",
+            "MTL_FAST_MATH": "YES",
+            "SDKROOT": "iphoneos",
+            "SWIFT_COMPILATION_MODE": "wholemodule",
+            "VALIDATE_PRODUCT": "YES"
+          },
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "2091ED18305908CA0023A3C6",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "BUNDLE_LOADER": "$(TEST_HOST)",
+            "CODE_SIGN_STYLE": "Automatic",
+            "CURRENT_PROJECT_VERSION": "1",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+            "MARKETING_VERSION": "1.0",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleTests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+            "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+            "SWIFT_EMIT_LOC_STRINGS": "NO",
+            "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+            "SWIFT_VERSION": "5.0",
+            "TARGETED_DEVICE_FAMILY": "1,2",
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/StoryboardSample.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StoryboardSample"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "com.example.StoryboardSampleTests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "2091ED19305908CA0023A3C6",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "BUNDLE_LOADER": "$(TEST_HOST)",
+            "CODE_SIGN_STYLE": "Automatic",
+            "CURRENT_PROJECT_VERSION": "1",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+            "MARKETING_VERSION": "1.0",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleTests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+            "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+            "SWIFT_EMIT_LOC_STRINGS": "NO",
+            "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+            "SWIFT_VERSION": "5.0",
+            "TARGETED_DEVICE_FAMILY": "1,2",
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/StoryboardSample.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StoryboardSample"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "com.example.StoryboardSampleTests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "2091ED1B305908CA0023A3C6",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "CODE_SIGN_STYLE": "Automatic",
+            "CURRENT_PROJECT_VERSION": "1",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            "MARKETING_VERSION": "1.0",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleUITests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+            "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+            "SWIFT_EMIT_LOC_STRINGS": "NO",
+            "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+            "SWIFT_VERSION": "5.0",
+            "TARGETED_DEVICE_FAMILY": "1,2",
+            "TEST_TARGET_NAME": "StoryboardSample"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "com.example.StoryboardSampleUITests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "2091ED1C305908CA0023A3C6",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "CODE_SIGN_STYLE": "Automatic",
+            "CURRENT_PROJECT_VERSION": "1",
+            "DEVELOPMENT_TEAM": "ABCDE12345",
+            "GENERATE_INFOPLIST_FILE": "YES",
+            "MARKETING_VERSION": "1.0",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleUITests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+            "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+            "SWIFT_EMIT_LOC_STRINGS": "NO",
+            "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+            "SWIFT_VERSION": "5.0",
+            "TARGETED_DEVICE_FAMILY": "1,2",
+            "TEST_TARGET_NAME": "StoryboardSample"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "com.example.StoryboardSampleUITests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 2091ECE6305908C90023A3C6": [
+      "2091ED15305908CA0023A3C6",
+      "2091ED16305908CA0023A3C6"
+    ],
+    "getBuildSettingsForTarget 2091ECE6305908C90023A3C6 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
+        "CLANG_ANALYZER_NONNULL": "YES",
+        "CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION": "YES_AGGRESSIVE",
+        "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20",
+        "CLANG_ENABLE_MODULES": "YES",
+        "CLANG_ENABLE_OBJC_ARC": "YES",
+        "CLANG_ENABLE_OBJC_WEAK": "YES",
+        "CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING": "YES",
+        "CLANG_WARN_BOOL_CONVERSION": "YES",
+        "CLANG_WARN_COMMA": "YES",
+        "CLANG_WARN_CONSTANT_CONVERSION": "YES",
+        "CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS": "YES",
+        "CLANG_WARN_DIRECT_OBJC_ISA_USAGE": "YES_ERROR",
+        "CLANG_WARN_DOCUMENTATION_COMMENTS": "YES",
+        "CLANG_WARN_EMPTY_BODY": "YES",
+        "CLANG_WARN_ENUM_CONVERSION": "YES",
+        "CLANG_WARN_INFINITE_RECURSION": "YES",
+        "CLANG_WARN_INT_CONVERSION": "YES",
+        "CLANG_WARN_NON_LITERAL_NULL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF": "YES",
+        "CLANG_WARN_OBJC_LITERAL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_ROOT_CLASS": "YES_ERROR",
+        "CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "YES",
+        "CLANG_WARN_RANGE_LOOP_ANALYSIS": "YES",
+        "CLANG_WARN_STRICT_PROTOTYPES": "YES",
+        "CLANG_WARN_SUSPICIOUS_MOVE": "YES",
+        "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE",
+        "CLANG_WARN_UNREACHABLE_CODE": "YES",
+        "CLANG_WARN__DUPLICATE_METHOD_MATCH": "YES",
+        "COPY_PHASE_STRIP": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "ENABLE_STRICT_OBJC_MSGSEND": "YES",
+        "ENABLE_TESTABILITY": "YES",
+        "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+        "GCC_C_LANGUAGE_STANDARD": "gnu17",
+        "GCC_DYNAMIC_NO_PIC": "NO",
+        "GCC_NO_COMMON_BLOCKS": "YES",
+        "GCC_OPTIMIZATION_LEVEL": "0",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
+        "GCC_WARN_64_TO_32_BIT_CONVERSION": "YES",
+        "GCC_WARN_ABOUT_RETURN_TYPE": "YES_ERROR",
+        "GCC_WARN_UNDECLARED_SELECTOR": "YES",
+        "GCC_WARN_UNINITIALIZED_AUTOS": "YES_AGGRESSIVE",
+        "GCC_WARN_UNUSED_FUNCTION": "YES",
+        "GCC_WARN_UNUSED_VARIABLE": "YES",
+        "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+        "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
+        "MTL_ENABLE_DEBUG_INFO": "INCLUDE_SOURCE",
+        "MTL_FAST_MATH": "YES",
+        "ONLY_ACTIVE_ARCH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone"
+      },
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "$(inherited)"
+      ],
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget 2091ECE6305908C90023A3C6 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
+        "CLANG_ANALYZER_NONNULL": "YES",
+        "CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION": "YES_AGGRESSIVE",
+        "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20",
+        "CLANG_ENABLE_MODULES": "YES",
+        "CLANG_ENABLE_OBJC_ARC": "YES",
+        "CLANG_ENABLE_OBJC_WEAK": "YES",
+        "CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING": "YES",
+        "CLANG_WARN_BOOL_CONVERSION": "YES",
+        "CLANG_WARN_COMMA": "YES",
+        "CLANG_WARN_CONSTANT_CONVERSION": "YES",
+        "CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS": "YES",
+        "CLANG_WARN_DIRECT_OBJC_ISA_USAGE": "YES_ERROR",
+        "CLANG_WARN_DOCUMENTATION_COMMENTS": "YES",
+        "CLANG_WARN_EMPTY_BODY": "YES",
+        "CLANG_WARN_ENUM_CONVERSION": "YES",
+        "CLANG_WARN_INFINITE_RECURSION": "YES",
+        "CLANG_WARN_INT_CONVERSION": "YES",
+        "CLANG_WARN_NON_LITERAL_NULL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF": "YES",
+        "CLANG_WARN_OBJC_LITERAL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_ROOT_CLASS": "YES_ERROR",
+        "CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "YES",
+        "CLANG_WARN_RANGE_LOOP_ANALYSIS": "YES",
+        "CLANG_WARN_STRICT_PROTOTYPES": "YES",
+        "CLANG_WARN_SUSPICIOUS_MOVE": "YES",
+        "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE",
+        "CLANG_WARN_UNREACHABLE_CODE": "YES",
+        "CLANG_WARN__DUPLICATE_METHOD_MATCH": "YES",
+        "COPY_PHASE_STRIP": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "ENABLE_NS_ASSERTIONS": "NO",
+        "ENABLE_STRICT_OBJC_MSGSEND": "YES",
+        "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+        "GCC_C_LANGUAGE_STANDARD": "gnu17",
+        "GCC_NO_COMMON_BLOCKS": "YES",
+        "GCC_WARN_64_TO_32_BIT_CONVERSION": "YES",
+        "GCC_WARN_ABOUT_RETURN_TYPE": "YES_ERROR",
+        "GCC_WARN_UNDECLARED_SELECTOR": "YES",
+        "GCC_WARN_UNINITIALIZED_AUTOS": "YES_AGGRESSIVE",
+        "GCC_WARN_UNUSED_FUNCTION": "YES",
+        "GCC_WARN_UNUSED_VARIABLE": "YES",
+        "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+        "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
+        "MTL_ENABLE_DEBUG_INFO": "NO",
+        "MTL_FAST_MATH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_COMPILATION_MODE": "wholemodule",
+        "VALIDATE_PRODUCT": "YES"
+      },
+      "sdkRoot": "iphoneos"
+    },
+    "resolveConfigurationListId 2091ED12305908CA0023A3C6": [
+      "2091ED13305908CA0023A3C6",
+      "2091ED14305908CA0023A3C6"
+    ],
+    "getBuildSettingsForTarget 2091ED12305908CA0023A3C6 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_FILE": "StoryboardSample/Info.plist",
+        "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
+        "INFOPLIST_KEY_UILaunchStoryboardName": "LaunchScreen",
+        "INFOPLIST_KEY_UIMainStoryboardFile": "Main",
+        "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+        "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+        "LD_RUNPATH_SEARCH_PATHS": [
+          "$(inherited)",
+          "@executable_path/Frameworks"
+        ],
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSample",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
+        "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+        "SWIFT_EMIT_LOC_STRINGS": "YES",
+        "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": "1,2"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "com.example.StoryboardSample",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget 2091ED12305908CA0023A3C6 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_FILE": "StoryboardSample/Info.plist",
+        "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
+        "INFOPLIST_KEY_UILaunchStoryboardName": "LaunchScreen",
+        "INFOPLIST_KEY_UIMainStoryboardFile": "Main",
+        "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+        "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+        "LD_RUNPATH_SEARCH_PATHS": [
+          "$(inherited)",
+          "@executable_path/Frameworks"
+        ],
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSample",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
+        "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+        "SWIFT_EMIT_LOC_STRINGS": "YES",
+        "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": "1,2"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "com.example.StoryboardSample",
+      "productName": "$(TARGET_NAME)"
+    },
+    "resolveConfigurationListId 2091ED17305908CA0023A3C6": [
+      "2091ED18305908CA0023A3C6",
+      "2091ED19305908CA0023A3C6"
+    ],
+    "getBuildSettingsForTarget 2091ED17305908CA0023A3C6 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "BUNDLE_LOADER": "$(TEST_HOST)",
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleTests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+        "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+        "SWIFT_EMIT_LOC_STRINGS": "NO",
+        "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": "1,2",
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/StoryboardSample.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StoryboardSample"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "com.example.StoryboardSampleTests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget 2091ED17305908CA0023A3C6 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "BUNDLE_LOADER": "$(TEST_HOST)",
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleTests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+        "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+        "SWIFT_EMIT_LOC_STRINGS": "NO",
+        "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": "1,2",
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/StoryboardSample.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StoryboardSample"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "com.example.StoryboardSampleTests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "resolveConfigurationListId 2091ED1A305908CA0023A3C6": [
+      "2091ED1B305908CA0023A3C6",
+      "2091ED1C305908CA0023A3C6"
+    ],
+    "getBuildSettingsForTarget 2091ED1A305908CA0023A3C6 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleUITests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+        "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+        "SWIFT_EMIT_LOC_STRINGS": "NO",
+        "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": "1,2",
+        "TEST_TARGET_NAME": "StoryboardSample"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "com.example.StoryboardSampleUITests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget 2091ED1A305908CA0023A3C6 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "1",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.StoryboardSampleUITests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
+        "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+        "SWIFT_EMIT_LOC_STRINGS": "NO",
+        "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
+        "SWIFT_VERSION": "5.0",
+        "TARGETED_DEVICE_FAMILY": "1,2",
+        "TEST_TARGET_NAME": "StoryboardSample"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "com.example.StoryboardSampleUITests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
+        "CLANG_ANALYZER_NONNULL": "YES",
+        "CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION": "YES_AGGRESSIVE",
+        "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20",
+        "CLANG_ENABLE_MODULES": "YES",
+        "CLANG_ENABLE_OBJC_ARC": "YES",
+        "CLANG_ENABLE_OBJC_WEAK": "YES",
+        "CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING": "YES",
+        "CLANG_WARN_BOOL_CONVERSION": "YES",
+        "CLANG_WARN_COMMA": "YES",
+        "CLANG_WARN_CONSTANT_CONVERSION": "YES",
+        "CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS": "YES",
+        "CLANG_WARN_DIRECT_OBJC_ISA_USAGE": "YES_ERROR",
+        "CLANG_WARN_DOCUMENTATION_COMMENTS": "YES",
+        "CLANG_WARN_EMPTY_BODY": "YES",
+        "CLANG_WARN_ENUM_CONVERSION": "YES",
+        "CLANG_WARN_INFINITE_RECURSION": "YES",
+        "CLANG_WARN_INT_CONVERSION": "YES",
+        "CLANG_WARN_NON_LITERAL_NULL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF": "YES",
+        "CLANG_WARN_OBJC_LITERAL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_ROOT_CLASS": "YES_ERROR",
+        "CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "YES",
+        "CLANG_WARN_RANGE_LOOP_ANALYSIS": "YES",
+        "CLANG_WARN_STRICT_PROTOTYPES": "YES",
+        "CLANG_WARN_SUSPICIOUS_MOVE": "YES",
+        "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE",
+        "CLANG_WARN_UNREACHABLE_CODE": "YES",
+        "CLANG_WARN__DUPLICATE_METHOD_MATCH": "YES",
+        "COPY_PHASE_STRIP": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "ENABLE_STRICT_OBJC_MSGSEND": "YES",
+        "ENABLE_TESTABILITY": "YES",
+        "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+        "GCC_C_LANGUAGE_STANDARD": "gnu17",
+        "GCC_DYNAMIC_NO_PIC": "NO",
+        "GCC_NO_COMMON_BLOCKS": "YES",
+        "GCC_OPTIMIZATION_LEVEL": "0",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
+        "GCC_WARN_64_TO_32_BIT_CONVERSION": "YES",
+        "GCC_WARN_ABOUT_RETURN_TYPE": "YES_ERROR",
+        "GCC_WARN_UNDECLARED_SELECTOR": "YES",
+        "GCC_WARN_UNINITIALIZED_AUTOS": "YES_AGGRESSIVE",
+        "GCC_WARN_UNUSED_FUNCTION": "YES",
+        "GCC_WARN_UNUSED_VARIABLE": "YES",
+        "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+        "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
+        "MTL_ENABLE_DEBUG_INFO": "INCLUDE_SOURCE",
+        "MTL_FAST_MATH": "YES",
+        "ONLY_ACTIVE_ARCH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone"
+      },
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "$(inherited)"
+      ],
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
+        "CLANG_ANALYZER_NONNULL": "YES",
+        "CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION": "YES_AGGRESSIVE",
+        "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20",
+        "CLANG_ENABLE_MODULES": "YES",
+        "CLANG_ENABLE_OBJC_ARC": "YES",
+        "CLANG_ENABLE_OBJC_WEAK": "YES",
+        "CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING": "YES",
+        "CLANG_WARN_BOOL_CONVERSION": "YES",
+        "CLANG_WARN_COMMA": "YES",
+        "CLANG_WARN_CONSTANT_CONVERSION": "YES",
+        "CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS": "YES",
+        "CLANG_WARN_DIRECT_OBJC_ISA_USAGE": "YES_ERROR",
+        "CLANG_WARN_DOCUMENTATION_COMMENTS": "YES",
+        "CLANG_WARN_EMPTY_BODY": "YES",
+        "CLANG_WARN_ENUM_CONVERSION": "YES",
+        "CLANG_WARN_INFINITE_RECURSION": "YES",
+        "CLANG_WARN_INT_CONVERSION": "YES",
+        "CLANG_WARN_NON_LITERAL_NULL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF": "YES",
+        "CLANG_WARN_OBJC_LITERAL_CONVERSION": "YES",
+        "CLANG_WARN_OBJC_ROOT_CLASS": "YES_ERROR",
+        "CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "YES",
+        "CLANG_WARN_RANGE_LOOP_ANALYSIS": "YES",
+        "CLANG_WARN_STRICT_PROTOTYPES": "YES",
+        "CLANG_WARN_SUSPICIOUS_MOVE": "YES",
+        "CLANG_WARN_UNGUARDED_AVAILABILITY": "YES_AGGRESSIVE",
+        "CLANG_WARN_UNREACHABLE_CODE": "YES",
+        "CLANG_WARN__DUPLICATE_METHOD_MATCH": "YES",
+        "COPY_PHASE_STRIP": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "DEVELOPMENT_TEAM": "ABCDE12345",
+        "ENABLE_NS_ASSERTIONS": "NO",
+        "ENABLE_STRICT_OBJC_MSGSEND": "YES",
+        "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+        "GCC_C_LANGUAGE_STANDARD": "gnu17",
+        "GCC_NO_COMMON_BLOCKS": "YES",
+        "GCC_WARN_64_TO_32_BIT_CONVERSION": "YES",
+        "GCC_WARN_ABOUT_RETURN_TYPE": "YES_ERROR",
+        "GCC_WARN_UNDECLARED_SELECTOR": "YES",
+        "GCC_WARN_UNINITIALIZED_AUTOS": "YES_AGGRESSIVE",
+        "GCC_WARN_UNUSED_FUNCTION": "YES",
+        "GCC_WARN_UNUSED_VARIABLE": "YES",
+        "IPHONEOS_DEPLOYMENT_TARGET": "27.0",
+        "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
+        "MTL_ENABLE_DEBUG_INFO": "NO",
+        "MTL_FAST_MATH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_COMPILATION_MODE": "wholemodule",
+        "VALIDATE_PRODUCT": "YES"
+      },
+      "sdkRoot": "iphoneos"
+    },
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "2091ECE2305908C90023A3C6",
+        {
+          "id": "2091ECE2305908C90023A3C6",
+          "childIds": [
+            "2091ECED305908C90023A3C6",
+            "2091ED04305908CA0023A3C6",
+            "2091ED0E305908CA0023A3C6",
+            "2091ECEC305908C90023A3C6"
+          ]
+        }
+      ],
+      [
+        "2091ECEC305908C90023A3C6",
+        {
+          "id": "2091ECEC305908C90023A3C6",
+          "name": "Products",
+          "childIds": [
+            "2091ECEB305908C90023A3C6",
+            "2091ED01305908CA0023A3C6",
+            "2091ED0B305908CA0023A3C6"
+          ]
+        }
+      ],
+      [
+        "2091ECED305908C90023A3C6",
+        {
+          "id": "2091ECED305908C90023A3C6",
+          "name": "StoryboardSample",
+          "path": "StoryboardSample",
+          "childIds": []
+        }
+      ],
+      [
+        "2091ED04305908CA0023A3C6",
+        {
+          "id": "2091ED04305908CA0023A3C6",
+          "name": "StoryboardSampleTests",
+          "path": "StoryboardSampleTests",
+          "childIds": []
+        }
+      ],
+      [
+        "2091ED0E305908CA0023A3C6",
+        {
+          "id": "2091ED0E305908CA0023A3C6",
+          "name": "StoryboardSampleUITests",
+          "path": "StoryboardSampleUITests",
+          "childIds": []
+        }
+      ]
+    ],
+    "findMainGroupId": "2091ECE2305908C90023A3C6",
+    "buildGroupDirectories": [
+      [
+        "2091ECE2305908C90023A3C6",
+        "/project"
+      ],
+      [
+        "2091ECED305908C90023A3C6",
+        "/project/StoryboardSample"
+      ],
+      [
+        "2091ED04305908CA0023A3C6",
+        "/project/StoryboardSampleTests"
+      ],
+      [
+        "2091ED0E305908CA0023A3C6",
+        "/project/StoryboardSampleUITests"
+      ],
+      [
+        "2091ECEC305908C90023A3C6",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath StoryboardSample": "2091ECED305908C90023A3C6",
+    "resolveGroupForPath StoryboardSampleTests": "2091ED04305908CA0023A3C6",
+    "parseVersionGroups": [],
+    "parseSwiftVersion": "5.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "27.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": false,
+    "parseFrameworksBuildPhase 2091ECE8305908C90023A3C6": [],
+    "parseLinkedFrameworksForTarget 2091ECE8305908C90023A3C6": [],
+    "parseFrameworksBuildPhase 2091ECFE305908CA0023A3C6": [],
+    "parseLinkedFrameworksForTarget 2091ECFE305908CA0023A3C6": [],
+    "parseFrameworksBuildPhase 2091ED08305908CA0023A3C6": [],
+    "parseLinkedFrameworksForTarget 2091ED08305908CA0023A3C6": [],
+    "parseResourcesBuildPhase 2091ECE9305908C90023A3C6": [],
+    "parseResourcesForTarget 2091ECE9305908C90023A3C6": [],
+    "parseResourcesBuildPhase 2091ECFF305908CA0023A3C6": [],
+    "parseResourcesForTarget 2091ECFF305908CA0023A3C6": [],
+    "parseResourcesBuildPhase 2091ED09305908CA0023A3C6": [],
+    "parseResourcesForTarget 2091ED09305908CA0023A3C6": [],
+    "findFileReferencePath 2091ECEB305908C90023A3C6": "StoryboardSample.app",
+    "findBuildFileId 2091ECEB305908C90023A3C6": null,
+    "findFileReferencePath 2091ED01305908CA0023A3C6": "StoryboardSampleTests.xctest",
+    "findBuildFileId 2091ED01305908CA0023A3C6": null,
+    "findFileReferencePath 2091ED0B305908CA0023A3C6": "StoryboardSampleUITests.xctest",
+    "findBuildFileId 2091ED0B305908CA0023A3C6": null,
+    "folderSpellings": [
+      {
+        "id": "2091ECED305908C90023A3C6",
+        "position": 0,
+        "folder": "/project/StoryboardSample"
+      },
+      {
+        "id": "2091ED04305908CA0023A3C6",
+        "position": 0,
+        "folder": "/project/StoryboardSampleTests"
+      },
+      {
+        "id": "2091ED0E305908CA0023A3C6",
+        "position": 0,
+        "folder": "/project/StoryboardSampleUITests"
+      }
+    ],
+    "displayName 2091ECEB305908C90023A3C6": "StoryboardSample.app",
+    "buildFilesFor 2091ECEB305908C90023A3C6": [],
+    "phasesOf 2091ECEB305908C90023A3C6": {},
+    "displayName 2091ED01305908CA0023A3C6": "StoryboardSampleTests.xctest",
+    "buildFilesFor 2091ED01305908CA0023A3C6": [],
+    "phasesOf 2091ED01305908CA0023A3C6": {},
+    "displayName 2091ED0B305908CA0023A3C6": "StoryboardSampleUITests.xctest",
+    "buildFilesFor 2091ED0B305908CA0023A3C6": [],
+    "phasesOf 2091ED0B305908CA0023A3C6": {},
+    "locateList 2091ECE2305908C90023A3C6 children": {
+      "openIndex": 3589,
+      "closeIndex": 3809,
+      "multiLine": true,
+      "entries": [
+        {
+          "id": "2091ECED305908C90023A3C6",
+          "startIndex": 3590,
+          "endIndex": 3643
+        },
+        {
+          "id": "2091ED04305908CA0023A3C6",
+          "startIndex": 3643,
+          "endIndex": 3701
+        },
+        {
+          "id": "2091ED0E305908CA0023A3C6",
+          "startIndex": 3701,
+          "endIndex": 3761
+        },
+        {
+          "id": "2091ECEC305908C90023A3C6",
+          "startIndex": 3761,
+          "endIndex": 3806
+        }
+      ]
+    },
+    "locateListEntry 2091ECE2305908C90023A3C6 children 2091ECED305908C90023A3C6": {
+      "id": "2091ECED305908C90023A3C6",
+      "startIndex": 3590,
+      "endIndex": 3643
+    },
+    "locateList 2091ECE7305908C90023A3C6 files": {
+      "openIndex": 8380,
+      "closeIndex": 8384,
+      "multiLine": true,
+      "entries": []
+    },
+    "parentOf 2091ECE2305908C90023A3C6": null,
+    "resolvedPath 2091ECE2305908C90023A3C6": "/project",
+    "parentOf 2091ECED305908C90023A3C6": "2091ECE2305908C90023A3C6",
+    "resolvedPath 2091ECED305908C90023A3C6": "/project/StoryboardSample",
+    "parentOf 2091ED11305908CA0023A3C6": null,
+    "resolvedPath 2091ED11305908CA0023A3C6": null,
+    "parentOf 2091ECEB305908C90023A3C6": "2091ECEC305908C90023A3C6",
+    "resolvedPath 2091ECEB305908C90023A3C6": null,
+    "targetOfPhase 2091ECE7305908C90023A3C6": "2091ECEA305908C90023A3C6",
+    "targetOfPhase 2091ECFD305908CA0023A3C6": "2091ED00305908CA0023A3C6",
+    "targetOfPhase 2091ED07305908CA0023A3C6": "2091ED0A305908CA0023A3C6",
+    "groupForFolder .": "2091ECE2305908C90023A3C6",
+    "groupForFolder StoryboardSample": null,
+    "locateKey 2091ECED305908C90023A3C6 path": {
+      "startIndex": 2628,
+      "endIndex": 2658,
+      "valueStart": 2638,
+      "valueEnd": 2656
+    },
+    "locateKey 2091ECEB305908C90023A3C6 explicitFileType": {
+      "startIndex": 1322,
+      "endIndex": 1362,
+      "valueStart": 1341,
+      "valueEnd": 1360
+    },
+    "writer addSwiftFileToPbxproj Added.swift": {
+      "lint": "OK",
+      "diff": [
+        "+14: /* Begin PBXBuildFile section */",
+        "+14: \t\t800000000000000000000001 /* Added.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800000000000000000000002 /* Added.swift */; };",
+        "+14: /* End PBXBuildFile section */",
+        "+14: ",
+        "+35: \t\t800000000000000000000002 /* Added.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Added.swift; sourceTree = \"<group>\"; };",
+        "+94: \t\t\t\t800000000000000000000002 /* Added.swift */,",
+        "+236: \t\t\t\t800000000000000000000001 /* Added.swift in Sources */,"
+      ]
+    },
+    "writer addGroupPath Features at the project root": {
+      "lint": "OK",
+      "diff": [
+        "+90: \t\t\t\t800000000000000000000001 /* Features */,",
+        "+107: \t\t800000000000000000000001 /* Features */ = {",
+        "+107: \t\t\tisa = PBXGroup;",
+        "+107: \t\t\tchildren = (",
+        "+107: \t\t\t);",
+        "+107: \t\t\tpath = Features;",
+        "+107: \t\t\tsourceTree = \"<group>\";",
+        "+107: \t\t};"
+      ]
+    },
+    "writer updateBuildSetting existing key": {
+      "lint": "OK",
+      "diff": [
+        "-291: \t\t\t\tSWIFT_VERSION = 5.0;",
+        "+292: \t\t\t\tSWIFT_VERSION = 6.0;"
+      ]
+    },
+    "writer updateBuildSetting new key": {
+      "lint": "OK",
+      "diff": [
+        "+389: \t\t\t\tSWIFT_STRICT_CONCURRENCY = complete;"
+      ]
+    }
+  }
+}
