@@ -1,6 +1,8 @@
 import type { BuildTaskConfig } from '../types/interfaces';
 import { devBundleIdOverrideArgs } from '../utils/bundleId';
 import { derivedDataShellPathForScheme, getDestinationType, productDirForDestination, xcodebuildDestinationFlags } from '../utils/destination';
+import { currentXcodeToolchain, revealSimulatorCommand } from '../utils/xcodeToolchain';
+import type { XcodeToolchain } from '../utils/xcodeToolchain';
 
 function xcodebuildArgs(config: BuildTaskConfig): string[] {
     const derivedData = derivedDataShellPathForScheme(config.schemeName);
@@ -58,7 +60,7 @@ const BUNDLE_ID_FROM_INFOPLIST = (appPath: string): string =>
 
 const ASSERT_BID = `if [ -z "$BID" ]; then echo "ERROR: failed to read CFBundleIdentifier from Info.plist" >&2; exit 1; fi`;
 
-export function buildInstallCommandLine(config: BuildTaskConfig): string {
+export function buildInstallCommandLine(config: BuildTaskConfig, toolchain: XcodeToolchain = currentXcodeToolchain()): string {
     // macOS has no simulator/device install step — Build & Run (Cmd+R) launches
     // the .app directly under lldb-dap. Guard the Tasks-menu entry point.
     if (getDestinationType(config) === 'mac') {
@@ -85,7 +87,7 @@ export function buildInstallCommandLine(config: BuildTaskConfig): string {
         `&& { xcrun simctl boot "${udid}" 2>/dev/null || true`,
         `; xcrun simctl terminate "${udid}" "$BID" 2>/dev/null || true`,
         `; xcrun simctl install "${udid}" "${appPath}"`,
-        '; open -a Simulator; }',
+        `; ${revealSimulatorCommand(udid, toolchain)}; }`,
     ].join(' ');
 }
 
@@ -106,11 +108,11 @@ export function runAndDebugCommandLine(config: BuildTaskConfig): string {
     return `set -e; ${BUNDLE_ID_FROM_INFOPLIST(appPath)}; ${ASSERT_BID}; xcrun simctl launch --console-pty --wait-for-debugger "${udid}" "$BID" 2>&1 | ${TIMESTAMP_LINES}`;
 }
 
-export function testCommandLine(config: BuildTaskConfig): string {
+export function testCommandLine(config: BuildTaskConfig, toolchain: XcodeToolchain = currentXcodeToolchain()): string {
     const args = [...xcodebuildArgs(config), `test -only-testing:"${config.targetName}" 2>&1`];
     if (getDestinationType(config) === 'simulator') {
         const udid = config.simulatorUdid || config.simulatorDevice;
-        args.unshift(`xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator;`);
+        args.unshift(`xcrun simctl boot "${udid}" 2>/dev/null || true; ${revealSimulatorCommand(udid, toolchain)};`);
     }
     return args.join(' ');
 }

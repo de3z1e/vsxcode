@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import type { BuildTaskConfig } from '../types/interfaces';
 import { buildCommandLine, buildForTestingCommandLine, buildInstallCommandLine, runAndDebugCommandLine, debugConsoleCommandLine, testCommandLine } from '../generators/buildTasks';
+import { currentXcodeToolchain } from '../utils/xcodeToolchain';
 
 export const TASK_TYPE = 'xcode-build';
 const TASK_SOURCE = 'xcode';
@@ -190,7 +191,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'build-install', dontTriggerTestDiscovery: true },
             folder, 'Build and Install', TASK_SOURCE,
-            new vscode.CustomExecution(async () => new TaskTerminal(buildInstallCommandLine(config), cwd, { colorize: true })),
+            new vscode.CustomExecution(async () => new TaskTerminal(buildInstallCommandLine(config, currentXcodeToolchain()), cwd, { colorize: true })),
             '$swiftc'
         );
         task.presentationOptions = {
@@ -247,7 +248,7 @@ export class XcodeBuildTaskProvider implements vscode.TaskProvider {
         const task = new vscode.Task(
             { type: TASK_TYPE, task: 'test', dontTriggerTestDiscovery: true },
             folder, 'Test', TASK_SOURCE,
-            new vscode.CustomExecution(async () => new TaskTerminal(testCommandLine(config), cwd, { colorize: true })),
+            new vscode.CustomExecution(async () => new TaskTerminal(testCommandLine(config, currentXcodeToolchain()), cwd, { colorize: true })),
             '$swiftc'
         );
         task.group = vscode.TaskGroup.Test;

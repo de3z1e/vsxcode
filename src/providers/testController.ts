@@ -9,6 +9,7 @@ import { determineTargetPath } from '../utils/path';
 import { devBundleIdOverrideArgs } from '../utils/bundleId';
 import { derivedDataBasePath, derivedDataShellPathForScheme, getDestinationType, xcodebuildDestinationFlags } from '../utils/destination';
 import { listSimulatorAppProcesses, waitForNewSimulatorAppProcess } from '../utils/simulator';
+import { currentXcodeToolchain, revealSimulator, revealSimulatorCommand } from '../utils/xcodeToolchain';
 
 const execFile = promisify(cp.execFile);
 const DERIVED_DATA_BASE = derivedDataBasePath();
@@ -302,8 +303,8 @@ export class XCTestController implements vscode.Disposable {
             const udid = config.simulatorUdid || config.simulatorDevice;
             try {
                 await execFile('xcrun', ['simctl', 'boot', udid]).catch(() => {});
-                await execFile('open', ['-a', 'Simulator']);
-            } catch { /* already booted */ }
+                await revealSimulator(udid);
+            } catch { /* already booted, or no simulator app to show */ }
         }
 
         // 3. Start test-without-building AND attach debugger simultaneously
@@ -431,10 +432,9 @@ export class XCTestController implements vscode.Disposable {
             coverageArgs = ` -enableCodeCoverage YES -resultBundlePath "${resultPath}"`;
         }
         let command = `${base}${coverageArgs} test ${filters} 2>&1`;
-        // Boot simulator and open Simulator.app before running tests
         if (getDestinationType(config) === 'simulator') {
             const udid = config.simulatorUdid || config.simulatorDevice;
-            command = `xcrun simctl boot "${udid}" 2>/dev/null || true; open -a Simulator; ${command}`;
+            command = `xcrun simctl boot "${udid}" 2>/dev/null || true; ${revealSimulatorCommand(udid, currentXcodeToolchain())}; ${command}`;
         }
         if (options?.coverage && this.coverageResultPath) {
             command = `rm -rf "${this.coverageResultPath}"; ${command}`;

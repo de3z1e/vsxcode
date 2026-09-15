@@ -30,6 +30,7 @@ import { buildPackageSwift, formatPackageDependencyEntry } from './generators/pa
 import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, findDeviceSymbols, getMyMacDestination, listSimulatorAppProcesses, waitForNewSimulatorAppProcess } from './utils/simulator';
 import type { SimulatorAppQuery, SimulatorAppProcess } from './utils/simulator';
 import { getDestinationType, builtAppPath, derivedDataBasePath } from './utils/destination';
+import { detectXcodeToolchain, revealSimulator } from './utils/xcodeToolchain';
 import {
     derivedSourcesHomeRelativePath,
     derivedSourcesPathForWorkspace,
@@ -965,6 +966,15 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[${timestamp}] ${message}`);
     };
 
+    // Prime the selected-Xcode description so task creation only pays the cheap `xcode-select -p` probe.
+    detectXcodeToolchain().then(
+        (toolchain) => {
+            const version = toolchain.version ? `Xcode ${toolchain.version.major}.${toolchain.version.minor}` : 'Xcode of unknown version';
+            log(`[xcode] ${version} at ${toolchain.developerDir || '(nothing selected)'}; simulator UI: ${toolchain.simulatorUI?.kind ?? 'none'}`);
+        },
+        (error) => log(`[xcode] toolchain detection failed: ${error}`)
+    );
+
     // Register sidebar and no-project placeholder
     const sidebarProvider = new SidebarProvider(context.workspaceState, log);
     const treeView = vscode.window.createTreeView('vsxcode.sidebar', {
@@ -1882,11 +1892,20 @@ export function activate(context: vscode.ExtensionContext): void {
                     `xcrun simctl boot "${udid}" 2>/dev/null || true`,
                     `xcrun simctl terminate "${udid}" "${bundleId}" 2>/dev/null || true`,
                     `xcrun simctl install "${udid}" "${appPath}"`,
-                    'open -a Simulator',
                 ].join(' && '),
                 (error) => error ? reject(error) : resolve()
             );
         });
+        if (runId !== currentRunId) return;
+        // The app is installed either way, so a simulator that won't show is reported, not fatal.
+        try {
+            await revealSimulator(udid);
+        } catch (error) {
+            const message = (error as { message?: string }).message || String(error);
+            log(`[simulator-debug] could not reveal the simulator: ${message}`);
+            // A notification, not the shared panel: the console task claims that panel next.
+            vscode.window.showWarningMessage('VSXcode could not open the simulator window. The app is installed and will still launch.');
+        }
         if (runId !== currentRunId) return;
         sidebarProvider.refresh();
         const mtimeInfo = await getInstalledAppExecutableMtime(udid, bundleId);
