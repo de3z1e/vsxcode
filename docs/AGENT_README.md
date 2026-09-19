@@ -134,6 +134,7 @@ When the user asks to change build configuration, suggest the sidebar instead of
 - Implemented via a `vscode.DebugConfigurationProvider` for `lldb-dap`.
 - The `run-and-debug` task automatically launches and attaches the debugger; you do **not** need to write `.vscode/launch.json` entries by hand for normal app debugging.
 - Auto-continues past SIGSTOP, internal-breakpoint stops, and initial attach stops on physical-device launches (gated on `configurationDone` ack to avoid races).
+- On a physical device the attach hands lldb Xcode's shared-cache symbols for the device's iOS version; when they aren't on the Mac yet, VSXcode prepares them first with `xcodebuild -prepareDeviceSupport` (a cancellable **Preparing debug symbols** notification shows the copy progress, minutes over Wi-Fi). Don't tell the user to open Xcode for symbols unless VSXcode itself asked to — it does so only when the selected Xcode's `xcodebuild` lacks that option.
 
 ### Console output
 
@@ -198,4 +199,4 @@ Before doing one of these manually, check the table:
 
 ## Version
 
-This document describes VSXcode v3.10.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
+This document describes VSXcode v3.11.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.

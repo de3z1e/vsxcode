@@ -2,11 +2,9 @@
 
 Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on simulators, physical devices, and your Mac, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS and macOS apps directly from VS Code.
 
-### What's new in 3.10.0
+### What's new in 3.11.0
 
-**Xcode 27 support.** Xcode 27 replaced Simulator.app with **Device Hub**, and VSXcode works with it: simulator runs bring the device up in Device Hub, while Xcode 26 and earlier keep using Simulator.app. The device picker keeps simulators out of the physical-device list now that Xcode 27's device list includes them, and the Swift Language Version picker works with Swift 6.4. Xcode 26 remains supported; the Xcode 27 behavior applies only when Xcode 27 is the selected toolchain.
-
-Also in this release: **Step Over, Step Into and Pause** now stop where you expect on simulators and physical devices. Previously the debugger resumed the app.
+**Debug symbols for your iPhone, prepared automatically.** When you Build & Run on a physical device whose iOS version Xcode hasn't cached symbols for on this Mac, VSXcode now prepares them itself with `xcodebuild -prepareDeviceSupport`: a cancellable **Preparing debug symbols** notification shows the copy and extraction progress, and the debugger attaches with full system symbols once it finishes. Previously the run asked you to open Xcode with the device connected, a flow Xcode 27 no longer offers. Symbols Xcode 27 has already prepared are found as well: Xcode 27 keeps them in a per-architecture folder that earlier releases didn't look in, so device debugging on Xcode 27 ran without system symbols. Xcode 26.6 has the same command and gets the same behavior; on an Xcode without it, the Open Xcode prompt remains.
 
 ### How It Works
 
@@ -68,7 +66,7 @@ Build tasks are integrated directly into the extension — no shell scripts, `ta
 - Uses VS Code's `TaskProvider` API to provide build, build-install, run-and-debug, and test tasks.
 - Full debug support with breakpoints and `print()` console output for **simulator**, **physical device**, and **macOS** builds. Simulator and device output streams into the task terminal (the same panel as the build output), with each line prefixed by a wall-clock timestamp; the Debug Console shows only LLDB messages on those runs.
 - Simulator debugging uses `simctl launch --console-pty --wait-for-debugger` with LLDB DAP attach. The simulator's screen is shown in **Device Hub** on Xcode 27 and later (the device is brought to the front through Device Hub's `devices://` URL) and in **Simulator.app** on Xcode 26 and earlier, whichever the selected Xcode ships.
-- Physical device debugging uses `devicectl --console --start-stopped` with LLDB DAP remote-ios attach. Supports USB and Wi-Fi connected devices (requires Xcode 15+). Code signing uses the project's existing settings from Xcode. Xcode 27's devicectl lists simulators alongside hardware in its JSON version 5 output; VSXcode reads that format and keeps only physical devices, and reads earlier devicectl output as before.
+- Physical device debugging uses `devicectl --console --start-stopped` with LLDB DAP remote-ios attach. Supports USB and Wi-Fi connected devices (requires Xcode 15+). Code signing uses the project's existing settings from Xcode. Before installing, VSXcode checks that Xcode's symbols for the device's iOS version are on this Mac (Xcode 27's per-architecture folder and the earlier flat layout are both recognized); when they aren't, it prepares them with `xcodebuild -prepareDeviceSupport` under a cancellable notification so the debugger attaches with system symbols, and a re-run started during that copy waits for the same copy. On an Xcode whose `xcodebuild` lacks that option, VSXcode asks you to open Xcode with the device connected instead. Xcode 27's devicectl lists simulators alongside hardware in its JSON version 5 output; VSXcode reads that format and keeps only physical devices, and reads earlier devicectl output as before.
 - macOS debugging launches the built `.app` directly under LLDB DAP (`request: launch`) — no simulator boot or install step; the app's output streams to the Debug Console.
 - Build configuration is stored in VS Code's workspace state (persists across sessions).
 - Build output is colorized: errors in red, warnings in yellow.
@@ -114,7 +112,7 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.10.0.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.11.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -122,5 +120,5 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.10.0.vsix
+code --install-extension vsxcode-3.11.0.vsix
 ```
