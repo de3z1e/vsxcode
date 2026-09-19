@@ -28,10 +28,10 @@ import { generateSwiftSettings, effectiveSwiftMajor } from './generators/swiftSe
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
 import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, getMyMacDestination, listSimulatorAppProcesses, waitForNewSimulatorAppProcess } from './utils/simulator';
-import { findDeviceSymbols } from './utils/deviceSupport';
-import type { SimulatorAppQuery, SimulatorAppProcess } from './utils/simulator';
+import { findDeviceSymbols, deviceSupportFolderName, prepareDeviceSupport, PrepareAbortedError } from './utils/deviceSupport';
+import type { SimulatorAppQuery, SimulatorAppProcess, PhysicalDevice } from './utils/simulator';
 import { getDestinationType, builtAppPath, derivedDataBasePath } from './utils/destination';
-import { detectXcodeToolchain, revealSimulator } from './utils/xcodeToolchain';
+import { detectXcodeToolchain, revealSimulator, canPrepareDeviceSupport } from './utils/xcodeToolchain';
 import { classifyStop, pendingUserStopAfterRequest } from './utils/debugStops';
 import type { PendingUserStop, StoppedEventBody } from './utils/debugStops';
 import {
@@ -727,6 +727,14 @@ let consoleExecution: vscode.TaskExecution | undefined;
 let buildExecution: vscode.TaskExecution | undefined;
 let currentRunId = 0;
 let activeDebugSession: vscode.DebugSession | undefined;
+
+interface SymbolPreparation {
+    folderName: string;
+    /** True once the folder is prepared (or turned out to exist); false after a failure or Cancel. */
+    done: Thenable<boolean>;
+}
+/** The one symbol preparation in flight; a run needing the same folder waits on it instead of starting another. */
+let symbolPreparation: SymbolPreparation | undefined;
 
 function printToSharedPanel(message: string, color = '33'): void {
     const folder = vscode.workspace.workspaceFolders?.[0];
@@ -2102,6 +2110,119 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     }
 
+    /**
+     * The Symbols folder to hand lldb for the run's device, preparing it with xcodebuild when it is
+     * missing; undefined means attaching without symbols. Preparation is one job per folder shared
+     * by every run that needs it — a run only waits on it, so a re-run after a build fix joins the
+     * copy instead of killing it.
+     */
+    async function ensureDeviceSymbols(config: BuildTaskConfig, deviceId: string): Promise<string | undefined> {
+        const matches = (d: PhysicalDevice) => d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier;
+        let device = sidebarProvider.getProjectData()?.physicalDevices.find(matches);
+        let symbolsPath = device ? await findDeviceSymbols(device) : undefined;
+        if (!symbolsPath) {
+            // The sidebar's record may predate an iOS update (a new build spells a new folder), or the
+            // sidebar may not have loaded; devicectl knows the current version either way.
+            const devices = await listPhysicalDevices();
+            if (devices.length > 0) {
+                // An empty list is a devicectl failure (or Xcode's first launch pending), not an empty Mac; keep what the sidebar has.
+                sidebarProvider.updatePhysicalDevices(devices);
+            }
+            const fresh = devices.find(matches);
+            if (fresh) {
+                device = fresh;
+                log(`[physical-debug] device record refreshed: iOS ${fresh.osVersion} (${fresh.osBuildVersion})`);
+                symbolsPath = await findDeviceSymbols(fresh);
+            }
+        }
+        if (symbolsPath) {
+            log(`[physical-debug] found cached symbols at ${symbolsPath}`);
+            return symbolsPath;
+        }
+        const folderName = device ? deviceSupportFolderName(device) : undefined;
+        if (!device || !folderName) {
+            log('[physical-debug] device record unavailable; attaching without symbols');
+            return undefined;
+        }
+        if (!(await canPrepareDeviceSupport())) {
+            // Xcode 26.5 and earlier: xcodebuild has no -prepareDeviceSupport, and Xcode's Devices window still copies symbols.
+            log(`[physical-debug] no cached symbols for ${folderName}; this Xcode's xcodebuild cannot prepare them`);
+            vscode.window.showWarningMessage(
+                `No cached device symbols for iOS ${device.osVersion}. Debugging will be slower. Open Xcode with this device connected to download symbols.`,
+                'Open Xcode'
+            ).then((action) => {
+                if (action === 'Open Xcode') {
+                    execFile('open', ['-a', 'Xcode'], { encoding: 'utf8' }).catch(() => {});
+                }
+            });
+            return undefined;
+        }
+        let job = symbolPreparation;
+        if (job?.folderName === folderName) {
+            log(`[physical-debug] joining the symbol preparation already running for ${folderName}`);
+        } else {
+            const started: SymbolPreparation = { folderName, done: prepareSymbolsWithProgress(device, deviceId, folderName) };
+            const clear = () => { if (symbolPreparation === started) { symbolPreparation = undefined; } };
+            started.done.then(clear, clear);
+            symbolPreparation = started;
+            job = started;
+        }
+        await job.done;
+        const prepared = await findDeviceSymbols(device);
+        log(prepared ? `[physical-debug] found prepared symbols at ${prepared}` : `[physical-debug] symbols still missing for ${folderName}; attaching without them`);
+        return prepared;
+    }
+
+    /** Runs xcodebuild under a cancellable notification and reports a failure or Cancel once, here. */
+    function prepareSymbolsWithProgress(device: PhysicalDevice, deviceId: string, folderName: string): Thenable<boolean> {
+        log(`[physical-debug] no cached symbols for ${folderName}; running xcodebuild -prepareDeviceSupport`);
+        return vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Preparing debug symbols for iOS ${device.osVersion} (${device.osBuildVersion})…`,
+                cancellable: true,
+            },
+            async (progress, token) => {
+                const abort = new AbortController();
+                token.onCancellationRequested(() => abort.abort());
+                let loggedPhase: string | undefined;
+                let loggedDevice = false;
+                try {
+                    const result = await prepareDeviceSupport(deviceId, {
+                        signal: abort.signal,
+                        onProgress: (state) => {
+                            if (state.deviceName && !loggedDevice) {
+                                loggedDevice = true;
+                                log(`[physical-debug] xcodebuild located ${state.deviceName}`);
+                            }
+                            if (state.phase !== 'copying' && state.phase !== 'extracting') {
+                                return;
+                            }
+                            const label = state.phase === 'copying' ? 'Copying' : 'Extracting';
+                            progress.report({ message: `${label} ${state.percent}%` });
+                            if (loggedPhase !== state.phase) {
+                                loggedPhase = state.phase;
+                                log(`[physical-debug] ${label.toLowerCase()} shared cache symbols…`);
+                            }
+                        },
+                    });
+                    log(`[physical-debug] symbols ${result.outcome === 'existing' ? 'already prepared' : 'prepared'} for ${folderName}`);
+                    return true;
+                } catch (error) {
+                    if (error instanceof PrepareAbortedError) {
+                        log(`[physical-debug] symbol preparation cancelled for ${folderName}`);
+                        vscode.window.showWarningMessage(`Debug symbols for iOS ${device.osVersion} weren't prepared. Debugging will be slower.`);
+                    } else {
+                        const reason = (error as { message?: string }).message || String(error);
+                        log(`[physical-debug] symbol preparation failed for ${folderName}: ${reason}`);
+                        vscode.window.showWarningMessage(`Debug symbols for iOS ${device.osVersion} couldn't be prepared: ${reason}. Debugging will be slower.`);
+                    }
+                    return false;
+                }
+            }
+        );
+    }
+
     async function buildAndDebugPhysicalDevice(config: BuildTaskConfig): Promise<void> {
         await cancelActiveRun();
         const runId = currentRunId;
@@ -2147,7 +2268,12 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
-        // 2. Install app on device
+        // 2. Device symbols, before anything else uses the device link: a shared-cache copy is
+        //    minutes over Wi-Fi, and the install would only slow it down.
+        const symbolsPath = await ensureDeviceSymbols(config, devId);
+        if (runId !== currentRunId) return;
+
+        // 3. Install app on device
         try {
             log(`[physical-debug] installing ${appPath} (bundleId=${resolved.bundleId}, source=${resolved.source}) on device...`);
             await devicectlInstall(devId, appPath);
@@ -2161,7 +2287,7 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
-        // 3. Verify device is unlocked before launching
+        // 4. Verify device is unlocked before launching
         const folder = vscode.workspace.workspaceFolders?.[0];
         if (!folder) {
             vscode.window.showErrorMessage('No workspace folder found.');
@@ -2201,13 +2327,13 @@ export function activate(context: vscode.ExtensionContext): void {
             log('[physical-debug] device unlocked');
         }
 
-        // 4. Launch app with console streaming via task
+        // 5. Launch app with console streaming via task
         const debugConsoleTask = buildTaskProvider.createPhysicalDebugTask(config, folder);
         log('[physical-debug] starting debug console task...');
         consoleExecution = await vscode.tasks.executeTask(debugConsoleTask);
         if (runId !== currentRunId) return;
 
-        // 5. Wait for console task to settle — detect early failures (locked device, etc.)
+        // 6. Wait for console task to settle — detect early failures (locked device, etc.)
         const earlyExit = await Promise.race<number | null>([
             new Promise<number>((resolve) => {
                 const listener = vscode.tasks.onDidEndTaskProcess((event) => {
@@ -2230,28 +2356,6 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         log('[physical-debug] console task is running');
         buildTaskProvider.writeToConsole('\r\n\x1b[32m** APP LAUNCH SUCCEEDED **\x1b[0m\r\n\r\n');
-
-        // 6. Check for cached device symbols (Xcode's iOS DeviceSupport)
-        const physicalDevice = sidebarProvider.getProjectData()?.physicalDevices.find(
-            d => d.udid === config.simulatorUdid || d.deviceIdentifier === config.deviceIdentifier
-        );
-        let symbolsPath: string | undefined;
-        if (physicalDevice) {
-            symbolsPath = await findDeviceSymbols(physicalDevice);
-            if (!symbolsPath) {
-                log(`[physical-debug] no cached symbols for ${physicalDevice.productType} ${physicalDevice.osVersion} (${physicalDevice.osBuildVersion})`);
-                vscode.window.showWarningMessage(
-                    `No cached device symbols for iOS ${physicalDevice.osVersion}. Debugging will be slower. Open Xcode with this device connected to download symbols.`,
-                    'Open Xcode'
-                ).then((action) => {
-                    if (action === 'Open Xcode') {
-                        execFile('open', ['-a', 'Xcode'], { encoding: 'utf8' }).catch(() => {});
-                    }
-                });
-            } else {
-                log(`[physical-debug] found cached symbols at ${symbolsPath}`);
-            }
-        }
 
         // 7. Attach debugger by name (--waitfor finds the --start-stopped process)
         const initCommands = [

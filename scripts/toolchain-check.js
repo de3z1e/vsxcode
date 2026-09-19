@@ -7,7 +7,10 @@
  * behaviour is gated on the selected Xcode's version. This runs the compiled
  * src/utils/xcodeToolchain.ts under every Xcode found among XCODE_APPS (via DEVELOPER_DIR,
  * which `xcode-select -p` honors), so both branches are exercised on a Mac that has both
- * Xcodes installed and neither is silently skipped when only one is.
+ * Xcodes installed and neither is silently skipped when only one is. Under each Xcode it also
+ * probes `xcodebuild -prepareDeviceSupport` (the device-symbols preparation) live: the capability
+ * must be reported, an unknown device must be rejected once the search times out, and an abort
+ * must kill xcodebuild.
  *
  * Usage: npm run test:toolchain
  *        VSXCODE_XCODE_APPS=/path/Xcode-27.app:/path/Xcode-26.app npm run test:toolchain
@@ -17,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..');
 const OUT = path.join(REPO, 'out');
@@ -67,6 +71,18 @@ function checkHelpers() {
     const quoted = { ...noUI, simulatorUI: { kind: 'simulatorApp', appPath: "/Volumes/It's here/Xcode.app/Contents/Developer/Applications/Simulator.app" } };
     report(toolchain.revealSimulatorCommand('ABCD-1234', quoted) === "open '/Volumes/It'\\''s here/Xcode.app/Contents/Developer/Applications/Simulator.app'",
         'app paths are single-quoted for zsh');
+
+    // `xcodebuild -help` lines as Xcode 27.0 and 26.6 print them (to stderr); older Xcodes lack the option.
+    const HELP_27 = '    -downloadAllPlatforms                                    downloads a matching simulator runtime for every platform in this Xcode\n'
+        + '    -prepareDeviceSupport                                    prepares the Device Support symbols folder for the device\n'
+        + '    -platform PLATFORM                                       specify the platform for device support (e.g. iOS, macOS)\n';
+    const HELP_26 = HELP_27;
+    const HELP_OLDER = '    -runFirstLaunch                                          install packages and agree to the license.\n'
+        + '    -downloadAllPlatforms                                    downloads a matching simulator runtime for every platform in this Xcode\n';
+    report(toolchain.supportsPrepareDeviceSupport(HELP_27) === true, 'Xcode 27 help lists -prepareDeviceSupport');
+    report(toolchain.supportsPrepareDeviceSupport(HELP_26) === true, 'Xcode 26.6 help lists -prepareDeviceSupport');
+    report(toolchain.supportsPrepareDeviceSupport(HELP_OLDER) === false, 'a help text without the option → unsupported');
+    report(toolchain.supportsPrepareDeviceSupport('xcodebuild -prepareDeviceSupport is mentioned in prose only') === false, 'the option must start a help line');
 }
 
 // ── devicectl device lists ───────────────────────────────────────────────────────────
@@ -249,6 +265,63 @@ async function checkXcode(appPath) {
     const versions = await detectSupportedSwiftVersions();
     const newestFirst = versions.every((v, i) => i === 0 || compareVersions(versions[i - 1], v) >= 0);
     report(versions.includes('5') && versions.includes('6') && newestFirst, 'live swiftc probe lists language modes, newest first', JSON.stringify(versions));
+
+    await checkPrepareDeviceSupport();
+}
+
+// ── xcodebuild -prepareDeviceSupport, live ───────────────────────────────────────────
+//
+// No device is needed: an id no device has makes xcodebuild search for -destination-timeout
+// seconds and exit 1 with "No matches found", and an abort during that search must kill it.
+
+const UNKNOWN_DEVICE_ID = '00000000-000000000000000A';
+
+function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, rejectTimeout) => { timer = setTimeout(() => rejectTimeout(new Error(`${label} took longer than ${ms} ms`)), ms); });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function prepareProcessesLeft() {
+    try {
+        return execFileSync('pgrep', ['-f', 'xcodebuild -prepareDeviceSupport'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).length;
+    } catch {
+        return 0; // pgrep exits 1 when nothing matches
+    }
+}
+
+async function checkPrepareDeviceSupport() {
+    const { prepareDeviceSupport } = require(path.join(OUT, 'utils/deviceSupport.js'));
+    report(await toolchain.canPrepareDeviceSupport() === true, 'xcodebuild -help reports -prepareDeviceSupport');
+
+    let rejection = null;
+    const started = Date.now();
+    try {
+        await withTimeout(prepareDeviceSupport(UNKNOWN_DEVICE_ID, { searchTimeoutSeconds: 1 }), 30000, 'unknown-device search');
+    } catch (error) {
+        rejection = error;
+    }
+    report(rejection !== null && /No matches found/.test(rejection.message), 'an unknown device is rejected with "No matches found"', `${rejection && rejection.message} after ${Date.now() - started} ms`);
+
+    const abort = new AbortController();
+    setTimeout(() => abort.abort(), 500);
+    let aborted = null;
+    try {
+        await withTimeout(prepareDeviceSupport(UNKNOWN_DEVICE_ID, { searchTimeoutSeconds: 20, signal: abort.signal }), 10000, 'abort');
+    } catch (error) {
+        aborted = error;
+    }
+    report(aborted !== null && aborted.name === 'PrepareAbortedError', 'an abort during the search rejects as PrepareAbortedError', aborted && aborted.name);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    report(prepareProcessesLeft() === 0, 'the aborted xcodebuild is gone', `${prepareProcessesLeft()} left`);
+
+    let malformed = null;
+    try {
+        await prepareDeviceSupport('not an id; rm -rf /');
+    } catch (error) {
+        malformed = error;
+    }
+    report(malformed !== null && /malformed device identifier/.test(malformed.message), 'a malformed id is rejected before xcodebuild runs');
 }
 
 async function main() {

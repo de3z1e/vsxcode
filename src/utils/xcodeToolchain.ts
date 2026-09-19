@@ -39,8 +39,8 @@ export interface XcodeToolchain {
 const DEVELOPER_SUFFIX = `${path.sep}Contents${path.sep}Developer`;
 /** Xcode 27 replaced Simulator.app with Device Hub. */
 const DEVICE_HUB_MIN_MAJOR = 27;
-/** CoreSimulator device identifiers are hex and dashes; anything else never reaches a shell. */
-const SIMULATOR_UDID = /^[0-9A-Fa-f-]+$/;
+/** CoreSimulator and CoreDevice identifiers are hex and dashes; anything else never reaches a shell or a destination specifier. */
+export const DEVICE_ID_PATTERN = /^[0-9A-Fa-f-]+$/;
 const VERSION_TIMEOUT_MS = 15000;
 
 /** "Xcode 27.0\nBuild version 27A266a" → { major: 27, minor: 0 }. */
@@ -154,6 +154,48 @@ export function currentXcodeToolchain(): XcodeToolchain {
     return cached.toolchain;
 }
 
+// ── Preparing device support ─────────────────────────────
+//
+// `xcodebuild -prepareDeviceSupport` (listed by Xcode 26.6 and 27.0, absent from older Xcodes) is
+// probed from `xcodebuild -help`, whose option list goes to stderr. The probe stays off the
+// synchronous path: `currentXcodeToolchain` runs from the task providers, where a second xcodebuild
+// launch would stall the extension host.
+
+export function supportsPrepareDeviceSupport(helpOutput: string): boolean {
+    return /^\s*-prepareDeviceSupport\b/m.test(helpOutput);
+}
+
+let prepareSupportCache: { key: string; supported: boolean } | null = null;
+
+/** Whether the selected Xcode's xcodebuild can prepare device support; a failed probe is false and is probed again next call. */
+export async function canPrepareDeviceSupport(): Promise<boolean> {
+    let developerDir = '';
+    try {
+        developerDir = (await execFile('xcode-select', ['-p'], { encoding: 'utf8' })).stdout.trim();
+    } catch {
+        return false;
+    }
+    const key = cacheKey(developerDir);
+    if (prepareSupportCache && prepareSupportCache.key === key) {
+        return prepareSupportCache.supported;
+    }
+    let helpOutput = '';
+    try {
+        const result = await execFile('xcodebuild', ['-help'], { encoding: 'utf8', timeout: VERSION_TIMEOUT_MS });
+        helpOutput = result.stdout + result.stderr;
+    } catch (error) {
+        // An xcodebuild that exits non-zero for -help still printed its options; a timeout or a missing tool printed nothing.
+        const failed = error as { stdout?: string; stderr?: string };
+        helpOutput = (failed.stdout ?? '') + (failed.stderr ?? '');
+        if (!helpOutput.trim()) {
+            return false;
+        }
+    }
+    const supported = supportsPrepareDeviceSupport(helpOutput);
+    prepareSupportCache = { key, supported };
+    return supported;
+}
+
 // ── Showing a simulator ──────────────────────────────────
 
 /** Device Hub's own way to bring one device to the front; handed to the selected Xcode's bundle with `open -a <bundle> <url>`. */
@@ -172,7 +214,7 @@ function shellQuote(value: string): string {
  */
 export function revealSimulatorCommand(udid: string, toolchain: XcodeToolchain = currentXcodeToolchain()): string {
     const ui = toolchain.simulatorUI;
-    if (!ui || !SIMULATOR_UDID.test(udid)) {
+    if (!ui || !DEVICE_ID_PATTERN.test(udid)) {
         return 'true';
     }
     switch (ui.kind) {
@@ -189,7 +231,7 @@ export async function revealSimulator(udid: string, toolchain: XcodeToolchain = 
     if (!ui) {
         throw new Error(`no simulator app found under ${toolchain.developerDir || 'the selected Xcode'}`);
     }
-    if (!SIMULATOR_UDID.test(udid)) {
+    if (!DEVICE_ID_PATTERN.test(udid)) {
         throw new Error(`malformed simulator identifier "${udid}"`);
     }
     switch (ui.kind) {

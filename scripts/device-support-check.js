@@ -8,7 +8,9 @@
  * architecture folder (`arm64e/`). This runs the compiled src/utils/deviceSupport.ts over temp
  * folders laid out each way, over the partial states an interrupted or in-progress copy leaves
  * behind, and — when this Mac has one — over the real tree, where every device folder must resolve
- * to what an independent restatement of the rule picks.
+ * to what an independent restatement of the rule picks. It also reads `xcodebuild
+ * -prepareDeviceSupport` transcripts recorded from Xcode 27.0 and 26.6 (device names and ids
+ * replaced by placeholders), whole and cut mid-line, through the output parser the runner uses.
  *
  * Usage: npm run test:device-support
  */
@@ -19,7 +21,7 @@ const os = require('os');
 const path = require('path');
 
 const OUT = path.join(path.resolve(__dirname, '..'), 'out');
-const { DEVICE_SUPPORT_ROOT, deviceSupportFolderName, findDeviceSymbols } = require(path.join(OUT, 'utils/deviceSupport.js'));
+const { DEVICE_SUPPORT_ROOT, deviceSupportFolderName, findDeviceSymbols, parsePrepareOutput } = require(path.join(OUT, 'utils/deviceSupport.js'));
 
 let failures = 0;
 function report(ok, label, detail) {
@@ -124,10 +126,82 @@ async function checkRealTree() {
     if (checked === 0) { console.log('  skip  no device folders to check'); }
 }
 
+
+// ── xcodebuild -prepareDeviceSupport transcripts ─────────────────────────────────────
+//
+// Recorded 2026-09-19. Progress is appended to one line without newlines, so every prefix of a
+// transcript is something the runner really sees mid-way.
+
+const COPY_RUN_27 = `Starting Device Support Preparation
+-----------------------------------
+Searching for 30.0 seconds with ["id": "00000000-0000-4000-8000-000000000001", "platform": "iOS"]
+Located My iPhone 00008150-000000000000000A
+[My iPhone] Copying ....100%
+[My iPhone] Extracting .....80%...80%...80%...98%...98%
+[My iPhone] Finished
+`;
+const EXISTING_27 = `Starting Device Support Preparation
+-----------------------------------
+Searching for 60.0 seconds with ["id": "00008150-000000000000000A", "platform": "iOS"]
+Located My iPhone 00008150-000000000000000A
+Existing Device Support '/Users/me/Library/Developer/Xcode/iOS DeviceSupport/iPhone18,2 27.0 (24A437)/arm64e/Symbols'
+[My iPhone] Finished
+`;
+// Xcode 26.6: two DVTDeviceOperation lines and no closing quote after the path.
+const EXISTING_26 = `Starting Device Support Preparation
+-----------------------------------
+Searching for 60.0 seconds with [:]
+Located My iPhone 00008150-000000000000000A
+2026-09-19 14:33:10.677 xcodebuild[74325:51231267]  DVTDeviceOperation: Encountered a build number "" that is incompatible with DVTBuildVersion.
+2026-09-19 14:33:10.677 xcodebuild[74325:51231256] [MT] DVTDeviceOperation: Encountered a build number "" that is incompatible with DVTBuildVersion.
+Existing Device Support '/Users/me/Library/Developer/Xcode/iOS DeviceSupport/iPhone18,2 26.6.2 (23G90)/Symbols
+[My iPhone] Finished
+`;
+const NOT_FOUND = `Starting Device Support Preparation
+-----------------------------------
+Searching for 5.0 seconds with ["id": "00000000-000000000000000A", "platform": "iOS"]
+No matches found for locator: CoreDevice
+No matches found for locator: CoreDevice
+No matches found for locator: CoreDevice
+No matches found
+`;
+// The literal exists in Xcode3Core; the reason text is a placeholder.
+const CACHING_FAILED = COPY_RUN_27.split('[My iPhone] Extracting')[0] + 'Symbol caching failed: The device disconnected.\n';
+
+function prefixUpTo(transcript, marker) {
+    const index = transcript.indexOf(marker);
+    if (index < 0) { throw new Error(`marker not in transcript: ${marker}`); }
+    return transcript.slice(0, index + marker.length);
+}
+
+function expectParsed(label, output, expected) {
+    const parsed = parsePrepareOutput(output);
+    const mismatches = Object.keys(expected).filter((key) => parsed[key] !== expected[key]);
+    report(mismatches.length === 0, label, mismatches.length === 0 ? `${parsed.phase} ${parsed.percent}%` : JSON.stringify(parsed));
+}
+
+function checkOutputParsing() {
+    console.log('xcodebuild -prepareDeviceSupport output');
+    expectParsed('a finished copy run: located, finished', COPY_RUN_27, { deviceName: 'My iPhone', phase: 'finished', existingSymbolsPath: undefined, failure: undefined });
+    expectParsed('cut before any progress: searching', prefixUpTo(COPY_RUN_27, 'Located My iPhone 00008150-000000000000000A\n'), { deviceName: 'My iPhone', phase: 'searching', percent: 0 });
+    expectParsed('cut inside the first percentage (Copying ....10): copying 0%', prefixUpTo(COPY_RUN_27, 'Copying ....10'), { phase: 'copying', percent: 0 });
+    expectParsed('cut after the copy completed: copying 100%', prefixUpTo(COPY_RUN_27, 'Copying ....100%'), { phase: 'copying', percent: 100 });
+    expectParsed('cut inside a later percentage (…80%...9): extracting 80%', prefixUpTo(COPY_RUN_27, 'Extracting .....80%...80%...80%...9'), { phase: 'extracting', percent: 80 });
+    expectParsed('cut at the end of extraction: extracting 98%', prefixUpTo(COPY_RUN_27, '...98%...98%'), { phase: 'extracting', percent: 98 });
+    expectParsed('Xcode 27 existing folder: path between quotes', EXISTING_27, { phase: 'finished', existingSymbolsPath: '/Users/me/Library/Developer/Xcode/iOS DeviceSupport/iPhone18,2 27.0 (24A437)/arm64e/Symbols' });
+    expectParsed('Xcode 26.6 existing folder: path without a closing quote, noise ignored', EXISTING_26, { deviceName: 'My iPhone', phase: 'finished', existingSymbolsPath: '/Users/me/Library/Developer/Xcode/iOS DeviceSupport/iPhone18,2 26.6.2 (23G90)/Symbols', failure: undefined });
+    expectParsed('unknown device: failure "No matches found", still searching', NOT_FOUND, { deviceName: undefined, phase: 'searching', failure: 'No matches found' });
+    expectParsed('symbol caching failure: its reason', CACHING_FAILED, { phase: 'copying', percent: 100, failure: 'The device disconnected.' });
+    expectParsed('empty output: searching', '', { deviceName: undefined, phase: 'searching', percent: 0, failure: undefined });
+    const bracketed = COPY_RUN_27.split('My iPhone').join('My iPhone [work]');
+    expectParsed('a device name holding brackets still parses', prefixUpTo(bracketed, 'Copying ....100%'), { deviceName: 'My iPhone [work]', phase: 'copying', percent: 100 });
+}
+
 async function main() {
     checkNames();
     await checkLayouts();
     await checkRealTree();
+    checkOutputParsing();
     if (failures > 0) {
         console.log(`\n${failures} device-support check failure(s).`);
         process.exit(1);
