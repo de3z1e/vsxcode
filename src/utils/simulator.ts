@@ -365,25 +365,3 @@ function sleepUntilAborted(ms: number, signal?: AbortSignal): Promise<void> {
         signal?.addEventListener('abort', finish, { once: true });
     });
 }
-
-/**
- * Check if Xcode has cached device symbols for the given physical device.
- * Xcode stores extracted shared cache symbols in:
- *   ~/Library/Developer/Xcode/iOS DeviceSupport/<productType> <osVersion> (<buildVersion>)/Symbols/
- * Returns the Symbols path if found and finalized, or undefined if missing.
- */
-export async function findDeviceSymbols(device: PhysicalDevice): Promise<string | undefined> {
-    if (!device.productType || !device.osVersion || !device.osBuildVersion) {
-        return undefined;
-    }
-    const supportDir = path.join(os.homedir(), 'Library', 'Developer', 'Xcode', 'iOS DeviceSupport');
-    const expectedName = `${device.productType} ${device.osVersion} (${device.osBuildVersion})`;
-    const symbolsPath = path.join(supportDir, expectedName, 'Symbols');
-    try {
-        await fsp.access(path.join(supportDir, expectedName, '.finalized'));
-        await fsp.access(symbolsPath);
-        return symbolsPath;
-    } catch {
-        return undefined;
-    }
-}

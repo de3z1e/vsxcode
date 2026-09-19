@@ -49,6 +49,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   breakpoints, a no-reason initial-attach stop) and the user stops it must never resume (breakpoint, step, a pause
   that lldb-dap reports exactly like the launch SIGSTOP, crashes, anything unrecognized), plus the pending-request
   transitions. Needs no Xcode.
+- `npm run test:device-support` — Run the compiled device-symbols lookup (`src/utils/deviceSupport.ts`) over
+  temp folders in both layouts Xcode uses under `~/Library/Developer/Xcode/iOS DeviceSupport` (flat up to
+  Xcode 26, per-architecture from Xcode 27), the partial states a copy leaves behind, and every device folder
+  in this Mac's real tree. Needs no Xcode.
 
 No test framework or linter is configured; the checks are plain Node scripts.
 
@@ -183,6 +187,10 @@ src/
     │                              (SIGSTOP, negative-id breakpoints, no reason) are resumed; breakpoint, step,
     │                              pause (told apart from the launch SIGSTOP by the client's last request),
     │                              exception and unknown stops stay (no vscode import)
+    ├── deviceSupport.ts         — Xcode's device-symbols folders (`~/Library/Developer/Xcode/iOS DeviceSupport/
+    │                              <productType> <osVersion> (<build>)`): the folder name and the Symbols lookup
+    │                              in both layouts, flat (Xcode 26 and earlier) and per-architecture (Xcode 27)
+    │                              (no vscode import)
     └── simulator.ts             — Simulators via xcrun simctl; physical devices via devicectl, read from the
                                    JSON v5 `properties` dictionary (Xcode 27) or the older top-level keys,
                                    simulators excluded; simulator app process discovery

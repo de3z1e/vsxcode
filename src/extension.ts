@@ -27,7 +27,8 @@ import { parseResourcesForTarget, scanForUnhandledFiles } from './parsers/resour
 import { generateSwiftSettings, effectiveSwiftMajor } from './generators/swiftSettings';
 import { generateLinkerSettings } from './generators/linkerSettings';
 import { buildPackageSwift, formatPackageDependencyEntry } from './generators/packageSwift';
-import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, findDeviceSymbols, getMyMacDestination, listSimulatorAppProcesses, waitForNewSimulatorAppProcess } from './utils/simulator';
+import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDeviceReady, getMyMacDestination, listSimulatorAppProcesses, waitForNewSimulatorAppProcess } from './utils/simulator';
+import { findDeviceSymbols } from './utils/deviceSupport';
 import type { SimulatorAppQuery, SimulatorAppProcess } from './utils/simulator';
 import { getDestinationType, builtAppPath, derivedDataBasePath } from './utils/destination';
 import { detectXcodeToolchain, revealSimulator } from './utils/xcodeToolchain';
