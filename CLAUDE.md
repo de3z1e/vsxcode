@@ -60,6 +60,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   Xcode 26, per-architecture from Xcode 27), the partial states a copy leaves behind, and every device folder
   in this Mac's real tree; and the `xcodebuild -prepareDeviceSupport` output parser over transcripts recorded
   from Xcode 27.0 and 26.6, whole and cut mid-line. Needs no Xcode.
+- `npm run test:agent-guide` — Run the compiled agent guide link builder (`src/utils/agentGuide.ts`) over the
+  repository URL forms `package.json` may use; check that this repository's `package.json` links
+  `docs/AGENT_README.md` at `v<version>` and that the guide exists at that path; and check the copied prompt
+  stays on one line, naming the selected project and scheme only when there is a selection. Needs no Xcode.
 
 No test framework or linter is configured; the checks are plain Node scripts.
 
@@ -96,7 +100,7 @@ Also contains inline helpers: `generateCSettings`, `formatProductType`, `printTo
 | `vsxcode.createFromXcodeproj` | Generate Package.swift (Debug config) |
 | `vsxcode.createFromXcodeprojWithOptions` | Generate Package.swift (QuickPick config selection) |
 | `vsxcode.generateBuildTasks` | Interactive build task configuration |
-| `vsxcode.sidebar.*` | 15 sidebar commands: changeProject, changeTarget, changeScheme, changeBundleId, toggleDevBundleId (+ enableDevBundleId/disableDevBundleId inline wrappers), uninstallStaleAppsOnSimulator, selectSimulator, changeSwiftVersion, changeStrictConcurrency, build, buildAndRun, refresh, cleanDerivedData |
+| `vsxcode.sidebar.*` | 16 sidebar commands: changeProject, changeTarget, changeScheme, changeBundleId, toggleDevBundleId (+ enableDevBundleId/disableDevBundleId inline wrappers), uninstallStaleAppsOnSimulator, selectSimulator, changeSwiftVersion, changeStrictConcurrency, build, buildAndRun, refresh, cleanDerivedData, copyAgentPrompt |
 
 ### Module Map
 
@@ -203,6 +207,9 @@ src/
     │                              preparing a missing folder with `xcodebuild -prepareDeviceSupport -destination
     │                              platform=iOS,id=<id>` (spawned detached, abortable, settled on the exit code)
     │                              and the parser of its one-line progress output (no vscode import)
+    ├── agentGuide.ts            — The sidebar's agent prompt: the raw GitHub link to `docs/AGENT_README.md` at
+    │                              the installed version's tag `v<version>`, and the one-line prompt around it
+    │                              that names the selected project and scheme (no vscode import)
     └── simulator.ts             — Simulators via xcrun simctl; physical devices via devicectl, read from the
                                    JSON v5 `properties` dictionary (Xcode 27) or the older top-level keys,
                                    simulators excluded; simulator app process discovery
@@ -228,6 +235,7 @@ src/
 - **swift-format**: Auto-detects binary, discovers workspace/project config files, format-on-save via DocumentFormattingEditProvider, webview UI for rule configuration in sidebar
 - **XCTest integration**: Discovers test targets from pbxproj, runs via xcodebuild, parses results (xcresulttool), xccov code coverage
 - **Diff view**: Shows current vs generated Package.swift before overwriting
+- **Agent guide link**: the Xcode Build view's **Copy Prompt for AI Agent** title button (✨) copies a one-line prompt any AI agent can act on. It links `docs/AGENT_README.md` as raw GitHub content at the tag `v<version>` of the installed extension, with the version and repository read from `context.extension.packageJSON` when clicked. It also names the selected project and scheme, which live in workspace state where an agent can't see them. It writes nothing to the workspace. The link works only for versions published with `npm run release`, which creates the tag
 - **Activation**: `workspaceContains:**/*.pbxproj` and `onDebug`
 
 ### Package.swift Features

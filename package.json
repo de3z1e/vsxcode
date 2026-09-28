@@ -163,6 +163,11 @@
                 "command": "vsxcode.syncProjectFiles",
                 "title": "Swift: Sync Project Files to Xcode Project",
                 "icon": "$(sync)"
+            },
+            {
+                "command": "vsxcode.sidebar.copyAgentPrompt",
+                "title": "Copy Prompt for AI Agent",
+                "icon": "$(sparkle)"
             }
         ],
         "menus": {
@@ -191,6 +196,11 @@
                     "command": "vsxcode.sidebar.cleanDerivedData",
                     "when": "view == vsxcode.sidebar",
                     "group": "navigation@5"
+                },
+                {
+                    "command": "vsxcode.sidebar.copyAgentPrompt",
+                    "when": "view == vsxcode.sidebar",
+                    "group": "navigation@6"
                 }
             ],
             "view/item/context": [
@@ -282,7 +292,8 @@
         "test:swiftpm-project": "npm run compile && node scripts/swiftpm-project-check.js",
         "test:toolchain": "npm run compile && node scripts/toolchain-check.js",
         "test:debug-stops": "npm run compile && node scripts/debug-stops-check.js",
-        "test:device-support": "npm run compile && node scripts/device-support-check.js"
+        "test:device-support": "npm run compile && node scripts/device-support-check.js",
+        "test:agent-guide": "npm run compile && node scripts/agent-guide-check.js"
     },
     "files": [
         "out",

@@ -34,6 +34,7 @@ import { getDestinationType, builtAppPath, derivedDataBasePath } from './utils/d
 import { detectXcodeToolchain, revealSimulator, canPrepareDeviceSupport } from './utils/xcodeToolchain';
 import { classifyStop, pendingUserStopAfterRequest } from './utils/debugStops';
 import type { PendingUserStop, StoppedEventBody } from './utils/debugStops';
+import { agentGuidePrompt, agentGuideUrl } from './utils/agentGuide';
 import {
     derivedSourcesHomeRelativePath,
     derivedSourcesPathForWorkspace,
@@ -2440,6 +2441,26 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    const copyAgentPromptCmd = vscode.commands.registerCommand(
+        'vsxcode.sidebar.copyAgentPrompt',
+        async () => {
+            const { version, repository } = context.extension.packageJSON as { version: string; repository?: { url?: string } };
+            const guideUrl = agentGuideUrl(repository?.url, version);
+            if (!guideUrl) {
+                vscode.window.showErrorMessage('VSXcode: the agent guide link couldn\'t be built from the extension\'s repository URL.');
+                return;
+            }
+            const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            await vscode.env.clipboard.writeText(agentGuidePrompt({
+                guideUrl,
+                version,
+                projectFile: config?.projectFile,
+                schemeName: config?.schemeName,
+            }));
+            vscode.window.showInformationMessage('VSXcode: copied a prompt for your AI agent. Paste it into the agent\'s chat.');
+        }
+    );
+
     const cleanDerivedDataCmd = vscode.commands.registerCommand(
         'vsxcode.sidebar.cleanDerivedData',
         async () => {
@@ -2742,7 +2763,7 @@ export function activate(context: vscode.ExtensionContext): void {
         changeProjectCmd, changeTargetCmd, changeSchemeCmd, changeBundleIdCmd,
         toggleDevBundleIdCmd, enableDevBundleIdCmd, disableDevBundleIdCmd, uninstallStaleAppsCmd,
         selectSimulatorCmd, changeSwiftVersionCmd, changeStrictConcurrencyCmd, buildCmd, buildAndRunCmd, refreshCmd,
-        cleanDerivedDataCmd,
+        cleanDerivedDataCmd, copyAgentPromptCmd,
         watcher, onProjectChange, dyldTracker, onDebugStart, onDebugEnd, onTaskEnd,
         outputChannel
     );
