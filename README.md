@@ -2,9 +2,9 @@
 
 Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on simulators, physical devices, and your Mac, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS and macOS apps directly from VS Code.
 
-### What's new in 3.11.0
+### What's new in 3.12.0
 
-**Debug symbols for your iPhone, prepared automatically.** When you Build & Run on a physical device whose iOS version Xcode hasn't cached symbols for on this Mac, VSXcode now prepares them itself with `xcodebuild -prepareDeviceSupport`: a cancellable **Preparing debug symbols** notification shows the copy and extraction progress, and the debugger attaches with full system symbols once it finishes. Previously the run asked you to open Xcode with the device connected, a flow Xcode 27 no longer offers. Symbols Xcode 27 has already prepared are found as well: Xcode 27 keeps them in a per-architecture folder that earlier releases didn't look in, so device debugging on Xcode 27 ran without system symbols. Xcode 26.6 has the same command and gets the same behavior; on an Xcode without it, the Open Xcode prompt remains.
+**Point any AI agent at VSXcode in one click.** The new **Copy Prompt for AI Agent** button (✨) in the Xcode Build view's title bar copies a one-line prompt to paste into Claude Code, Codex, Copilot or any other agent, in a chat panel or a terminal. The prompt links the [agent guide](docs/AGENT_README.md) for the VSXcode version you have installed. That guide tells the agent what VSXcode already does automatically and which of its commands to use to build, run and test. The prompt also names your selected project and scheme, which an agent can't see on its own.
 
 ### How It Works
 
@@ -37,7 +37,7 @@ The extension adds a panel to the Activity Bar with configurable build settings:
 
 > **Note:** the suffix applies to every target the scheme builds. Projects with embedded app extensions (whose bundle ids must stay prefixed by the host app's) will be warned once, as those targets may fail to build or install. On physical devices the new id needs provisioning — automatic signing handles it via `-allowProvisioningUpdates`; manual profiles must cover the `-dev` id.
 
-Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Project Files to Xcode Project**, and **Clean DerivedData** (deletes the current scheme's build cache — or all schemes — along with the workspace's Core Data codegen when present, reports the disk space reclaimed, and regenerates the codegen immediately).
+Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Project Files to Xcode Project**, **Clean DerivedData** (deletes the current scheme's build cache — or all schemes — along with the workspace's Core Data codegen when present, reports the disk space reclaimed, and regenerates the codegen immediately), and **Copy Prompt for AI Agent** (copies a prompt that points your AI agent at the [agent guide](docs/AGENT_README.md)).
 
 ### Commands
 
@@ -103,7 +103,7 @@ XCTest integration via the VS Code Testing sidebar — tests are discovered from
 
 ### AI agent usage
 
-Working with an AI coding assistant in a Swift project that uses VSXcode? Point your agent at [docs/AGENT_README.md](docs/AGENT_README.md) — it documents what the extension does automatically (so the agent doesn't duplicate the work) and how to invoke its build/run/debug/test capabilities (so the agent uses the wired-up tasks instead of constructing raw `xcodebuild` commands).
+Working with an AI coding assistant in a Swift project that uses VSXcode? Click **Copy Prompt for AI Agent** (✨) in the Xcode Build view's title bar and paste the prompt into your agent's chat. It points the agent at [docs/AGENT_README.md](docs/AGENT_README.md) as published for your installed version, and names your selected project and scheme. The guide documents what the extension does automatically (so the agent doesn't duplicate the work) and how to invoke its build/run/debug/test capabilities (so the agent uses the wired-up tasks instead of constructing raw `xcodebuild` commands).
 
 ### Dependencies
 
@@ -112,7 +112,7 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.11.0.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.12.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -120,5 +120,5 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Point 
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.11.0.vsix
+code --install-extension vsxcode-3.12.0.vsix
 ```
