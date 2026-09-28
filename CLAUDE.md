@@ -7,6 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run compile` — Build TypeScript from `src/` to `out/`
 - `npm run watch` — Rebuild on file changes
 - `npm run package` — Package as `.vsix` for distribution
+- `npm run release` — Publish the current version to the Marketplace and tag it. Refuses, listing every
+  reason, unless the branch is a clean `main` that matches `origin/main` and `v<version>` exists neither
+  locally nor on origin; then runs `npx vsce publish` (which compiles first through `vscode:prepublish`),
+  creates the annotated tag `v<version>` at that commit and pushes it. `npm run release -- --dry-run` runs
+  the checks and prints the commands without running them.
 - `npm run test:flag-parity` — Build a fixture Xcode project with `xcodebuild`, generate a
   `Package.swift` from the same pbxproj, build that with SwiftPM, and diff the
   semantics-affecting flags the two toolchains pass to the Swift compiler. **Re-run after
@@ -59,6 +64,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 No test framework or linter is configured; the checks are plain Node scripts.
 
 **Version bumps**: When bumping the version number, update it in **all** locations: `package.json`, `README.md`, and any other files that reference the version. Search the repo to ensure nothing is missed. The README's **What's new in x.y.z** section describes only the current release: rewrite its heading and bullets for what changed since the last version, in user-facing terms, on every bump.
+
+**Releases**: Publish only with `npm run release`, never a bare `npx vsce publish`, so every published version is tagged `v<version>` on the commit it was built from.
 
 **Important**: After every code change, always compile, package, and install the extension into VS Code:
 ```
