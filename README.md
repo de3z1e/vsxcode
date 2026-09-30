@@ -2,9 +2,9 @@
 
 Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on simulators, physical devices, and your Mac, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS and macOS apps directly from VS Code.
 
-### What's new in 3.12.0
+### What's new in 3.12.1
 
-**Point any AI agent at VSXcode in one click.** The new **Copy Prompt for AI Agent** button (✨) in the Xcode Build view's title bar copies a one-line prompt to paste into Claude Code, Codex, Copilot or any other agent, in a chat panel or a terminal. The prompt links the [agent guide](docs/AGENT_README.md) for the VSXcode version you have installed. That guide tells the agent what VSXcode already does automatically and which of its commands to use to build, run and test. The prompt also names your selected project and scheme, which an agent can't see on its own.
+**IntelliSense follows a physical device.** With a physical device selected, SourceKit-LSP now checks your code against the iOS device SDK instead of the simulator's, so code in the device-only branch of `#if targetEnvironment(simulator)` shows the errors and warnings Xcode reports for a device build. Switching between a simulator, a physical device and My Mac restarts the language server, so the change takes effect right away. The Swift extension may still offer to restart it; VSXcode already has, so you can close that notification.
 
 ### How It Works
 
@@ -12,7 +12,7 @@ Open a folder containing an `.xcodeproj` and the extension handles the rest:
 
 1. **Auto-generates `Package.swift`** from the Xcode project on activation, with correct target paths, resources, dependencies, and Swift settings.
 2. **Auto-configures build tasks** with sensible defaults (target, scheme, device/simulator). Bundle id is sourced live from `project.pbxproj` on every operation, so renames take effect immediately.
-3. **Configures SourceKit-LSP** for the active run destination so IntelliSense resolves the right SDK — the iOS simulator SDK for UIKit, or the macOS SDK when targeting My Mac.
+3. **Configures SourceKit-LSP** for the active run destination so IntelliSense resolves the right SDK — the iOS simulator SDK for a simulator, the iOS device SDK for a physical device, or the macOS SDK when targeting My Mac — and restarts the language server when you switch.
 4. **Silently regenerates** `Package.swift` whenever the `.pbxproj` file changes.
 5. **Syncs project files to the Xcode project** — when `.swift` files or `.xcdatamodeld` model bundles are added or removed in a target directory, the `.xcodeproj` is updated automatically (build file, file reference, group, and Sources-phase entries — plus the XCVersionGroup for model bundles). Swift files are matched by path, so a renamed or moved file or folder keeps its project entries and target memberships, and a new folder gets its group.
 6. **Resolves Core Data codegen in IntelliSense** — models using class/category codegen get their `NSManagedObject` subclasses generated with the same tool Xcode's build uses and fed to SourceKit-LSP, so generated types resolve without touching your model, project file, or repository — and regenerate automatically when you edit entities.
@@ -56,7 +56,7 @@ Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Project Files
 - Resolves resource file paths on disk relative to the target directory.
 - Includes per-target Swift settings translated from the target's build settings — `.swiftLanguageMode`, `.define`, `.enableUpcomingFeature`, `.enableExperimentalFeature`, `.defaultIsolation`, `.strictMemorySafety`, `.treatWarning`, `.treatAllWarnings` and `.interoperabilityMode`, falling back to `.unsafeFlags` where the tools version has no first-class form — plus linked system frameworks, resources, header search paths, target dependencies, and excluded files.
 - Runs Core Data class generation (momc) for targets with `.xcdatamodeld` models and wires the generated sources into the manifest, so codegen types resolve in IntelliSense.
-- Automatically configures SourceKit-LSP server arguments for the selected destination — the iOS simulator SDK (SDK path, target triple, framework search path), or the host macOS SDK when targeting My Mac.
+- Automatically configures SourceKit-LSP server arguments for the selected destination — the iOS simulator or device SDK (SDK path, target triple, framework search paths), or the host macOS SDK when targeting My Mac — and restarts the language server when they change.
 - Shows a diff view before overwriting when run manually from the command palette — except right after choosing **Use VSXcode fully** for a SwiftPM-generated project, whose files were just backed up.
 
 ### Build Tasks
@@ -112,7 +112,7 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Click 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.12.0.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.12.1.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -120,5 +120,5 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Click 
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.12.0.vsix
+code --install-extension vsxcode-3.12.1.vsix
 ```

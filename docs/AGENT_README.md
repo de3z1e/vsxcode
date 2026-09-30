@@ -33,8 +33,9 @@ The extension activates on `workspaceContains:**/*.pbxproj` or `onDebug`. Once a
 - If those errors appear anyway, trigger a regen — run **Clean DerivedData** (wipes and regenerates the codegen), save `project.pbxproj`, or reload the window — and check the output channel's `[codegen]` lines for momc failures.
 
 ### SourceKit-LSP server arguments
-- **What**: The extension writes `swift.sourcekit-lsp.serverArguments` into `.vscode/settings.json` with iOS-simulator SDK paths, target triple, framework search paths, and XCTest overlay paths.
-- **Don't manually edit `swift.sourcekit-lsp.serverArguments`.** It will be overwritten on next Package.swift regeneration.
+- **What**: The extension writes `swift.sourcekit-lsp.serverArguments` into `.vscode/settings.json` for the selected device: SDK path, target triple, framework search paths and XCTest overlay paths from the iOS simulator SDK for a simulator, or from the iOS device SDK for a physical device. For My Mac it removes them. When the value changes, the extension restarts SourceKit-LSP itself, so the Swift extension's "restart the language server" notification that appears alongside can be closed.
+- Only the side of `#if targetEnvironment(simulator)` that matches the selected device is type-checked. To check the other side, select a device of that kind in the sidebar.
+- **Don't manually edit `swift.sourcekit-lsp.serverArguments`.** It will be overwritten on the next Package.swift regeneration or device selection.
 - If you switch Xcode versions (`sudo xcode-select -s ...`), trigger a regeneration via the `Swift: Generate Package.swift from Xcode Project` command so the SDK paths refresh.
 
 ### swift-format integration
@@ -199,4 +200,4 @@ Before doing one of these manually, check the table:
 
 ## Version
 
-This document describes VSXcode v3.12.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
+This document describes VSXcode v3.12.1. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
