@@ -293,7 +293,8 @@
         "test:toolchain": "npm run compile && node scripts/toolchain-check.js",
         "test:debug-stops": "npm run compile && node scripts/debug-stops-check.js",
         "test:device-support": "npm run compile && node scripts/device-support-check.js",
-        "test:agent-guide": "npm run compile && node scripts/agent-guide-check.js"
+        "test:agent-guide": "npm run compile && node scripts/agent-guide-check.js",
+        "test:sourcekit-lsp": "npm run compile && node scripts/sourcekit-lsp-check.js"
     },
     "files": [
         "out",

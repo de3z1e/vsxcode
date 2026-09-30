@@ -35,6 +35,7 @@ import { detectXcodeToolchain, revealSimulator, canPrepareDeviceSupport } from '
 import { classifyStop, pendingUserStopAfterRequest } from './utils/debugStops';
 import type { PendingUserStop, StoppedEventBody } from './utils/debugStops';
 import { agentGuidePrompt, agentGuideUrl } from './utils/agentGuide';
+import { sameServerArguments, sourceKitLSPArguments } from './utils/sourceKitLSP';
 import {
     derivedSourcesHomeRelativePath,
     derivedSourcesPathForWorkspace,
@@ -116,14 +117,20 @@ function currentDestinationType(workspaceState: vscode.Memento): DestinationType
     return config ? getDestinationType(config) : 'simulator';
 }
 
+/** SourceKit-LSP reads its arguments only at launch; not awaited, since stopping the old server can take seconds. */
+function restartSourceKitLSP(logger: (message: string) => void): void {
+    logger('[sourcekit-lsp] server arguments changed; restarting the language server');
+    vscode.commands.executeCommand('swift.restartLSPServer').then(undefined, (error) => {
+        const message = (error as { message?: string }).message || String(error);
+        logger(`[sourcekit-lsp] restart failed: ${message}`);
+    });
+}
+
 /**
- * Point SourceKit-LSP at the SDK matching the selected run destination.
- * macOS indexes against the host SDK (we clear our iOS override so SwiftPM
- * uses the default macOS toolchain); iOS destinations resolve against the
- * iPhoneSimulator SDK. macOS stays in the package's platform list so
- * mac-only indexing resolves.
+ * Point SourceKit-LSP at the destination's SDK so the editor type-checks the `#if targetEnvironment(simulator)`
+ * side the build compiles; macOS clears the override so SwiftPM uses the host SDK.
  */
-async function configureSourceKitLSP(dest: DestinationType, platforms: DeploymentTarget[]): Promise<void> {
+async function configureSourceKitLSP(dest: DestinationType, platforms: DeploymentTarget[], logger: (message: string) => void): Promise<void> {
     const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
 
     // Removing a setting that isn't present still creates an empty
@@ -131,6 +138,7 @@ async function configureSourceKitLSP(dest: DestinationType, platforms: Deploymen
     const clearIfPresent = async () => {
         if (lspConfig.inspect('serverArguments')?.workspaceValue !== undefined) {
             await lspConfig.update('serverArguments', undefined, vscode.ConfigurationTarget.Workspace);
+            restartSourceKitLSP(logger);
         }
     };
 
@@ -148,22 +156,12 @@ async function configureSourceKitLSP(dest: DestinationType, platforms: Deploymen
     try {
         const cp = await import('child_process');
         const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
-        const sdkPath = `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk`;
-        const simulatorTarget = `arm64-apple-ios${iosPlatform.version}-simulator`;
-        const serverArguments = [
-            '-Xswiftc', '-sdk',
-            '-Xswiftc', sdkPath,
-            '-Xswiftc', '-target',
-            '-Xswiftc', simulatorTarget,
-            '-Xswiftc', '-F',
-            '-Xswiftc', `${sdkPath}/System/Library/Frameworks`,
-            '-Xswiftc', '-F',
-            '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks`,
-            '-Xswiftc', '-I',
-            '-Xswiftc', `${developerDir}/Platforms/iPhoneSimulator.platform/Developer/usr/lib`,
-            '-Xswiftc', '-enable-testing'
-        ];
-        await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
+        const serverArguments = sourceKitLSPArguments(dest, developerDir, iosPlatform.version);
+        // Rewriting an unchanged list (another simulator, say) would restart the server for nothing.
+        if (!sameServerArguments(lspConfig.inspect('serverArguments')?.workspaceValue, serverArguments)) {
+            await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
+            restartSourceKitLSP(logger);
+        }
     } catch {
         vscode.window.showWarningMessage(
             'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
@@ -175,7 +173,7 @@ async function configureSourceKitLSP(dest: DestinationType, platforms: Deploymen
  * Reconfigure SourceKit-LSP to match the config's destination without
  * regenerating Package.swift.
  */
-async function reconfigureSourceKitLSP(projectRoot: string, config: BuildTaskConfig): Promise<void> {
+async function reconfigureSourceKitLSP(projectRoot: string, config: BuildTaskConfig, logger: (message: string) => void): Promise<void> {
     const dest = getDestinationType(config);
     let platforms: DeploymentTarget[] = [];
     if (dest !== 'mac') {
@@ -185,7 +183,7 @@ async function reconfigureSourceKitLSP(projectRoot: string, config: BuildTaskCon
             platforms = parseDeploymentTargets(pbx);
         } catch { /* ignore — configureSourceKitLSP clears when no iOS platform */ }
     }
-    await configureSourceKitLSP(dest, platforms);
+    await configureSourceKitLSP(dest, platforms, logger);
 }
 
 // Serialized per workspace: momc is awaited between the pbxproj read and the Package.swift write, so concurrent runs would let a stale read win.
@@ -497,7 +495,7 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
     });
 
     // Point SourceKit-LSP at the SDK matching the selected run destination.
-    await configureSourceKitLSP(destinationType, platforms);
+    await configureSourceKitLSP(destinationType, platforms, logger);
 
     const packagePath = path.join(rootPath, 'Package.swift');
 
@@ -549,7 +547,7 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
     }
 }
 
-async function configureBuildTasks(rootPath: string, workspaceState: vscode.Memento): Promise<void> {
+async function configureBuildTasks(rootPath: string, workspaceState: vscode.Memento, logger: (message: string) => void): Promise<void> {
     const entries = await fsp.readdir(rootPath, { withFileTypes: true });
     const xcodeProjects = entries.filter(
         (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj')
@@ -705,7 +703,7 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
     };
 
     await workspaceState.update('buildTaskConfig', buildTaskConfig);
-    await configureSourceKitLSP(buildTaskConfig.destinationType ?? 'simulator', parseDeploymentTargets(pbxContents));
+    await configureSourceKitLSP(buildTaskConfig.destinationType ?? 'simulator', parseDeploymentTargets(pbxContents), logger);
 
     vscode.window.showInformationMessage(
         `Build tasks configured for ${selectedTarget.name} on ${simulatorPick.label}`
@@ -1411,7 +1409,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!workspaceFolders || workspaceFolders.length === 0) {
                     throw new Error('Open a workspace folder before running this command.');
                 }
-                await configureBuildTasks(workspaceFolders[0].uri.fsPath, context.workspaceState);
+                await configureBuildTasks(workspaceFolders[0].uri.fsPath, context.workspaceState, log);
                 sidebarProvider.refresh();
             } catch (error) {
                 const message = (error as { message?: string }).message as string;
@@ -1714,7 +1712,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     destinationType: pick.destinationType,
                 });
                 const updated = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-                if (updated) { await reconfigureSourceKitLSP(projectRoot, updated); }
+                if (updated) { await reconfigureSourceKitLSP(projectRoot, updated, log); }
             }
         }
     );

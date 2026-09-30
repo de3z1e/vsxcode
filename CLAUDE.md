@@ -64,6 +64,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   repository URL forms `package.json` may use; check that this repository's `package.json` links
   `docs/AGENT_README.md` at `v<version>` and that the guide exists at that path; and check the copied prompt
   stays on one line, naming the selected project and scheme only when there is a selection. Needs no Xcode.
+- `npm run test:sourcekit-lsp` — Run the compiled SourceKit-LSP argument builder (`src/utils/sourceKitLSP.ts`): the
+  simulator list must stay what earlier versions wrote, the device list must name the iPhoneOS platform, and a
+  stored value must compare equal only to the same list. Under every Xcode found among `/Applications/Xcode.app`
+  and `/Applications/Xcode_26.app` (override with a colon-separated `VSXCODE_XCODE_APPS`), every path in both
+  lists must exist, and probes type-checked with `swiftc`, the lists after a host `-target` as SwiftPM passes
+  them, must reach the `#else` of `#if targetEnvironment(simulator)` under the device list only and resolve
+  `import XCTest` under both with the test targets' simulator search paths. Requires a full Xcode. **Re-run after
+  every Xcode upgrade.**
 
 No test framework or linter is configured; the checks are plain Node scripts.
 
@@ -88,7 +96,7 @@ VS Code extension that parses Xcode `.xcodeproj` files and generates `Package.sw
 
 `src/extension.ts` — Orchestrator (~1500 lines) that registers all commands, providers, and watchers. Contains two main workflows:
 
-1. **generatePackageSwift** — Parses pbxproj, builds Package.swift, configures SourceKit-LSP for iOS simulator SDK
+1. **generatePackageSwift** — Parses pbxproj, builds Package.swift, configures SourceKit-LSP for the selected destination's SDK
 2. **configureBuildTasks** — Interactive setup of project/target/scheme/simulator, stores `BuildTaskConfig` to workspace state
 
 Also contains inline helpers: `generateCSettings`, `formatProductType`, `printToSharedPanel`, `cancelActiveRun`, `executeTaskAndWait`.
@@ -210,6 +218,9 @@ src/
     ├── agentGuide.ts            — The sidebar's agent prompt: the raw GitHub link to `docs/AGENT_README.md` at
     │                              the installed version's tag `v<version>`, and the one-line prompt around it
     │                              that names the selected project and scheme (no vscode import)
+    ├── sourceKitLSP.ts          — SourceKit-LSP server arguments for an iOS destination: the iPhoneSimulator or
+    │                              iPhoneOS SDK, triple and search paths; whether a stored value already matches
+    │                              (no vscode import)
     └── simulator.ts             — Simulators via xcrun simctl; physical devices via devicectl, read from the
                                    JSON v5 `properties` dictionary (Xcode 27) or the older top-level keys,
                                    simulators excluded; simulator app process discovery
@@ -231,7 +242,7 @@ src/
 - **Task chaining**: build-install completion triggers run-and-debug; debug session end kills debugserver
 - **Physical device support**: Build → device symbols → install via devicectl → poll device ready → launch console → attach lldb-dap. The attach hands lldb the Symbols folder Xcode extracts from the device's shared cache (`utils/deviceSupport.ts` finds it in both the flat layout of Xcode 26 and earlier and Xcode 27's per-architecture layout). When it is missing, the run refreshes the device record from devicectl (an iOS update spells a new folder) and, if the selected Xcode's xcodebuild has `-prepareDeviceSupport` (Xcode 26.6 and 27 do), runs it with `-destination platform=iOS,id=<CoreDevice id>` under a cancellable "Preparing debug symbols" notification before the install — always device mode, since the download mode answered "not available" for every build tried and then hung, and always with a destination, since without one xcodebuild takes the first device it finds. The preparation is one job per folder shared by every run that needs it: a run only waits on it, so a re-run after a build fix joins the copy instead of killing it; Cancel or a failure warns once and the run attaches without symbols. Xcodes without the flag keep the "Open Xcode" prompt. Device listing reads devicectl's JSON version 5 `properties` dictionary when `info.jsonVersion` is 5 or later (Xcode 27's CoreDevice, which every installed Xcode's devicectl uses and which also lists simulators with `reality: "simulated"`) and the deprecated top-level keys otherwise; both branches share one inclusion rule, and simulators stay sourced from simctl
 - **Xcode version gating**: `utils/xcodeToolchain.ts` describes the selected Xcode once per developer directory (re-detected when `xcode-select -p` or the bundle's `version.plist` changes) and the simulator UI choice branches on its version; the other Xcode 27 differences key on their own signals (devicectl's `info.jsonVersion`, the compiler note's wording). Xcode 27 removed Simulator.app, so from major 27 the simulator is revealed by handing Device Hub's `devices://device/open?id=<udid>` URL to the selected bundle (`open -a <DeviceHub.app> <url>`, falling back to opening the bundle), and before that by opening `Simulator.app` under the developer directory — never `open -a Simulator`, which LaunchServices resolves to whichever Xcode registered last. The supported-language-mode probe accepts both compiler wordings (`-swift-version` up to Swift 6.3, `-language-mode` from 6.4). Older Xcodes keep their previous behaviour on every path
-- **SourceKit-LSP**: Auto-configures `swift.sourcekit-lsp.serverArguments` with iOS simulator SDK paths for intellisense
+- **SourceKit-LSP**: `swift.sourcekit-lsp.serverArguments` follow the selected destination, so the editor type-checks the side of `#if targetEnvironment(simulator)` that the build compiles: a simulator gets the iPhoneSimulator SDK and `arm64-apple-ios<deployment>-simulator`, a physical device the iPhoneOS SDK and `arm64-apple-ios<deployment>`, and My Mac (or a project with no iOS platform) no arguments, so SwiftPM's host SDK applies (`utils/sourceKitLSP.ts`). SwiftPM passes its host `-target` first and these after it; the later one wins. The generated test targets keep their simulator XCTest search paths whatever the destination: `import XCTest` resolves for the device triple with them first. SourceKit-LSP reads its arguments only at launch, so a changed value is followed by `swift.restartLSPServer` (not awaited); an unchanged one (another simulator, another device) is neither rewritten nor restarted. The Swift extension shows its own "requires the language server be restarted" notification on every `swift.sourcekit-lsp` change, which VSXcode can't suppress; after VSXcode's restart it is redundant, and clicking it restarts again. The toast-free route, the Swift extension's `swift.swiftSDK` with a Darwin triple (the extension restarts the server itself when it changes), was measured on Xcode 27.0 (Swift 6.4) and rejected: SwiftPM builds `arm64-apple-ios-simulator` correctly, but `arm64-apple-ios` for macOS under the default `swiftbuild` build system and against the macOS SDK under `native`
 - **swift-format**: Auto-detects binary, discovers workspace/project config files, format-on-save via DocumentFormattingEditProvider, webview UI for rule configuration in sidebar
 - **XCTest integration**: Discovers test targets from pbxproj, runs via xcodebuild, parses results (xcresulttool), xccov code coverage
 - **Diff view**: Shows current vs generated Package.swift before overwriting
