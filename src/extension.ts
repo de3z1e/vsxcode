@@ -35,7 +35,7 @@ import { detectXcodeToolchain, revealSimulator, canPrepareDeviceSupport } from '
 import { classifyStop, pendingUserStopAfterRequest } from './utils/debugStops';
 import type { PendingUserStop, StoppedEventBody } from './utils/debugStops';
 import { agentGuidePrompt, agentGuideUrl } from './utils/agentGuide';
-import { sameServerArguments, sourceKitLSPArguments } from './utils/sourceKitLSP';
+import { destinationBuildArguments, sameArguments, sourceKitLSPArguments, withoutDestinationArguments } from './utils/sourceKitLSP';
 import {
     derivedSourcesHomeRelativePath,
     derivedSourcesPathForWorkspace,
@@ -119,7 +119,7 @@ function currentDestinationType(workspaceState: vscode.Memento): DestinationType
 
 /** SourceKit-LSP reads its arguments only at launch; not awaited, since stopping the old server can take seconds. */
 function restartSourceKitLSP(logger: (message: string) => void): void {
-    logger('[sourcekit-lsp] server arguments changed; restarting the language server');
+    logger('[sourcekit-lsp] destination arguments changed; restarting the language server');
     vscode.commands.executeCommand('swift.restartLSPServer').then(undefined, (error) => {
         const message = (error as { message?: string }).message || String(error);
         logger(`[sourcekit-lsp] restart failed: ${message}`);
@@ -128,44 +128,60 @@ function restartSourceKitLSP(logger: (message: string) => void): void {
 
 /**
  * Point SourceKit-LSP at the destination's SDK so the editor type-checks the `#if targetEnvironment(simulator)`
- * side the build compiles; macOS clears the override so SwiftPM uses the host SDK.
+ * side the build compiles; macOS (or no iOS platform) drops the arguments so SwiftPM uses the host SDK.
+ * Not `serverArguments`: changing it prompts, and it is machine-scoped in newer Swift extensions.
  */
 async function configureSourceKitLSP(dest: DestinationType, platforms: DeploymentTarget[], logger: (message: string) => void): Promise<void> {
-    const lspConfig = vscode.workspace.getConfiguration('swift.sourcekit-lsp');
+    let block: string[] | undefined;
+    const iosPlatform = platforms.find((p) => p.platform === 'iOS');
+    if (dest !== 'mac' && iosPlatform) {
+        try {
+            const cp = await import('child_process');
+            const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
+            block = sourceKitLSPArguments(dest, developerDir, iosPlatform.version);
+        } catch {
+            vscode.window.showWarningMessage(
+                'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
+            );
+            return;
+        }
+    }
 
-    // Removing a setting that isn't present still creates an empty
-    // .vscode/settings.json, so only clear when a workspace value exists.
-    const clearIfPresent = async () => {
-        if (lspConfig.inspect('serverArguments')?.workspaceValue !== undefined) {
-            await lspConfig.update('serverArguments', undefined, vscode.ConfigurationTarget.Workspace);
-            restartSourceKitLSP(logger);
+    // Only changed values are written: rewriting one would restart the server for nothing, and removing
+    // a setting that isn't present still creates an empty .vscode/settings.json.
+    let changed = false;
+    const write = async (section: string, key: string, value: string[] | undefined): Promise<boolean> => {
+        try {
+            await vscode.workspace.getConfiguration(section).update(key, value, vscode.ConfigurationTarget.Workspace);
+            changed = true;
+            return true;
+        } catch (error) {
+            const message = (error as { message?: string }).message || String(error);
+            logger(`[sourcekit-lsp] could not write ${section}.${key}: ${message}`);
+            return false;
         }
     };
 
-    if (dest === 'mac') {
-        await clearIfPresent();
-        return;
+    const build = vscode.workspace.getConfiguration('swift').inspect<unknown>('buildArguments');
+    const nextBuild = destinationBuildArguments(build?.workspaceValue, build?.globalValue, block);
+    if (nextBuild === null) {
+        logger('[sourcekit-lsp] the workspace swift.buildArguments is not a list of strings; leaving it alone');
+    } else if (!sameArguments(build?.workspaceValue, nextBuild) && !(await write('swift', 'buildArguments', nextBuild))) {
+        vscode.window.showWarningMessage('Could not configure SourceKit-LSP: VSXcode could not write swift.buildArguments to the workspace settings.');
     }
 
-    const iosPlatform = platforms.find((p) => p.platform === 'iOS');
-    if (!iosPlatform) {
-        // Nothing iOS to target — clear the override (defaults to host macOS).
-        await clearIfPresent();
-        return;
-    }
-    try {
-        const cp = await import('child_process');
-        const developerDir = cp.execSync('xcode-select -p', { encoding: 'utf8' }).trim();
-        const serverArguments = sourceKitLSPArguments(dest, developerDir, iosPlatform.version);
-        // Rewriting an unchanged list (another simulator, say) would restart the server for nothing.
-        if (!sameServerArguments(lspConfig.inspect('serverArguments')?.workspaceValue, serverArguments)) {
-            await lspConfig.update('serverArguments', serverArguments, vscode.ConfigurationTarget.Workspace);
-            restartSourceKitLSP(logger);
+    // Move out the block earlier versions wrote to serverArguments; a write fails once the setting is machine-scoped.
+    const server = vscode.workspace.getConfiguration('swift.sourcekit-lsp').inspect<unknown>('serverArguments')?.workspaceValue;
+    const serverOwn = withoutDestinationArguments(server);
+    if (serverOwn !== null) {
+        const nextServer = serverOwn.length > 0 ? serverOwn : undefined;
+        if (!sameArguments(server, nextServer)) {
+            await write('swift.sourcekit-lsp', 'serverArguments', nextServer);
         }
-    } catch {
-        vscode.window.showWarningMessage(
-            'Could not configure SourceKit-LSP: xcode-select failed. Run "xcode-select --install" in Terminal to install command-line tools.'
-        );
+    }
+
+    if (changed) {
+        restartSourceKitLSP(logger);
     }
 }
 
