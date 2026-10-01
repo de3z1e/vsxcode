@@ -173,11 +173,8 @@ async function configureSourceKitLSP(dest: DestinationType, platforms: Deploymen
     // Move out the block earlier versions wrote to serverArguments; a write fails once the setting is machine-scoped.
     const server = vscode.workspace.getConfiguration('swift.sourcekit-lsp').inspect<unknown>('serverArguments')?.workspaceValue;
     const serverOwn = withoutDestinationArguments(server);
-    if (serverOwn !== null) {
-        const nextServer = serverOwn.length > 0 ? serverOwn : undefined;
-        if (!sameArguments(server, nextServer)) {
-            await write('swift.sourcekit-lsp', 'serverArguments', nextServer);
-        }
+    if (Array.isArray(server) && serverOwn !== null && serverOwn.length < server.length) {
+        await write('swift.sourcekit-lsp', 'serverArguments', serverOwn.length > 0 ? serverOwn : undefined);
     }
 
     if (changed) {

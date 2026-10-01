@@ -99,11 +99,19 @@ function checkLists() {
     const altered = [...device];
     altered[7] = 'arm64-apple-macosx14.0';
     expect('a block with a non-iOS triple is the user\'s and stays whole', withoutDestinationArguments(altered), altered);
+    // The deployment version is whatever the project file spells; a block the builder wrote must never be missed.
+    for (const version of ['17', '17.0.1', '26.0-beta', '$(MIN_IOS_VERSION)', '']) {
+        const built = ['simulator', 'device'].flatMap((destination) => sourceKitLSPArguments(destination, '/Library/Developer/CommandLineTools', version));
+        expect(`blocks built for deployment version ${JSON.stringify(version)} go`, withoutDestinationArguments(built), []);
+    }
     expect('a string is left alone', withoutDestinationArguments('-Xswiftc -DFOO'), null);
     expect('a list holding a non-string is left alone', withoutDestinationArguments(['-Xswiftc', 3]), null);
 
     console.log('the workspace swift.buildArguments to write');
     expect('a device with nothing set', destinationBuildArguments(undefined, undefined, device), device);
+    const unusual = sourceKitLSPArguments('simulator', dev, '$(MIN_IOS_VERSION)');
+    expect('a second run with an unusual deployment version replaces the block, never adds one',
+        destinationBuildArguments(destinationBuildArguments(undefined, undefined, unusual), undefined, unusual), unusual);
     expect('the user setting is carried over, since a workspace value replaces it',
         destinationBuildArguments(undefined, ['--build-system', 'native'], device), [...device, '--build-system', 'native']);
     expect('the workspace value\'s own arguments win over the user setting',

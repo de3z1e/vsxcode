@@ -36,7 +36,8 @@ export function sameArguments(stored: unknown, next: readonly string[] | undefin
 
 const BLOCK_LENGTH = 22;
 const IOS_SDK = /\/Platforms\/iPhone(?:OS|Simulator)\.platform\/Developer\/SDKs\/iPhone(?:OS|Simulator)\.sdk$/;
-const IOS_TRIPLE = /^arm64-apple-ios\d+(?:\.\d+)*(?:-simulator)?$/;
+/** A prefix only: the version is whatever the project file spells, and a block this missed would gain a twin on every run. */
+const IOS_TRIPLE_PREFIX = 'arm64-apple-ios';
 
 /** A block `sourceKitLSPArguments` built for any destination, Xcode or deployment version, starting at `start`. */
 function isBlockAt(list: readonly string[], start: number): boolean {
@@ -50,7 +51,7 @@ function isBlockAt(list: readonly string[], start: number): boolean {
     }
     const value = (pair: number): string => list[start + pair * 2 + 1];
     return value(0) === '-sdk' && IOS_SDK.test(value(1))
-        && value(2) === '-target' && IOS_TRIPLE.test(value(3))
+        && value(2) === '-target' && value(3).startsWith(IOS_TRIPLE_PREFIX)
         && value(4) === '-F' && value(6) === '-F' && value(8) === '-I'
         && value(10) === '-enable-testing';
 }
