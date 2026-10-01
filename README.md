@@ -4,7 +4,9 @@ Lightweight Xcode project integration for VS Code — IntelliSense, build tasks,
 
 ### What's new in 3.12.1
 
-**IntelliSense follows a physical device.** With a physical device selected, SourceKit-LSP now checks your code against the iOS device SDK instead of the simulator's, so code in the device-only branch of `#if targetEnvironment(simulator)` shows the errors and warnings Xcode reports for a device build. Switching between a simulator, a physical device and My Mac restarts the language server, so the change takes effect right away. The Swift extension may still offer to restart it; VSXcode already has, so you can close that notification.
+**IntelliSense follows a physical device.** With a physical device selected, SourceKit-LSP now checks your code against the iOS device SDK instead of the simulator's, so code in the device-only branch of `#if targetEnvironment(simulator)` shows the errors and warnings Xcode reports for a device build. Switching between a simulator, a physical device and My Mac restarts the language server, so the change takes effect right away, without a prompt.
+
+**Ready for the next Swift extension.** VSXcode now hands SourceKit-LSP its arguments through the workspace's `swift.buildArguments` instead of `swift.sourcekit-lsp.serverArguments`, which the Swift extension's next release limits to user settings. Any build arguments of your own are kept. When a project VSXcode already set up opens with this version, the Swift extension may ask once to restart the language server; VSXcode has already restarted it, so you can close that notification.
 
 ### How It Works
 
@@ -56,7 +58,7 @@ Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Project Files
 - Resolves resource file paths on disk relative to the target directory.
 - Includes per-target Swift settings translated from the target's build settings — `.swiftLanguageMode`, `.define`, `.enableUpcomingFeature`, `.enableExperimentalFeature`, `.defaultIsolation`, `.strictMemorySafety`, `.treatWarning`, `.treatAllWarnings` and `.interoperabilityMode`, falling back to `.unsafeFlags` where the tools version has no first-class form — plus linked system frameworks, resources, header search paths, target dependencies, and excluded files.
 - Runs Core Data class generation (momc) for targets with `.xcdatamodeld` models and wires the generated sources into the manifest, so codegen types resolve in IntelliSense.
-- Automatically configures SourceKit-LSP server arguments for the selected destination — the iOS simulator or device SDK (SDK path, target triple, framework search paths), or the host macOS SDK when targeting My Mac — and restarts the language server when they change.
+- Automatically configures SourceKit-LSP for the selected destination through the workspace's `swift.buildArguments` — the iOS simulator or device SDK (SDK path, target triple, framework search paths), or the host macOS SDK when targeting My Mac — keeping any build arguments of your own, and restarts the language server when they change.
 - Shows a diff view before overwriting when run manually from the command palette — except right after choosing **Use VSXcode fully** for a SwiftPM-generated project, whose files were just backed up.
 
 ### Build Tasks

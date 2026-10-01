@@ -32,10 +32,12 @@ The extension activates on `workspaceContains:**/*.pbxproj` or `onDebug`. Once a
 - **Don't "fix" `Cannot find 'SomeEntity' in scope` on codegen types** by generating subclass files into the target, checking generated classes into the repo, or flipping the model's codegen to Manual/None — the model file, the repository, and pbxproj are deliberately untouched by this feature, and duplicating the classes breaks the Xcode build.
 - If those errors appear anyway, trigger a regen — run **Clean DerivedData** (wipes and regenerates the codegen), save `project.pbxproj`, or reload the window — and check the output channel's `[codegen]` lines for momc failures.
 
-### SourceKit-LSP server arguments
-- **What**: The extension writes `swift.sourcekit-lsp.serverArguments` into `.vscode/settings.json` for the selected device: SDK path, target triple, framework search paths and XCTest overlay paths from the iOS simulator SDK for a simulator, or from the iOS device SDK for a physical device. For My Mac it removes them. When the value changes, the extension restarts SourceKit-LSP itself, so the Swift extension's "restart the language server" notification that appears alongside can be closed.
+### SourceKit-LSP arguments
+- **What**: The extension keeps a block of SourceKit-LSP arguments for the selected device at the front of the workspace's `swift.buildArguments` (`.vscode/settings.json`), whose `-Xswiftc` pairs the Swift extension passes to SourceKit-LSP: SDK path, target triple, framework search paths and XCTest overlay paths from the iOS simulator SDK for a simulator, or from the iOS device SDK for a physical device. For My Mac it removes the block. Other entries in `swift.buildArguments` are kept. When the block changes, the extension restarts SourceKit-LSP itself.
 - Only the side of `#if targetEnvironment(simulator)` that matches the selected device is type-checked. To check the other side, select a device of that kind in the sidebar.
-- **Don't manually edit `swift.sourcekit-lsp.serverArguments`.** It will be overwritten on the next Package.swift regeneration or device selection.
+- **Don't manually edit the extension's block** (the `-Xswiftc` pairs from `-sdk` to `-enable-testing`). It is rewritten on the next Package.swift regeneration or device selection; entries of your own are kept, after it.
+- The Swift extension also passes `swift.buildArguments` to its own `swift build` and `swift test` tasks for the generated package, so those build for the selected iOS destination. A `swift build` run in a terminal doesn't read VS Code settings and is unaffected.
+- Earlier versions wrote `swift.sourcekit-lsp.serverArguments`; the extension moves its block out. A leftover value that VS Code flags as user-settings-only is ignored and can be deleted.
 - If you switch Xcode versions (`sudo xcode-select -s ...`), trigger a regeneration via the `Swift: Generate Package.swift from Xcode Project` command so the SDK paths refresh.
 
 ### swift-format integration
@@ -171,7 +173,7 @@ Before doing one of these manually, check the table:
 | Add or remove a Core Data model | Just create or delete the `.xcdatamodeld` bundle — pbxproj (all five structures) is updated automatically |
 | Format Swift code | Save the file (format-on-save) or invoke "Format Document" |
 | Configure swift-format rules | Open the **Code Format** sidebar panel |
-| Refresh SourceKit-LSP after Xcode version switch | Run command `vsxcode.createFromXcodeproj` to regenerate Package.swift + serverArguments |
+| Refresh SourceKit-LSP after Xcode version switch | Run command `vsxcode.createFromXcodeproj` to regenerate Package.swift and the SourceKit-LSP arguments |
 | Clean the build cache (stale build state, disk space) | Run command `vsxcode.sidebar.cleanDerivedData` — do not `rm -rf` DerivedData by hand |
 
 ---
@@ -191,7 +193,7 @@ Before doing one of these manually, check the table:
 | Path | Purpose |
 |---|---|
 | `Package.swift` | Generated. Read-only from your perspective. |
-| `.vscode/settings.json` | Contains `swift.sourcekit-lsp.serverArguments` written by the extension. Read-only for that key. |
+| `.vscode/settings.json` | Holds the extension's SourceKit-LSP block at the front of `swift.buildArguments`. Leave that block alone; other entries are yours. |
 | `.vscode/.swift-format` | swift-format rule config (JSON). Edit via Code Format sidebar; raw edits also fine. |
 | `.vscode/tasks.json` | Optional. Add `xcode-build` task entries here if you want explicit task definitions. |
 | `<project>.xcodeproj/project.pbxproj` | Source of truth for project structure. The extension reads it and (for Swift file and Core Data model create/delete on non-synchronized targets) writes to it. |
