@@ -111,7 +111,7 @@ function compareCodePoints(a: string, b: string): number {
 }
 
 /** The last component of a path, as Swift gives it: trailing slashes ignored, empty for an empty path. */
-function lastPathComponent(path: string): string {
+export function lastPathComponent(path: string): string {
     const trimmed = path.replace(/\/+$/, '');
     if (trimmed === '') { return path === '' ? '' : '/'; }
     return trimmed.slice(trimmed.lastIndexOf('/') + 1);
@@ -126,10 +126,39 @@ const BASES: Record<string, string> = {
     SDK: 'SDKROOT'
 };
 
-interface ParsedPath {
+export interface ParsedPath {
     sourceTree: string;
     /** Relative to the base, or absolute for `<absolute>`; empty when the element has no path of its own. */
     path: string;
+}
+
+/** A `path` value as parsePath reads it, or undefined where Xcode would refuse it. */
+export function readPath(raw: string): ParsedPath | undefined {
+    try {
+        return parsePath(raw, 'the path');
+    } catch (error) {
+        if (error instanceof Refusal) { return undefined; }
+        throw error;
+    }
+}
+
+/**
+ * The `path` value that reads back as `path` under `sourceTree`, as Xcode's encoder writes it: a base prefix and the raw
+ * path, or a plain path with `\` and `<` escaped. A relative path that would start with `~`, which Xcode reads as absolute
+ * and refuses after any base but `<absolute>`, is written `./~…`.
+ */
+export function formatPath(sourceTree: string, path: string): string {
+    const relative = path.startsWith('~') ? `./${path}` : path;
+    const escapePlain = (text: string): string => text.replace(/[\\<]/g, (character) => `\\${character}`);
+    switch (sourceTree) {
+        case '<group>': return escapePlain(relative);
+        case '<absolute>': return escapePlain(path);
+        default: {
+            const base = Object.keys(BASES).find((variable) => BASES[variable] === sourceTree);
+            const prefix = base !== undefined ? `<${base}>` : `<USER:${sourceTree.replace(/[\\>]/g, (character) => `\\${character}`)}>`;
+            return `${prefix}/${relative}`;
+        }
+    }
 }
 
 /**
@@ -199,8 +228,9 @@ function unescapePlainPath(raw: string, what: string): string {
 
 // ── References ───────────────────────────────────────────
 
-type Component = { kind: 'current' } | { kind: 'parent' } | { kind: 'child'; name: string };
-type Reference = { id: string } | { components: Component[] };
+export type ReferenceComponent = { kind: 'current' } | { kind: 'parent' } | { kind: 'child'; name: string };
+export type Reference = { id: string } | { components: ReferenceComponent[] };
+type Component = ReferenceComponent;
 
 /**
  * A tree or phase reference: `id:<id>`, a name path split on `/`, or an array of components, each `.`, `..`, a child
@@ -232,6 +262,70 @@ function stringComponent(text: string): Component {
     return { kind: 'child', name: text };
 }
 
+/** A reference as the text it stands for, components joined with `/`. */
+export function describeReference(reference: Reference): string {
+    return describe(reference);
+}
+
+/** A tree reference read by the grammar Xcode's decoder accepts, or why it can't be one. */
+export function readReference(value: unknown): { reference: Reference } | { problem: string } {
+    try {
+        return { reference: parseReference(value, 'the reference') };
+    } catch (error) {
+        if (error instanceof Refusal) { return { problem: error.message }; }
+        throw error;
+    }
+}
+
+/**
+ * The value Xcode's encoder writes for a name path (`GroupTreeReference.encoding`): the names joined with `/` when each
+ * is lossless (no `/`, not `.` or `..`) and the result doesn't start with `id:`, which would read as an id; else an
+ * array, with `{ "name": … }` for each name that isn't lossless.
+ */
+export function encodeReference(names: readonly string[]): string | Array<string | { name: string }> {
+    const lossless = (name: string): boolean => !name.includes('/') && name !== '.' && name !== '..';
+    const joined = names.join('/');
+    if (names.length > 0 && names.every(lossless) && !joined.startsWith('id:')) { return joined; }
+    return names.map((name) => (lossless(name) ? name : { name }));
+}
+
+/** A node a tree reference can walk: its display name, the element holding it, and its children. */
+export interface ReferenceNode<N> {
+    displayName: string;
+    parent?: N;
+    children: readonly N[];
+}
+
+/**
+ * The node a tree reference names, walked from `origin` (undefined for the top level, whose nodes are `topLevel`): `.`
+ * stays, `..` moves to the parent of the node reached so far and may not climb above `origin`, and a name must match
+ * exactly one child's display name, compared exactly. An `id:` reference asks `byId`. Else why it names nothing.
+ */
+export function resolveReference<N extends ReferenceNode<N>>(
+    reference: Reference, origin: N | undefined, topLevel: readonly N[], byId: (id: string) => N | undefined
+): { node: N } | { problem: string } {
+    if ('id' in reference) {
+        const node = byId(reference.id);
+        return node ? { node } : { problem: `"id:${reference.id}" names no element` };
+    }
+    let current = origin;
+    for (const component of reference.components) {
+        if (component.kind === 'current') { continue; }
+        if (component.kind === 'parent') {
+            if (current === origin) { return { problem: `"${describe(reference)}" climbs above where it starts` }; }
+            current = current?.parent;
+            continue;
+        }
+        const matches = (current ? current.children : topLevel).filter((node) => node.displayName === component.name);
+        if (matches.length !== 1) {
+            return { problem: `"${describe(reference)}" ${matches.length === 0 ? 'names nothing' : 'is ambiguous'}` };
+        }
+        current = matches[0];
+    }
+    if (current === origin || current === undefined) { return { problem: `"${describe(reference)}" names nothing` }; }
+    return { node: current };
+}
+
 function describe(reference: Reference): string {
     if ('id' in reference) { return `id:${reference.id}`; }
     return reference.components.map((component) => component.kind === 'child' ? component.name : component.kind === 'current' ? '.' : '..').join('/');
@@ -247,11 +341,51 @@ function childNames(reference: { components: Component[] }, what: string): strin
 
 // ── Model ────────────────────────────────────────────────
 
-type ElementKind = 'file-reference' | 'group' | 'folder' | 'variant-group' | 'version-group';
+export type ElementKind = 'file-reference' | 'group' | 'folder' | 'variant-group' | 'version-group';
 
 const ELEMENT_TAGS: Record<ElementKind, string> = {
     'file-reference': 'f', 'group': 'g', 'folder': 'd', 'variant-group': 'v', 'version-group': 'm'
 };
+
+/** Whether a file-tree `kind` is one Xcode knows (absent means a file reference). */
+export function isElementKind(kind: unknown): kind is ElementKind {
+    return own(ELEMENT_TAGS, kind) !== undefined;
+}
+
+/**
+ * What an element's own fields give: the name references and phase order use (the explicit `name`, else the last path
+ * component; a localized child is named after its `<lang>.lproj` folder), the `name` Xcode's lowering writes, and the
+ * identity its key uses (kind tag and the lower-cased path, else name). File references and folders have no `name`.
+ */
+export function elementNaming(
+    kind: ElementKind, rawPath: string, parsedPath: ParsedPath, name: string | undefined, inVariantGroup: boolean
+): { displayName: string; loweredName?: string; identity: string } {
+    const explicitName = kind === 'file-reference' || kind === 'folder' ? undefined : name;
+    const ownName = lastPathComponent(parsedPath.path);
+    let displayName = explicitName ?? ownName;
+    let loweredName = explicitName ?? (parsedPath.path.includes('/') ? ownName : undefined);
+    if (inVariantGroup) {
+        const languageFolder = parsedPath.path.split('/').find((component) => component.endsWith('.lproj'));
+        if (languageFolder) {
+            loweredName = languageFolder.slice(0, -'.lproj'.length);
+            displayName = loweredName;
+        }
+    }
+    return { displayName, loweredName, identity: `${ELEMENT_TAGS[kind]}:${(rawPath || explicitName || '').toLowerCase()}` };
+}
+
+/** A child's key: its parent's key, its identity, and `#n` when n earlier siblings share that identity. */
+export function childKey(parentKey: string, identity: string, ordinal: number): string {
+    return `${parentKey}/${identity}${ordinal > 0 ? `#${ordinal}` : ''}`;
+}
+
+/** The synthetic id for a key: the first 24 upper-case hex digits of its SHA-1, rehashed with `#collision<n>` while taken. */
+export function syntheticId(key: string, taken: (id: string) => boolean): string {
+    for (let attempt = 0; ; attempt++) {
+        const candidate = createHash('sha1').update(attempt === 0 ? key : `${key}#collision${attempt}`).digest('hex').slice(0, 24).toUpperCase();
+        if (!taken(candidate)) { return candidate; }
+    }
+}
 
 interface Element {
     id: string;
@@ -423,13 +557,9 @@ class Lowering {
             this.taken.add(explicit);
             return explicit;
         }
-        for (let attempt = 0; ; attempt++) {
-            const candidate = createHash('sha1').update(attempt === 0 ? key : `${key}#collision${attempt}`).digest('hex').slice(0, 24).toUpperCase();
-            if (!this.taken.has(candidate) && !this.reserved.has(candidate)) {
-                this.taken.add(candidate);
-                return candidate;
-            }
-        }
+        const id = syntheticId(key, (candidate) => this.taken.has(candidate) || this.reserved.has(candidate));
+        this.taken.add(id);
+        return id;
     }
 
     // ── The file tree
@@ -439,27 +569,24 @@ class Lowering {
         return list.map((entry, index) => {
             const at = [...pointer, index];
             const json = asObject(entry, `files entry ${at.join('/')}`);
-            const kind = (json.kind ?? 'file-reference') as ElementKind;
-            if (own(ELEMENT_TAGS, kind) === undefined) { refuse(`unknown file-tree kind ${JSON.stringify(json.kind)} at ${at.join('/')}`); }
-            return this.element(json, kind, at, parentKey, ordinals, parent);
+            const kind = json.kind ?? 'file-reference';
+            if (!isElementKind(kind)) { refuse(`unknown file-tree kind ${JSON.stringify(json.kind)} at ${at.join('/')}`); }
+            return this.element(json, kind, at, parentKey, ordinals, parent, false);
         });
     }
 
     private element(
-        json: Json, kind: ElementKind, pointer: JsonPointer, parentKey: string, ordinals: Map<string, number>, parent: Element | undefined
+        json: Json, kind: ElementKind, pointer: JsonPointer, parentKey: string, ordinals: Map<string, number>,
+        parent: Element | undefined, inVariantGroup: boolean
     ): Element {
         const what = `the element at ${pointer.join('/')}`;
         const rawPath = json.path === undefined ? '' : asString(json.path, `${what} "path"`);
-        const explicitName = kind === 'file-reference' || kind === 'folder' ? undefined : optionalString(json, 'name', what);
+        const name = kind === 'file-reference' || kind === 'folder' ? undefined : optionalString(json, 'name', what);
         const parsedPath = parsePath(rawPath, what);
-        const ownName = lastPathComponent(parsedPath.path);
-        const displayName = explicitName ?? ownName;
-        const loweredName = explicitName ?? (parsedPath.path.includes('/') ? ownName : undefined);
-
-        const identity = `${ELEMENT_TAGS[kind]}:${(rawPath || explicitName || '').toLowerCase()}`;
+        const { displayName, loweredName, identity } = elementNaming(kind, rawPath, parsedPath, name, inVariantGroup);
         const ordinal = ordinals.get(identity) ?? 0;
         ordinals.set(identity, ordinal + 1);
-        const key = `${parentKey}/${identity}${ordinal > 0 ? `#${ordinal}` : ''}`;
+        const key = childKey(parentKey, identity, ordinal);
         const explicitId = optionalString(json, 'id', what);
         const id = this.id(explicitId, key);
 
@@ -474,13 +601,7 @@ class Lowering {
             const childOrdinals = new Map<string, number>();
             element.children = optionalList(json, 'children', what).map((entry, index) => {
                 const at = [...pointer, 'children', index];
-                const child = this.element(asObject(entry, `${what} child ${index}`), 'file-reference', at, key, childOrdinals, element);
-                if (kind === 'variant-group') {
-                    // Xcode names a localized child after its language folder.
-                    const languageFolder = child.parsedPath.path.split('/').find((component) => component.endsWith('.lproj'));
-                    if (languageFolder) { child.loweredName = languageFolder.slice(0, -'.lproj'.length); child.displayName = child.loweredName; }
-                }
-                return child;
+                return this.element(asObject(entry, `${what} child ${index}`), 'file-reference', at, key, childOrdinals, element, kind === 'variant-group');
             });
         }
         return element;
@@ -492,27 +613,9 @@ class Lowering {
      * name must match exactly one child.
      */
     private resolveElement(reference: Reference, origin: Element | undefined, what: string): Element {
-        if ('id' in reference) {
-            const element = this.elementsByExplicitId.get(reference.id);
-            if (!element) { refuse(`${what}: "id:${reference.id}" names no element`); }
-            return element;
-        }
-        let current = origin;
-        for (const component of reference.components) {
-            if (component.kind === 'current') { continue; }
-            if (component.kind === 'parent') {
-                if (current === origin) { refuse(`${what}: "${describe(reference)}" climbs above where it starts`); }
-                current = current?.parent;
-                continue;
-            }
-            const matches = (current ? current.children : this.topLevel).filter((element) => element.displayName === component.name);
-            if (matches.length !== 1) {
-                refuse(`${what}: "${describe(reference)}" ${matches.length === 0 ? 'names nothing' : 'is ambiguous'}`);
-            }
-            current = matches[0];
-        }
-        if (current === origin || current === undefined) { refuse(`${what}: "${describe(reference)}" names nothing`); }
-        return current;
+        const resolved = resolveReference(reference, origin, this.topLevel, (id) => this.elementsByExplicitId.get(id));
+        if ('problem' in resolved) { refuse(`${what}: ${resolved.problem}`); }
+        return resolved.node;
     }
 
     // ── Targets and phases
@@ -613,6 +716,8 @@ class Lowering {
             optionalList(element.json, 'target-membership', what).forEach((entry, index) => {
                 const at = `${what} membership ${index}`;
                 const json = isObject(entry) ? entry : undefined;
+                // Xcode refuses a bare array here ("Expected an instance of dictionary"); an array reference goes in `build-phase`.
+                if (!json && typeof entry !== 'string') { refuse(`${at} isn't a phase reference or an object`); }
                 const phase = this.projectPhase(json ? json['build-phase'] : entry, at);
                 const ordinal = ordinals.get(phase.id) ?? 0;
                 ordinals.set(phase.id, ordinal + 1);

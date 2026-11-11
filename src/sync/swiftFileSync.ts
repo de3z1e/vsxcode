@@ -19,15 +19,19 @@ import {
     addGroupPath,
     addSwiftFile,
     anyEntry,
+    beginChange,
     beginProjectEdit,
+    editDeclined,
+    endChange,
     moveElement,
+    projectEditText,
     rehomeSwiftFile,
     removeSwiftFile,
     renameSwiftFile,
     setElementPaths,
     setFileReferencePath
-} from '../writers/pbxproj';
-import type { ElementPathChange, ProjectEdit } from '../writers/pbxproj';
+} from '../writers/projectEdit';
+import type { ElementPathChange, ProjectEdit } from '../writers/projectEdit';
 import {
     buildTargetMappings,
     canonicalPath,
@@ -107,6 +111,8 @@ interface SyncPass {
     synchronizedFolders?: string[];
     unregistered?: Promise<string[]>;
     unregisteredAnywhere?: Promise<string[]>;
+    /** Why the pass's text wasn't written, when a JSON session's read-back failed. */
+    unwritten?: string;
 }
 
 const isSwiftPath = (target: string): boolean => target.endsWith('.swift');
@@ -153,7 +159,7 @@ function openPass(
     log: (message: string) => void,
     identities: IdentityStore
 ): SyncPass | null {
-    const edit = beginProjectEdit(contents);
+    const edit = beginProjectEdit(contents, log);
     if (!edit) {
         log(`${LOG_PREFIX} ${path.basename(path.dirname(pbxprojPath))} can't be read, skipping`);
         return null;
@@ -304,6 +310,19 @@ function isInSynchronizedFolder(pass: SyncPass, filePath: string): boolean {
         pass.synchronizedFolders.some((folder) => filePath === folder || filePath.startsWith(folder + path.sep));
 }
 
+/** Runs one logical change; false when a JSON edit declined and undid it, groups it cached included. Always true for a pbxproj. */
+function inChange(pass: SyncPass, run: () => void): boolean {
+    const cached = new Map(pass.createdGroups);
+    beginChange(pass.edit);
+    run();
+    const landed = endChange(pass.edit);
+    if (!landed) {
+        pass.createdGroups.clear();
+        for (const [folder, group] of cached) { pass.createdGroups.set(folder, group); }
+    }
+    return landed;
+}
+
 /** The group for a folder: its own, one created earlier in the pass, or new groups under the deepest ancestor folder that has one. */
 function destinationGroup(pass: SyncPass, folder: string): string | undefined {
     const missing: string[] = [];
@@ -312,7 +331,7 @@ function destinationGroup(pass: SyncPass, folder: string): string | undefined {
         if (group) {
             if (missing.length === 0) { return group; }
             const created = addGroupPath(pass.edit, group, missing);
-            pass.createdGroups.set(folder, created);
+            if (created !== undefined) { pass.createdGroups.set(folder, created); }
             return created;
         }
         if (current === pass.root || path.dirname(current) === current) { return undefined; }
@@ -380,17 +399,22 @@ function renameChanges(pass: SyncPass, from: SpelledFolder, newName: string): El
     return [...changes.values()];
 }
 
-/** The changes that spell an existing folder the way the disk does, when only its last component differs in letter case; a difference above it is logged and left. */
-function folderCaseChanges(pass: SyncPass, entry: SpelledFolder): ElementPathChange[] {
-    if (entry.folder === entry.path) { return []; }
+/**
+ * The changes that spell an existing folder the way the disk does, when only its last component differs in letter case,
+ * with the line to log once they landed; a difference above it is logged and left.
+ */
+function folderCaseChanges(pass: SyncPass, entry: SpelledFolder): { changes: ElementPathChange[]; message?: string } {
+    if (entry.folder === entry.path) { return { changes: [] }; }
     const spelledName = path.basename(entry.folder);
     const actualName = path.basename(entry.path);
     if (path.dirname(entry.folder) !== path.dirname(entry.path) || spelledName.toLowerCase() !== actualName.toLowerCase()) {
         pass.log(`${LOG_PREFIX} ${relativeTo(pass, entry.path)} differs from the project in letter case above its own name, leaving it`);
-        return [];
+        return { changes: [] };
     }
-    pass.log(`${LOG_PREFIX} ${spelledName} renamed to ${actualName}, ${plural(entry.spellings.length, 'path')} rewritten`);
-    return renameChanges(pass, entry, actualName);
+    return {
+        changes: renameChanges(pass, entry, actualName),
+        message: `${LOG_PREFIX} ${spelledName} renamed to ${actualName}, ${plural(entry.spellings.length, 'path')} rewritten`
+    };
 }
 
 /** Moves a spelled folder's elements to `to`, under another parent: elements resolving to the folder move under the new parent's group, paths passing through it are recomputed, and descendants whose paths climb out of it keep resolving where they did. */
@@ -481,23 +505,31 @@ function syncFolders(pass: SyncPass, folderPaths: string[], renames: Rename[]): 
         }
     }
 
+    // One setElementPaths call keeps the pbxproj edit whole; a decline undoes every fix in it.
     const caseChanges: ElementPathChange[] = [];
+    const caseMessages: string[] = [];
     for (const created of present) {
         for (const entry of byDisk.get(created) ?? []) {
-            if (!paired.has(entry.folder)) { caseChanges.push(...folderCaseChanges(pass, entry)); }
+            if (paired.has(entry.folder)) { continue; }
+            const { changes, message } = folderCaseChanges(pass, entry);
+            caseChanges.push(...changes);
+            if (message) { caseMessages.push(message); }
         }
     }
-    if (caseChanges.length > 0) { setElementPaths(pass.edit, caseChanges); }
+    if (caseChanges.length > 0 && inChange(pass, () => setElementPaths(pass.edit, caseChanges))) {
+        for (const message of caseMessages) { pass.log(message); }
+    }
 
     for (const pair of pairs) {
         const { from, to } = pair;
         if (path.dirname(from.path) === path.dirname(to)) {
             const changes = renameChanges(pass, from, path.basename(to));
-            setElementPaths(pass.edit, changes);
-            pass.log(`${LOG_PREFIX} ${relativeTo(pass, from.path)} renamed to ${path.basename(to)}, ${plural(changes.length, 'path')} rewritten`);
+            if (inChange(pass, () => setElementPaths(pass.edit, changes))) {
+                pass.log(`${LOG_PREFIX} ${relativeTo(pass, from.path)} renamed to ${path.basename(to)}, ${plural(changes.length, 'path')} rewritten`);
+            }
         } else {
-            const count = moveFolder(pass, pair);
-            if (count > 0) {
+            let count = 0;
+            if (inChange(pass, () => { count = moveFolder(pass, pair); }) && count > 0) {
                 pass.log(`${LOG_PREFIX} ${relativeTo(pass, from.path)} moved to ${relativeTo(pass, path.dirname(to))}${path.basename(from.path) === path.basename(to) ? '' : ` as ${path.basename(to)}`}, ${plural(count, 'path')} rewritten`);
             }
         }
@@ -524,7 +556,9 @@ function fixLetterCase(pass: SyncPass, reference: SwiftReference): boolean {
     }
     // An <absolute> path keeps its leading "/", which the split above left as an empty first part.
     const ownPath = actual.slice(firstOwn).join('/');
-    setFileReferencePath(pass.edit, reference.id, reference.ownPath.startsWith('/') ? `/${ownPath}` : ownPath);
+    if (!inChange(pass, () => setFileReferencePath(pass.edit, reference.id, reference.ownPath.startsWith('/') ? `/${ownPath}` : ownPath))) {
+        return false;
+    }
     pass.log(`${LOG_PREFIX} ${reference.fileName} renamed to ${path.basename(reference.path)}, updated its path`);
     return true;
 }
@@ -537,19 +571,23 @@ function moveReferences(pass: SyncPass, references: SwiftReference[], destinatio
     for (const reference of references) {
         const oldName = reference.fileName;
         if (path.dirname(reference.path) === folder) {
-            renameSwiftFile(pass.edit, reference.id, fileName);
+            if (!inChange(pass, () => renameSwiftFile(pass.edit, reference.id, fileName))) { continue; }
             pass.rehomed.add(reference.id);
             relist(pass, reference, destination, [...reference.ownPath.split('/').slice(0, -1), fileName].join('/'));
             pass.log(`${LOG_PREFIX} ${oldName} renamed to ${fileName}, kept its entry`);
             moved++;
             continue;
         }
-        const groupId = destinationGroup(pass, folder);
+        let groupId: string | undefined;
+        const landed = inChange(pass, () => {
+            groupId = destinationGroup(pass, folder);
+            if (groupId) { rehomeSwiftFile(pass.edit, reference.id, groupId, fileName); }
+        });
         if (!groupId) {
-            pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, folder)}, leaving ${oldName} to the name rules`);
+            if (landed) { pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, folder)}, leaving ${oldName} to the name rules`); }
             continue;
         }
-        rehomeSwiftFile(pass.edit, reference.id, groupId, fileName);
+        if (!landed) { continue; }
         pass.rehomed.add(reference.id);
         relist(pass, reference, destination, fileName);
         pass.log(`${LOG_PREFIX} ${oldName} moved to ${relativeTo(pass, folder)}${oldName === fileName ? '' : ` as ${fileName}`}, kept its entry`);
@@ -624,18 +662,27 @@ function placePresentFile(pass: SyncPass, filePath: string): void {
     if (stale.length === 0 && !mapping) { return; }
 
     const folder = path.dirname(filePath);
-    const groupId = destinationGroup(pass, folder);
+    let groupId: string | undefined;
+    let id: string | undefined;
+    const landed = inChange(pass, () => {
+        groupId = destinationGroup(pass, folder);
+        if (!groupId) { return; }
+        if (stale.length === 1) {
+            rehomeSwiftFile(pass.edit, stale[0].id, groupId, fileName);
+        } else if (mapping) {
+            id = addSwiftFile(pass.edit, fileName, groupId, mapping.sourcesBuildPhaseId);
+        }
+    });
     if (!groupId) {
-        pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, folder)}, skipping ${fileName}`);
+        if (landed) { pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, folder)}, skipping ${fileName}`); }
         return;
     }
+    if (!landed) { return; }
     if (stale.length === 1) {
-        rehomeSwiftFile(pass.edit, stale[0].id, groupId, fileName);
         pass.rehomed.add(stale[0].id);
         relist(pass, stale[0], filePath, fileName);
         pass.log(`${LOG_PREFIX} ${fileName} moved to ${relativeTo(pass, folder)}, re-homed its entry`);
-    } else if (mapping) {
-        const id = addSwiftFile(pass.edit, fileName, groupId, mapping.sourcesBuildPhaseId);
+    } else if (mapping && id !== undefined) {
         const added: SwiftReference = { id, recordedPath: filePath, path: filePath, ownPath: fileName, fileName, exists: true };
         pass.references.push(added);
         pass.byPath.set(filePath, [added]);
@@ -699,17 +746,24 @@ async function settleMissingFile(pass: SyncPass, filePath: string): Promise<void
         pass.log(`${LOG_PREFIX} ${relativeTo(pass, filePath)} is gone but ${fileName} exists in ${relativeTo(pass, path.dirname(elsewhere))}, keeping its entry`);
         return;
     }
-    for (const reference of remaining) { removeSwiftFile(pass.edit, reference.id); }
-    pass.log(`${LOG_PREFIX} Removed ${fileName} from pbxproj`);
+    if (inChange(pass, () => { for (const reference of remaining) { removeSwiftFile(pass.edit, reference.id); } })) {
+        pass.log(`${LOG_PREFIX} Removed ${fileName} from pbxproj`);
+    }
 }
 
 /** Writes a pass's text when it changed, and records identities from what was written. */
 async function writePass(pass: SyncPass, pbxprojPath: string, contents: string): Promise<string> {
-    if (pass.edit.contents === contents) { return contents; }
-    await fsp.writeFile(pbxprojPath, pass.edit.contents, 'utf8');
-    const written = readProject(pass.edit.contents);
+    const text = projectEditText(pass.edit);
+    if (text === contents) {
+        // A JSON session whose text didn't read back writes nothing; its changes are then not counted as made.
+        const reason = editDeclined(pass.edit);
+        if (reason !== undefined) { pass.unwritten = reason; }
+        return contents;
+    }
+    await fsp.writeFile(pbxprojPath, text, 'utf8');
+    const written = readProject(text);
     if (typeof written !== 'string') { recordIdentities(pass.identities, written, pass.root, pass.canonical); }
-    return pass.edit.contents;
+    return text;
 }
 
 /**
@@ -880,6 +934,7 @@ function repointMissingFolders(pass: SyncPass): number {
 
     let repointed = 0;
     const changes: ElementPathChange[] = [];
+    const messages: string[] = [];
     for (const entry of spelled.values()) {
         const names = childNames.get(entry.folder);
         if (entry.exists || !names) { continue; }
@@ -901,12 +956,15 @@ function repointMissingFolders(pass: SyncPass): number {
             // Taken: another gone folder whose files it also holds finds no candidate, and its entries are re-homed one by one instead.
             spelledOnDisk.add(candidates[0]);
             repointed++;
-            pass.log(`${LOG_PREFIX} repair: ${relativeTo(pass, entry.folder)} is gone and ${relativeTo(pass, candidates[0])} holds its files, re-pointed its entries`);
+            messages.push(`${LOG_PREFIX} repair: ${relativeTo(pass, entry.folder)} is gone and ${relativeTo(pass, candidates[0])} holds its files, re-pointed its entries`);
         } else if (candidates.length > 1) {
             pass.log(`${LOG_PREFIX} repair: ${relativeTo(pass, entry.folder)} is gone and ${candidates.length} sibling folders hold its files, leaving it`);
         }
     }
-    if (changes.length > 0) { setElementPaths(pass.edit, changes); }
+    if (changes.length === 0) { return repointed; }
+    // One setElementPaths call keeps the pbxproj edit whole; a decline undoes every re-pointing.
+    if (!inChange(pass, () => setElementPaths(pass.edit, changes))) { return 0; }
+    for (const message of messages) { pass.log(message); }
     return repointed;
 }
 
@@ -1006,12 +1064,12 @@ export function removeMissingSwiftEntries(rootPath: string, ids: readonly string
         for (const id of ids) {
             const reference = pass.references.find((candidate) => candidate.id === id);
             if (!reference || reference.exists) { continue; }
-            removeSwiftFile(pass.edit, id);
+            if (!inChange(pass, () => removeSwiftFile(pass.edit, id))) { continue; }
             removed++;
             log(`${LOG_PREFIX} repair: removed ${reference.fileName} from pbxproj`);
         }
         await writePass(pass, pbxprojPath, contents);
-        return removed;
+        return pass.unwritten === undefined ? removed : 0;
     });
 }
 
@@ -1053,8 +1111,9 @@ export async function reconcileSwiftFiles(
         // A re-pointed folder changes where its children resolve, so it gets a pass of its own.
         const folderPass = openPass(root, pbxprojPath, contents, log, identities);
         if (!folderPass) { return none; }
-        const repointed = repointMissingFolders(folderPass);
+        let repointed = repointMissingFolders(folderPass);
         contents = await writePass(folderPass, pbxprojPath, contents);
+        if (folderPass.unwritten !== undefined) { repointed = 0; }
 
         const pass = openPass(root, pbxprojPath, contents, log, identities);
         if (!pass) { return { ...none, repointed }; }
@@ -1063,16 +1122,21 @@ export async function reconcileSwiftFiles(
         for (const reference of pass.references) {
             if (reference.exists && fixLetterCase(pass, reference)) { caseFixed++; }
         }
+        // One setElementPaths call keeps the pbxproj edit whole; a decline undoes every fix in it.
         const caseChanges: ElementPathChange[] = [];
+        const caseMessages: string[] = [];
         for (const entry of spelledFolders(pass).values()) {
             if (!entry.exists) { continue; }
-            const changes = folderCaseChanges(pass, entry);
+            const { changes, message } = folderCaseChanges(pass, entry);
             if (changes.length > 0) {
                 caseChanges.push(...changes);
-                caseFixed++;
+                if (message) { caseMessages.push(message); }
             }
         }
-        if (caseChanges.length > 0) { setElementPaths(pass.edit, caseChanges); }
+        if (caseChanges.length > 0 && inChange(pass, () => setElementPaths(pass.edit, caseChanges))) {
+            caseFixed += caseMessages.length;
+            for (const message of caseMessages) { pass.log(message); }
+        }
 
         const { rehomed, gone } = await rehomeStaleEntries(pass);
 
@@ -1106,18 +1170,27 @@ export async function reconcileSwiftFiles(
                     log(`${LOG_PREFIX} reconcile: ${relativeTo(pass, filePath)} shares its name with a missing ${owner.targetName} entry, leaving it`);
                     continue;
                 }
-                const groupId = destinationGroup(pass, path.dirname(filePath));
+                let groupId: string | undefined;
+                let id: string | undefined;
+                const landed = inChange(pass, () => {
+                    groupId = destinationGroup(pass, path.dirname(filePath));
+                    if (groupId) { id = addSwiftFile(pass.edit, fileName, groupId, owner.sourcesBuildPhaseId); }
+                });
                 if (!groupId) {
-                    log(`${LOG_PREFIX} reconcile: no PBXGroup for ${relativeTo(pass, filePath)}, skipping`);
+                    if (landed) { log(`${LOG_PREFIX} reconcile: no PBXGroup for ${relativeTo(pass, filePath)}, skipping`); }
                     continue;
                 }
-                addSwiftFile(pass.edit, fileName, groupId, owner.sourcesBuildPhaseId);
+                if (!landed || id === undefined) { continue; }
                 added++;
                 log(`${LOG_PREFIX} reconcile: added ${fileName} to ${owner.targetName}`);
             }
         }
 
         await writePass(pass, pbxprojPath, contents);
+        // A JSON session whose text didn't read back wrote none of the pass's changes.
+        if (pass.unwritten !== undefined) {
+            return { ...none, repointed, asked: toAsk.length, settled: settleGone(root, toAsk, options, log) };
+        }
         if (added > 0) { log(`${LOG_PREFIX} reconcile: added ${plural(added, 'file')} to the project`); }
         return { added, rehomed, repointed, caseFixed, asked: toAsk.length, settled: settleGone(root, toAsk, options, log) };
     });

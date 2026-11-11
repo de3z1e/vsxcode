@@ -635,6 +635,477 @@ console.log('never throws: a project nested deeper than the stack reads as unpar
     report(outcome === 'unparseable' || (outcome && typeof outcome === 'object'), 'readProject returns', typeof outcome === 'string' ? outcome : 'an index');
 }
 
+// ── Writer ────────────────────────────────────────────────
+
+const edits = load('writers/projectEdit.js');
+
+/** A fixture's objects, found by the lowered fields VSXcode reads. */
+function finder(index) {
+    const O = index.objects;
+    const ids = Object.keys(O);
+    return {
+        byPath: (value) => ids.find((id) => O[id].path === value),
+        byName: (value) => ids.find((id) => O[id].name === value),
+        sources: (targetName) => {
+            const target = index.objectsOfIsa('PBXNativeTarget').find(({ object }) => object.name === targetName)?.object;
+            return (target?.buildPhases ?? []).filter((id) => O[id].isa === 'PBXSourcesBuildPhase');
+        }
+    };
+}
+
+/** Every element id under `ids` in an index, with the build files, exception sets and project-reference groups keyed by them. */
+function subtreeIds(index, ids) {
+    const O = index.objects;
+    const out = new Set();
+    const walk = (id) => {
+        if (!O[id] || out.has(id)) { return; }
+        out.add(id);
+        for (const child of O[id].children ?? []) { walk(child); }
+        for (const set of O[id].exceptions ?? []) { out.add(set); }
+    };
+    ids.forEach(walk);
+    for (const [id, object] of Object.entries(O)) {
+        if (object.isa === 'PBXBuildFile' && out.has(object.fileRef)) { out.add(id); }
+    }
+    for (const reference of index.project?.projectReferences ?? []) {
+        if (out.has(reference.ProjectRef)) { out.add(reference.ProductGroup); }
+    }
+    return out;
+}
+
+/**
+ * One writer case: the output must read as a project with the expected change, keep every other input object's id and
+ * isa, be left unchanged by xcprojformatter (when the input is in its canonical form), and convert with Xcode's loader.
+ */
+function writerCase(label, input, { run, expect, edited = [], canonical = true }) {
+    const before = projectIndex.readProject(input);
+    const logs = [];
+    const edit = edits.beginProjectEdit(input, (message) => logs.push(message));
+    if (typeof before === 'string' || !edit) {
+        report(false, label, 'the input doesn\'t read');
+        return undefined;
+    }
+    const result = run(edit, finder(before), before);
+    const output = edits.projectEditText(edit);
+    const after = projectIndex.readProject(output);
+    const problems = [];
+    if (typeof after === 'string') {
+        problems.push(`the output reads ${after}`);
+    } else {
+        const expectation = expect(after, finder(after), result, logs, output);
+        if (expectation !== true) { problems.push(expectation || 'the expected change is missing'); }
+        const skip = subtreeIds(before, edited);
+        const lost = Object.keys(before.objects).filter((id) => !skip.has(id) && after.objects[id]?.isa !== before.objects[id].isa);
+        if (lost.length > 0) { problems.push(`${lost.length} other ids lost, e.g. ${lost.slice(0, 2).join(', ')}`); }
+    }
+    if (canonical && output !== input) {
+        const formatted = xcodeCanonical(output);
+        if (formatted !== output) {
+            const ours = output.split('\n');
+            const theirs = (formatted ?? '').split('\n');
+            const line = ours.findIndex((text, position) => text !== theirs[position]);
+            problems.push(formatted === undefined ? 'xcprojformatter rejects it' : `xcprojformatter changes line ${line + 1}: ${JSON.stringify(ours[line])} → ${JSON.stringify(theirs[line])}`);
+        }
+    }
+    if (output !== input) {
+        const conversion = xcodeConversion(output);
+        if (conversion.text === undefined) { problems.push(`Xcode ${conversion.refused ? 'refuses it' : `fails: ${conversion.error}`}`); }
+    }
+    report(problems.length === 0, label, problems.join('; ') || undefined);
+    return { output, logs, result };
+}
+
+/** The element ids holding a path value in an index's children, from the main group down a chain of display names. */
+function childNamed(index, parentId, name) {
+    return (index.objects[parentId]?.children ?? []).find((id) => projectIndex.displayName(index.objects[id]) === name);
+}
+
+function pathOf(index, names) {
+    let current = index.mainGroupId;
+    for (const name of names) {
+        current = childNamed(index, current, name);
+        if (!current) { return undefined; }
+    }
+    return current;
+}
+
+/** The phase files of a Sources phase, as file reference ids. */
+function phaseFiles(index, phaseId) {
+    return (index.objects[phaseId]?.files ?? []).map((id) => index.objects[id]?.fileRef);
+}
+
+console.log('writer: single operations, each checked against xcprojformatter and Xcode\'s loader');
+{
+    const app = texts.get('FixtureApp.xcproj.txt');
+    const index = projectIndex.readProject(app);
+    const f = finder(index);
+    const views = f.byPath('Views');
+    writerCase('addSwiftFile into a group, sorted among its Swift files', app, {
+        run: (edit, found) => edits.addSwiftFile(edit, 'Cat.swift', views, found.sources('MyApp')[0]),
+        expect: (after, _found, id) => {
+            const group = pathOf(after, ['MyApp', 'Views']);
+            const names = after.objects[group].children.map((child) => projectIndex.displayName(after.objects[child]));
+            return id !== undefined && after.objects[id]?.path === 'Cat.swift' && names.join() === 'Bar.swift,Cat.swift,ContentView.swift,Rename.swift' &&
+                phaseFiles(after, finder(after).sources('MyApp')[0]).includes(id) || `children ${names}`;
+        }
+    });
+    writerCase('removeSwiftFile, the only child of its group', app, {
+        run: (edit, found) => edits.removeSwiftFile(edit, found.byPath('Service.swift')),
+        expect: (after) => pathOf(after, ['MyApp', 'Services']) !== undefined && pathOf(after, ['MyApp', 'Services', 'Service.swift']) === undefined,
+        edited: [f.byPath('Service.swift')]
+    });
+    writerCase('renameSwiftFile, keeping its memberships', app, {
+        run: (edit, found) => edits.renameSwiftFile(edit, found.byPath('Rename.swift'), 'Renamed.swift'),
+        expect: (after) => {
+            const id = pathOf(after, ['MyApp', 'Views', 'Renamed.swift']);
+            return id !== undefined && phaseFiles(after, finder(after).sources('MyApp')[0]).includes(id);
+        },
+        edited: [f.byPath('Rename.swift')]
+    });
+    writerCase('rehomeSwiftFile into another group under a new name', app, {
+        run: (edit, found) => edits.rehomeSwiftFile(edit, found.byPath('Rename.swift'), found.byPath('Services'), 'Moved.swift'),
+        expect: (after) => pathOf(after, ['MyApp', 'Services', 'Moved.swift']) !== undefined && pathOf(after, ['MyApp', 'Views', 'Rename.swift']) === undefined,
+        edited: [f.byPath('Rename.swift')]
+    });
+    writerCase('moveElement of a multi-line group into another group', app, {
+        run: (edit, found) => edits.moveElement(edit, found.byPath('Views'), found.byPath('MyKit'), 'Views', 'Views', edits.anyEntry),
+        expect: (after) => pathOf(after, ['MyKit', 'Views', 'Bar.swift']) !== undefined && pathOf(after, ['MyApp', 'Views']) === undefined,
+        edited: [f.byPath('Views')]
+    });
+    writerCase('setFileReferencePath', app, {
+        run: (edit, found) => edits.setFileReferencePath(edit, found.byPath('Bar.swift'), 'BAR.swift'),
+        expect: (after) => pathOf(after, ['MyApp', 'Views', 'BAR.swift']) !== undefined,
+        edited: [f.byPath('Bar.swift')]
+    });
+    writerCase('setElementPaths on a group and a file', app, {
+        run: (edit, found) => edits.setElementPaths(edit, [{ id: found.byPath('Views'), path: 'Screens' }, { id: found.byPath('Helpers.swift'), path: 'Helper.swift' }]),
+        expect: (after) => pathOf(after, ['MyApp', 'Screens', 'Bar.swift']) !== undefined && pathOf(after, ['MyApp', 'Helper.swift']) !== undefined,
+        edited: [f.byPath('Views'), f.byPath('Helpers.swift')]
+    });
+    writerCase('addGroupPath of two levels, then a file in the deepest', app, {
+        run: (edit, found) => {
+            const group = edits.addGroupPath(edit, found.byPath('MyApp'), ['Features', 'Deep']);
+            return edits.addSwiftFile(edit, 'Deep.swift', group, found.sources('MyApp')[0]);
+        },
+        expect: (after, _found, id) => id !== undefined && pathOf(after, ['MyApp', 'Features', 'Deep', 'Deep.swift']) === id
+    });
+    writerCase('addSwiftFile at the top level (the main group)', app, {
+        run: (edit, found, input) => edits.addSwiftFile(edit, 'Top.swift', input.mainGroupId, found.sources('MyApp')[0]),
+        expect: (after, _found, id) => id !== undefined && childNamed(after, after.mainGroupId, 'Top.swift') === id
+    });
+}
+
+console.log('writer: the sync\'s sequences, references re-encoded where a path changes');
+{
+    const features = texts.get('features.xcproj.txt');
+    const index = projectIndex.readProject(features);
+    const f = finder(index);
+    const configs = f.byPath('Configs');
+    const base = (after) => {
+        const id = pathOf(after, ['Settings', 'Base.xcconfig']) ?? pathOf(after, ['App', 'Configs', 'Base.xcconfig']) ?? pathOf(after, ['Configs', 'Base.xcconfig']);
+        return id;
+    };
+    const configurationsUsing = (after, id) => after.objectsOfIsa('XCBuildConfiguration').filter(({ object }) => object.baseConfigurationReference === id).length;
+    const before = configurationsUsing(index, pathOf(index, ['Configs', 'Base.xcconfig']));
+    writerCase('a folder rename under a referenced xcconfig: references follow', features, {
+        run: (edit) => edits.setElementPaths(edit, [{ id: configs, path: 'Settings' }]),
+        expect: (after) => {
+            const id = pathOf(after, ['Settings', 'Base.xcconfig']);
+            return id !== undefined && configurationsUsing(after, id) === before || `${configurationsUsing(after, id)} of ${before} configurations keep it`;
+        },
+        edited: [configs]
+    });
+    writerCase('a folder move under a referenced xcconfig: references follow', features, {
+        run: (edit, found) => edits.moveElement(edit, configs, found.byPath('App'), 'Configs', 'Configs', edits.anyEntry),
+        expect: (after) => {
+            const id = pathOf(after, ['App', 'Configs', 'Base.xcconfig']);
+            return id !== undefined && configurationsUsing(after, id) === before || `${configurationsUsing(after, id)} of ${before} configurations keep it`;
+        },
+        edited: [configs]
+    });
+    writerCase('a rename of a file a ".." reference walks through', features, {
+        run: (edit, found) => edits.renameSwiftFile(edit, found.byPath('AppMain.swift'), 'Main.swift'),
+        expect: (after) => configurationsUsing(after, base(after)) === before || 'the Staging xcconfig no longer resolves',
+        edited: [f.byPath('AppMain.swift')]
+    });
+    writerCase('a letter-case fix of a file', features, {
+        run: (edit, found) => edits.setFileReferencePath(edit, found.byPath('Kit.swift'), 'KIT.swift'),
+        expect: (after) => pathOf(after, ['Kit', 'KIT.swift']) !== undefined,
+        edited: [f.byPath('Kit.swift')]
+    });
+    writerCase('a folder move of a <PROJECT>/-based group stays group-relative', features, {
+        run: (edit, found) => {
+            const vendor = found.byPath('Vendor');
+            edits.beginChange(edit);
+            edits.moveElement(edit, vendor, found.byPath('App'), 'Vendor', 'Vendor', edits.anyEntry);
+            edits.setElementPaths(edit, [{ id: vendor, path: 'Vendor' }]);
+            return edits.endChange(edit);
+        },
+        expect: (after, _found, landed) => {
+            const id = pathOf(after, ['App', 'Vendor']);
+            return landed && id !== undefined && after.objects[id].sourceTree === '<group>' || `sourceTree ${id && after.objects[id].sourceTree}`;
+        },
+        edited: [f.byPath('Vendor')]
+    });
+    writerCase('a folder move into a folder that has no group yet', features, {
+        run: (edit, found) => {
+            edits.beginChange(edit);
+            const home = edits.addGroupPath(edit, found.byPath('App'), ['Home']);
+            edits.moveElement(edit, found.byPath('Kit'), home, 'Kit', 'Kit', edits.anyEntry);
+            return edits.endChange(edit);
+        },
+        expect: (after, _found, landed) => landed && pathOf(after, ['App', 'Home', 'Kit', 'Kit.swift']) !== undefined,
+        edited: [f.byPath('Kit')]
+    });
+}
+
+console.log('writer: references in parts the lowering doesn\'t read');
+{
+    // An imported product names its project's file reference; Xcode refuses the project when that names nothing.
+    const features = texts.get('features.xcproj.txt');
+    const imported = xcodeCanonical(features.replace('\n  "targets": [', '\n  "imported-products": [\n    { "name": "libOtherKit.a", "project": "Other.xcodeproj", "target": "OtherKit", "product-id": "D1D1D1D1D1D1D1D1D1D1D1D1", "target-membership": [ "App/frameworks" ] },\n  ],\n  "targets": ['));
+    const index = projectIndex.readProject(imported ?? '');
+    if (!imported || typeof index === 'string') {
+        report(false, 'a project with an imported product reads');
+    } else {
+        const f = finder(index);
+        const other = f.byPath('Other/Other.xcodeproj');
+        writerCase('moving a project file reference: its imported product and dependency follow', imported, {
+            run: (edit, found) => edits.moveElement(edit, other, found.byPath('App'), 'Other.xcodeproj', 'Other.xcodeproj', edits.anyEntry),
+            expect: (_after, _found, _result, _logs, output) => (output.match(/"project": "App\/Other\.xcodeproj"/g) ?? []).length === 2 ||
+                'both references should read "App/Other.xcodeproj"',
+            edited: [other]
+        });
+    }
+}
+
+console.log('writer: a hand-written object closing on its last member\'s line');
+{
+    // A group written across lines that closes on its last member's line: a name added to it must go after that member.
+    const app = texts.get('FixtureApp.xcproj.txt');
+    const anchor = '    { "kind": "folder", "path": "SyncKit", "target-membership": [ "SyncKit" ] },';
+    const handWritten = app.replace(anchor, `${anchor}\n    {\n      "kind": "group",\n      "path": "Loose" },`);
+    const index = projectIndex.readProject(handWritten);
+    if (handWritten === app || typeof index === 'string') {
+        report(false, 'the hand-written variant reads');
+    } else {
+        const loose = finder(index).byPath('Loose');
+        writerCase('a field added after the last member, not inside it', handWritten, {
+            canonical: false,
+            run: (edit) => edits.setElementPaths(edit, [{ id: loose, path: 'Loose2', name: 'Shown' }]),
+            expect: (after, found) => {
+                const id = found.byName('Shown');
+                return id !== undefined && after.objects[id].path === 'Loose2' || 'the renamed group doesn\'t read as written';
+            },
+            edited: [loose]
+        });
+    }
+}
+
+console.log('writer: paths Xcode reads only when escaped or prefixed');
+{
+    const features = texts.get('features.xcproj.txt');
+    const index = projectIndex.readProject(features);
+    const f = finder(index);
+    const app = f.byPath('App');
+    const sources = f.sources('App')[0];
+    for (const [label, name, written] of [
+        ['a "<"', 'a<b.swift', 'a\\<b.swift'],
+        ['a backslash', 'back\\slash.swift', 'back\\\\slash.swift'],
+        ['a leading "~"', '~tilde.swift', './~tilde.swift'],
+        ['a non-ASCII name', `Caf${String.fromCodePoint(0xe9)}Views.swift`, `Caf${String.fromCodePoint(0xe9)}Views.swift`]
+    ]) {
+        writerCase(`addSwiftFile with ${label}`, features, {
+            run: (edit) => edits.addSwiftFile(edit, name, app, sources),
+            expect: (after, _found, id, _logs, output) => id !== undefined && output.includes(JSON.stringify(written)) || 'not written as Xcode writes it'
+        });
+    }
+    writerCase('a leading "~" after <PROJECT>/', features, {
+        run: (edit, found) => edits.setElementPaths(edit, [{ id: found.byPath('Vendor'), path: '~Vendor' }]),
+        expect: (_after, _found, _result, _logs, output) => output.includes('"<PROJECT>/./~Vendor"') || 'not written <PROJECT>/./~Vendor',
+        edited: [f.byPath('Vendor')]
+    });
+    writerCase('addSwiftFile under a <PROJECT>/-based group', features, {
+        run: (edit, found) => edits.addSwiftFile(edit, 'Extra.swift', found.byPath('Vendor'), sources),
+        expect: (after, _found, id) => id !== undefined && after.objects[id].path === 'Extra.swift' && after.objects[id].sourceTree === '<group>'
+    });
+}
+
+console.log('writer: membership forms');
+{
+    const features = texts.get('features.xcproj.txt');
+    const f = finder(projectIndex.readProject(features));
+    writerCase('one Sources phase: "<Target>/compile-sources"', features, {
+        run: (edit) => edits.addSwiftFile(edit, 'Plain.swift', f.byPath('App'), f.sources('App')[0]),
+        expect: (_after, _found, id, _logs, output) => id !== undefined && output.includes('{ "path": "Plain.swift", "target-membership": [ "App/compile-sources" ] }')
+    });
+    writerCase('two Sources phases: "id:<phase id>"', features, {
+        run: (edit) => edits.addSwiftFile(edit, 'Second.swift', f.byPath('Kit'), 'C2C2C2C2C2C2C2C2C2C2C2C2'),
+        expect: (_after, _found, id, _logs, output) => id !== undefined && output.includes('"target-membership": [ "id:C2C2C2C2C2C2C2C2C2C2C2C2" ]')
+    });
+    const special = (targetName, phases = ['compile-sources']) => `${JSON.stringify({
+        'default-configuration': 'Release', configurations: ['Debug', 'Release'], localizations: { development: 'en' },
+        files: [ { kind: 'group', path: 'Sources', children: [ { path: 'A.swift' } ] },
+            { kind: 'group', name: 'Products', children: [ { path: '<PRODUCTS>/App.app', id: 'A0A0A0A0A0A0A0A0A0A0A0A0', type: 'wrapper.application', index: false } ] } ],
+        targets: [ { name: targetName, id: 'B0B0B0B0B0B0B0B0B0B0B0B0', product: 'Products/App.app', 'product-type': 'application', 'build-phases': phases } ]
+    }, null, 2)}\n`;
+    for (const name of ['A/B', 'id:x']) {
+        const input = xcodeCanonical(special(name));
+        const index = projectIndex.readProject(input ?? '');
+        if (!input || typeof index === 'string') {
+            report(false, `a target named ${name} reads`);
+            continue;
+        }
+        const found = finder(index);
+        writerCase(`a target named ${JSON.stringify(name)}: the object form`, input, {
+            run: (edit) => edits.addSwiftFile(edit, 'New.swift', found.byPath('Sources'), found.sources(name)[0]),
+            expect: (after, _found, id) => id !== undefined && phaseFiles(after, finder(after).sources(name)[0]).includes(id)
+        });
+    }
+    const twoPhases = xcodeCanonical(special('Two', ['compile-sources', 'compile-sources']));
+    const twoIndex = projectIndex.readProject(twoPhases ?? '');
+    if (twoPhases && typeof twoIndex !== 'string') {
+        const logs = [];
+        const edit = edits.beginProjectEdit(twoPhases, (message) => logs.push(message));
+        const id = edits.addSwiftFile(edit, 'New.swift', finder(twoIndex).byPath('Sources'), finder(twoIndex).sources('Two')[0]);
+        report(id === undefined && edits.projectEditText(edit) === twoPhases && logs.some((line) => line.includes('several Sources phases')),
+            'two Sources phases without ids: declined, text unchanged, logged', logs[0]);
+    } else {
+        report(false, 'a target with two unnamed Sources phases reads');
+    }
+}
+
+console.log('writer: declines undo their change, and only it');
+{
+    const app = texts.get('FixtureApp.xcproj.txt');
+    // Rename.swift's object repeats a key: Xcode reads the first, and the writer never edits such an object.
+    const repeated = app.replace('{ "path": "Rename.swift", "target-membership"', '{ "path": "Rename.swift", "index": true, "index": true, "target-membership"');
+    const index = projectIndex.readProject(repeated);
+    const f = finder(index);
+    const views = f.byPath('Views');
+    const sources = f.sources('MyApp')[0];
+    writerCase('a change declining midway is undone whole; the changes around it land', repeated, {
+        canonical: false,
+        run: (edit) => {
+            const landed = [];
+            edits.beginChange(edit);
+            edits.addSwiftFile(edit, 'One.swift', views, sources);
+            landed.push(edits.endChange(edit));
+            edits.beginChange(edit);
+            const made = edits.addGroupPath(edit, views, ['Made']);
+            edits.moveElement(edit, f.byPath('Rename.swift'), made, 'Rename.swift', 'Rename.swift', edits.anyEntry);
+            const afterDecline = edits.addSwiftFile(edit, 'Lost.swift', views, sources);
+            landed.push(edits.endChange(edit));
+            edits.beginChange(edit);
+            const again = edits.addGroupPath(edit, views, ['Made']);
+            edits.addSwiftFile(edit, 'Three.swift', again, sources);
+            landed.push(edits.endChange(edit));
+            return { landed, made, again, afterDecline };
+        },
+        expect: (after, _found, { landed, afterDecline }) => {
+            const ok = landed.join() === 'true,false,true' && afterDecline === undefined &&
+                pathOf(after, ['MyApp', 'Views', 'One.swift']) !== undefined && pathOf(after, ['MyApp', 'Views', 'Made', 'Three.swift']) !== undefined &&
+                pathOf(after, ['MyApp', 'Views', 'Rename.swift']) !== undefined && pathOf(after, ['MyApp', 'Views', 'Lost.swift']) === undefined;
+            return ok || `landed ${landed}`;
+        }
+    });
+    const features = texts.get('features.xcproj.txt');
+    const ff = finder(projectIndex.readProject(features));
+    for (const [label, run, reason] of [
+        ['removing an element a reference names', (edit) => edits.removeSwiftFile(edit, ff.byPath('Base.xcconfig')), 'removes'],
+        ['adding a sibling that makes a reference ambiguous', (edit, index) => edits.addGroupPath(edit, index.mainGroupId, ['Configs']), 'more than one'],
+        ['editing an object with a repeated key', (edit) => edits.renameSwiftFile(edit, f.byPath('Rename.swift'), 'Other.swift'), 'repeats']
+    ]) {
+        const input = reason === 'repeats' ? repeated : features;
+        const inputIndex = projectIndex.readProject(input);
+        const logs = [];
+        const edit = edits.beginProjectEdit(input, (message) => logs.push(message));
+        const result = run(edit, inputIndex);
+        report(result === undefined && edits.projectEditText(edit) === input && logs.some((line) => line.includes(reason)),
+            `${label}: declined, text unchanged, logged`, logs[0]);
+    }
+    const logs = [];
+    const edit = edits.beginProjectEdit(app, (message) => logs.push(message));
+    edits.addSwiftFile(edit, 'Gate.swift', views === undefined ? '' : finder(projectIndex.readProject(app)).byPath('Views'), finder(projectIndex.readProject(app)).sources('MyApp')[0]);
+    edit.contents = edit.contents.replace('"files"', '"filez"');
+    report(edits.projectEditText(edit) === app && edits.editDeclined(edit) !== undefined && logs.some((line) => line.includes('left unchanged')),
+        'a session text that no longer reads: the input is written back, and why is logged', logs[logs.length - 1]);
+}
+
+console.log('writer: new handles never take an input id');
+{
+    const app = texts.get('FixtureApp.xcproj.txt');
+    const index = projectIndex.readProject(app);
+    const f = finder(index);
+    writerCase('a file renamed, then one added under its old name', app, {
+        run: (edit) => {
+            edits.renameSwiftFile(edit, f.byPath('Rename.swift'), 'Renamed.swift');
+            return edits.addSwiftFile(edit, 'Rename.swift', f.byPath('Views'), f.sources('MyApp')[0]);
+        },
+        expect: (after, _found, id) => id !== undefined && index.objects[id] === undefined &&
+            pathOf(after, ['MyApp', 'Views', 'Renamed.swift']) !== undefined && pathOf(after, ['MyApp', 'Views', 'Rename.swift']) !== undefined,
+        edited: [f.byPath('Rename.swift')]
+    });
+    writerCase('a folder renamed, then a group added under its old name', app, {
+        run: (edit) => {
+            edits.setElementPaths(edit, [{ id: f.byPath('Views'), path: 'Screens' }]);
+            return edits.addGroupPath(edit, f.byPath('MyApp'), ['Views']);
+        },
+        expect: (after, _found, id) => id !== undefined && index.objects[id] === undefined &&
+            pathOf(after, ['MyApp', 'Screens', 'Bar.swift']) !== undefined && pathOf(after, ['MyApp', 'Views']) !== undefined,
+        edited: [f.byPath('Views')]
+    });
+}
+
+console.log('writer: a hand-written project keeps its bytes outside the edit');
+{
+    const text = texts.get('json5-syntax.xcproj.txt');
+    const index = projectIndex.readProject(text);
+    const f = finder(index);
+    const edit = edits.beginProjectEdit(text);
+    edits.addSwiftFile(edit, 'C.swift', f.byPath('App'), f.sources('App')[0]);
+    const output = edits.projectEditText(edit);
+    let prefix = 0;
+    while (prefix < text.length && text[prefix] === output[prefix]) { prefix++; }
+    let suffix = 0;
+    while (suffix < text.length - prefix && text[text.length - 1 - suffix] === output[output.length - 1 - suffix]) { suffix++; }
+    const removed = text.slice(prefix, text.length - suffix);
+    const read = projectIndex.readProject(output);
+    report(typeof read !== 'string' && removed === '' && output.startsWith(text.slice(0, prefix)) && output.includes('// Fixture for') &&
+        !/[^\r]\n/.test(output), 'nothing of the input is replaced, the comments and BOM stay, and every line still ends in CRLF', JSON.stringify(removed));
+}
+
+console.log('writer: cost');
+{
+    const groups = [];
+    for (let group = 0; group < 50; group++) {
+        const children = [];
+        for (let file = 0; file < 100; file++) { children.push({ path: `File${group}_${file}.swift`, 'target-membership': ['App/compile-sources'] }); }
+        groups.push({ kind: 'group', path: `Group${group}`, children });
+    }
+    const big = xcodeCanonical(`${JSON.stringify({
+        'default-configuration': 'Release', configurations: ['Debug', 'Release'], localizations: { development: 'en' },
+        files: [...groups, { kind: 'group', name: 'Products', children: [ { path: '<PRODUCTS>/App.app', id: 'A0A0A0A0A0A0A0A0A0A0A0A0', type: 'wrapper.application', index: false } ] }],
+        targets: [ { name: 'App', id: 'B0B0B0B0B0B0B0B0B0B0B0B0', product: 'Products/App.app', 'product-type': 'application', 'build-phases': ['compile-sources'] } ]
+    })}\n`);
+    const index = projectIndex.readProject(big ?? '');
+    if (!big || typeof index === 'string') {
+        report(false, 'the synthetic project reads');
+    } else {
+        const f = finder(index);
+        const sources = f.sources('App')[0];
+        const started = Date.now();
+        const edit = edits.beginProjectEdit(big);
+        let added = 0;
+        for (let count = 0; count < 300; count++) {
+            if (edits.addSwiftFile(edit, `Added${count}.swift`, f.byPath(`Group${count % 50}`), sources) !== undefined) { added++; }
+        }
+        const output = edits.projectEditText(edit);
+        const seconds = (Date.now() - started) / 1000;
+        report(added === 300 && output !== big && seconds < 5, '300 adds, each its own change, in a 5,000-file project, within 5 s', `${seconds.toFixed(2)} s`);
+    }
+}
+
 // ── Goldens ───────────────────────────────────────────────
 
 const normalize = (value) => (value === undefined ? null : JSON.parse(JSON.stringify(value)));

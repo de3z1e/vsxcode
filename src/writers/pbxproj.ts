@@ -55,6 +55,7 @@ const formatId = formatPath;
 
 /** A run of edits on one read of the project: the text as it changes, and what was read from the input. */
 export interface ProjectEdit {
+    format: 'pbxproj';
     contents: string;
     /** Read once, on the input; offsets always come from `contents`. */
     index: ProjectIndex;
@@ -73,6 +74,7 @@ export function beginProjectEdit(pbxContents: string): ProjectEdit | null {
     const index = readProject(pbxContents);
     if (typeof index === 'string' || index.format === 'xcproj') { return null; }
     return {
+        format: 'pbxproj',
         contents: pbxContents,
         index,
         commented: SECTION_MARKER.test(pbxContents),
