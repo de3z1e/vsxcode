@@ -1,0 +1,1122 @@
+{
+  "fixture": "scripts/fixtures/xcproj/features.xcproj.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "App",
+        "productName": "App",
+        "productType": "com.apple.product-type.application",
+        "packageProductDependencyIds": [
+          "29CD70E2FD0D616C1F3A4F8C",
+          "DC6268EDA936E5483F7153AD",
+          "5528AE9F22A26DCBA4B29833",
+          "A08347FA49F36D026B26B716",
+          "538E09778BB87D3BCEA2F5CB",
+          "A75F8FFE2DF35F4B317D153D"
+        ],
+        "buildConfigurationListId": "E56563D854B76391F9292401",
+        "fileSystemSynchronizedGroupIds": [
+          "5EB8616EC0FE164BE21A4AAC"
+        ]
+      },
+      {
+        "name": "Kit",
+        "productName": "Kit",
+        "productType": "com.apple.product-type.framework",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "DE22F55BD51376351F2F1093",
+        "fileSystemSynchronizedGroupIds": []
+      },
+      {
+        "name": "AppTests",
+        "productName": "AppTests",
+        "productType": "com.apple.product-type.bundle.unit-test",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "5ED30E7DA8320FE2A0EA6312",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [
+      [
+        "App",
+        [
+          {
+            "targetId": "21D6C8556A4E002B74B9C8CA",
+            "targetName": "Kit"
+          },
+          {
+            "targetId": "548F556F0C60F3C9F26A1DE0",
+            "targetName": "Tōols"
+          }
+        ]
+      ],
+      [
+        "AppTests",
+        [
+          {
+            "targetId": "CEB327143C6455CCB0A66A02",
+            "targetName": "App"
+          }
+        ]
+      ]
+    ],
+    "parseBuildPhaseIds App": {
+      "sourcesBuildPhaseId": "067AFEBBA691B52956BE3450",
+      "frameworksBuildPhaseId": "FACFDC98E1FC84AF7AFE1581",
+      "resourcesBuildPhaseId": "B0F1992D054669085006911E"
+    },
+    "parseExcludedFiles App": [
+      "Info.plist",
+      "Notes/Readme.md",
+      "Zeta.txt"
+    ],
+    "parseBuildPhaseIds Kit": {
+      "sourcesBuildPhaseId": "C1C1C1C1C1C1C1C1C1C1C1C1",
+      "frameworksBuildPhaseId": "0CB19B80452D16D2CD521BA7"
+    },
+    "parseExcludedFiles Kit": [
+      "Common.swift"
+    ],
+    "parseBuildPhaseIds AppTests": {
+      "sourcesBuildPhaseId": "DF4400B02C95A2D823EF1A8D",
+      "frameworksBuildPhaseId": "706D61BEF450B4220193F881"
+    },
+    "parseExcludedFiles AppTests": [],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "099BC29B77EF22EF70CB3293",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/App.app/App"
+          }
+        }
+      ],
+      [
+        "0D2656BEB1E68A8D2EDC1208",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {}
+        }
+      ],
+      [
+        "3BA04114FF1292D4529A89ED",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "DEBUG_INFORMATION_FORMAT": "dwarf",
+            "GCC_PREPROCESSOR_DEFINITIONS": [
+              "DEBUG=1",
+              "$(inherited)"
+            ],
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+            "SDKROOT": "iphoneos"
+          },
+          "gccPreprocessorDefinitions": [
+            "DEBUG=1",
+            "$(inherited)"
+          ],
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "40D19E479D3B2B8A3DC84E85",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {}
+        }
+      ],
+      [
+        "53793863CDC273F4D9E6917E",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {}
+        }
+      ],
+      [
+        "A49F2EDD2E7FC01590D85ACB",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+            "SDKROOT": "iphoneos"
+          },
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "C3588959701A3028248C4925",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/App.app/App"
+          }
+        }
+      ],
+      [
+        "C4E89D684F6F1D55C58DFF1D",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SKIP_INSTALL": "YES"
+          },
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "CC5B8CBBDD0AAFA95F998EAE",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "ARCHS": "arm64",
+            "HEADER_SEARCH_PATHS": [
+              "$(inherited)",
+              "\"Vendor Headers/include\"",
+              "include"
+            ],
+            "INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]": "UIStatusBarStyleDefault",
+            "OTHER_CFLAGS": [
+              "-DA",
+              "B",
+              "C"
+            ],
+            "OTHER_LDFLAGS": [
+              "-ObjC",
+              "-lz"
+            ],
+            "OTHER_SWIFT_FLAGS": "$(inherited) -DAPP",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SHADOW[sdk=iphoneos*]": "plain",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "FEATURE_X $(inherited)",
+            "SWIFT_STRICT_CONCURRENCY": "complete",
+            "SWIFT_VERSION": "5.0",
+            "WARNING_CFLAGS": "",
+            "ZZ_PAIR[sdk=iphoneos*]": "second"
+          },
+          "swiftVersion": "5.0",
+          "strictConcurrency": "complete",
+          "swiftActiveCompilationConditions": [
+            "FEATURE_X",
+            "$(inherited)"
+          ],
+          "otherSwiftFlags": [
+            "$(inherited)",
+            "-DAPP"
+          ],
+          "headerSearchPaths": [
+            "$(inherited)",
+            "\"Vendor Headers/include\"",
+            "include"
+          ],
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "DF52CEFB760D1E102BC3DB35",
+        {
+          "configurationName": "Staging",
+          "targetId": null,
+          "raw": {
+            "ARCHS": "arm64",
+            "HEADER_SEARCH_PATHS": [
+              "$(inherited)",
+              "\"Vendor Headers/include\"",
+              "include"
+            ],
+            "INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]": "UIStatusBarStyleDefault",
+            "OTHER_CFLAGS": [
+              "-DA",
+              "B",
+              "C"
+            ],
+            "OTHER_LDFLAGS": [
+              "-ObjC",
+              "-lz"
+            ],
+            "OTHER_SWIFT_FLAGS": "$(inherited) -DAPP",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SHADOW[sdk=iphoneos*]": "plain",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "FEATURE_X $(inherited)",
+            "SWIFT_VERSION": "5.0",
+            "WARNING_CFLAGS": ""
+          },
+          "swiftVersion": "5.0",
+          "swiftActiveCompilationConditions": [
+            "FEATURE_X",
+            "$(inherited)"
+          ],
+          "otherSwiftFlags": [
+            "$(inherited)",
+            "-DAPP"
+          ],
+          "headerSearchPaths": [
+            "$(inherited)",
+            "\"Vendor Headers/include\"",
+            "include"
+          ],
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "E080C5300BF1E5B5F8CAF724",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {}
+        }
+      ],
+      [
+        "E0E0E0E0E0E0E0E0E0E0E0E0",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SKIP_INSTALL": "YES"
+          },
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "FE4DF2B9F469100BC83690DF",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "ARCHS": "arm64",
+            "HEADER_SEARCH_PATHS": [
+              "$(inherited)",
+              "\"Vendor Headers/include\"",
+              "include"
+            ],
+            "INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]": "UIStatusBarStyleDefault",
+            "OTHER_CFLAGS": [
+              "-DA",
+              "B",
+              "C"
+            ],
+            "OTHER_LDFLAGS": [
+              "-ObjC",
+              "-lz"
+            ],
+            "OTHER_SWIFT_FLAGS": "$(inherited) -DAPP",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SHADOW[sdk=iphoneos*]": "plain",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "FEATURE_X $(inherited)",
+            "SWIFT_VERSION": "5.0",
+            "WARNING_CFLAGS": ""
+          },
+          "swiftVersion": "5.0",
+          "swiftActiveCompilationConditions": [
+            "FEATURE_X",
+            "$(inherited)"
+          ],
+          "otherSwiftFlags": [
+            "$(inherited)",
+            "-DAPP"
+          ],
+          "headerSearchPaths": [
+            "$(inherited)",
+            "\"Vendor Headers/include\"",
+            "include"
+          ],
+          "productName": "$(TARGET_NAME)"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 614471660AA131A99883C67C": [
+      "3BA04114FF1292D4529A89ED",
+      "A49F2EDD2E7FC01590D85ACB"
+    ],
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "SDKROOT": "iphoneos"
+      },
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "SDKROOT": "iphoneos"
+      },
+      "sdkRoot": "iphoneos"
+    },
+    "resolveConfigurationListId E56563D854B76391F9292401": [
+      "CC5B8CBBDD0AAFA95F998EAE",
+      "FE4DF2B9F469100BC83690DF",
+      "DF52CEFB760D1E102BC3DB35"
+    ],
+    "getBuildSettingsForTarget E56563D854B76391F9292401 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ARCHS": "arm64",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "\"Vendor Headers/include\"",
+          "include"
+        ],
+        "INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]": "UIStatusBarStyleDefault",
+        "OTHER_CFLAGS": [
+          "-DA",
+          "B",
+          "C"
+        ],
+        "OTHER_LDFLAGS": [
+          "-ObjC",
+          "-lz"
+        ],
+        "OTHER_SWIFT_FLAGS": "$(inherited) -DAPP",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SHADOW[sdk=iphoneos*]": "plain",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "FEATURE_X $(inherited)",
+        "SWIFT_STRICT_CONCURRENCY": "complete",
+        "SWIFT_VERSION": "5.0",
+        "WARNING_CFLAGS": "",
+        "ZZ_PAIR[sdk=iphoneos*]": "second"
+      },
+      "swiftVersion": "5.0",
+      "strictConcurrency": "complete",
+      "swiftActiveCompilationConditions": [
+        "FEATURE_X",
+        "$(inherited)"
+      ],
+      "otherSwiftFlags": [
+        "$(inherited)",
+        "-DAPP"
+      ],
+      "headerSearchPaths": [
+        "$(inherited)",
+        "\"Vendor Headers/include\"",
+        "include"
+      ],
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget E56563D854B76391F9292401 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ARCHS": "arm64",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "\"Vendor Headers/include\"",
+          "include"
+        ],
+        "INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]": "UIStatusBarStyleDefault",
+        "OTHER_CFLAGS": [
+          "-DA",
+          "B",
+          "C"
+        ],
+        "OTHER_LDFLAGS": [
+          "-ObjC",
+          "-lz"
+        ],
+        "OTHER_SWIFT_FLAGS": "$(inherited) -DAPP",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SHADOW[sdk=iphoneos*]": "plain",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "FEATURE_X $(inherited)",
+        "SWIFT_VERSION": "5.0",
+        "WARNING_CFLAGS": ""
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "FEATURE_X",
+        "$(inherited)"
+      ],
+      "otherSwiftFlags": [
+        "$(inherited)",
+        "-DAPP"
+      ],
+      "headerSearchPaths": [
+        "$(inherited)",
+        "\"Vendor Headers/include\"",
+        "include"
+      ],
+      "productName": "$(TARGET_NAME)"
+    },
+    "resolveConfigurationListId DE22F55BD51376351F2F1093": [
+      "E0E0E0E0E0E0E0E0E0E0E0E0",
+      "C4E89D684F6F1D55C58DFF1D"
+    ],
+    "getBuildSettingsForTarget DE22F55BD51376351F2F1093 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES"
+      },
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget DE22F55BD51376351F2F1093 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES"
+      },
+      "productName": "$(TARGET_NAME)"
+    },
+    "resolveConfigurationListId 5ED30E7DA8320FE2A0EA6312": [
+      "099BC29B77EF22EF70CB3293",
+      "C3588959701A3028248C4925"
+    ],
+    "getBuildSettingsForTarget 5ED30E7DA8320FE2A0EA6312 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/App.app/App"
+      }
+    },
+    "getBuildSettingsForTarget 5ED30E7DA8320FE2A0EA6312 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/App.app/App"
+      }
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "SDKROOT": "iphoneos"
+      },
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "SDKROOT": "iphoneos"
+      },
+      "sdkRoot": "iphoneos"
+    },
+    "parseSwiftPackageReferences": [
+      [
+        "0A9134C37B3C32F734D64B66",
+        {
+          "id": "0A9134C37B3C32F734D64B66",
+          "name": "branch-kit",
+          "type": "remote",
+          "url": "https://github.com/example/branch-kit.git",
+          "requirement": {
+            "branch": "main",
+            "kind": "branch"
+          }
+        }
+      ],
+      [
+        "28846902BED35F27FBEED456",
+        {
+          "id": "28846902BED35F27FBEED456",
+          "name": "range-kit",
+          "type": "remote",
+          "url": "https://github.com/example/range-kit.git",
+          "requirement": {
+            "kind": "versionRange",
+            "maximumVersion": "2.0.0",
+            "minimumVersion": "1.0.0"
+          }
+        }
+      ],
+      [
+        "529293D6D81470D9B7C1A42D",
+        {
+          "id": "529293D6D81470D9B7C1A42D",
+          "name": "beta-kit",
+          "type": "remote",
+          "url": "https://github.com/example/beta-kit.git",
+          "requirement": {
+            "kind": "versionRange",
+            "maximumVersion": "2.0.0",
+            "minimumVersion": "1.0.0-beta"
+          }
+        }
+      ],
+      [
+        "5A28093EC455E70B536E7BD1",
+        {
+          "id": "5A28093EC455E70B536E7BD1",
+          "name": "revision-kit",
+          "type": "remote",
+          "url": "https://github.com/example/revision-kit.git",
+          "requirement": {
+            "kind": "revision",
+            "revision": "0123456789abcdef0123456789abcdef01234567"
+          }
+        }
+      ],
+      [
+        "67A3DDA9C2D020CC1993F92A",
+        {
+          "id": "67A3DDA9C2D020CC1993F92A",
+          "name": "open-kit",
+          "type": "remote",
+          "url": "https://github.com/example/open-kit.git",
+          "requirement": {}
+        }
+      ],
+      [
+        "7A127B56D8BB8513CFBB6834",
+        {
+          "id": "7A127B56D8BB8513CFBB6834",
+          "name": "minor-kit",
+          "type": "remote",
+          "url": "https://github.com/example/minor-kit.git",
+          "requirement": {
+            "kind": "upToNextMinorVersion",
+            "minimumVersion": "1.2.0"
+          }
+        }
+      ],
+      [
+        "D73C02D4C72DE877F648834B",
+        {
+          "id": "D73C02D4C72DE877F648834B",
+          "name": "exact-kit",
+          "type": "remote",
+          "url": "https://github.com/example/exact-kit.git",
+          "requirement": {
+            "kind": "exactVersion",
+            "version": "1.2.3"
+          }
+        }
+      ],
+      [
+        "EB892A17B2CC08EA3811E9E0",
+        {
+          "id": "EB892A17B2CC08EA3811E9E0",
+          "name": "major-kit",
+          "type": "remote",
+          "url": "https://github.com/example/major-kit.git",
+          "requirement": {
+            "kind": "upToNextMajorVersion",
+            "minimumVersion": "1.2.0"
+          }
+        }
+      ],
+      [
+        "29594166D3CC0EB48F783788",
+        {
+          "id": "29594166D3CC0EB48F783788",
+          "name": "../Café",
+          "type": "local",
+          "path": "../Café"
+        }
+      ],
+      [
+        "5037CBC4C2A34D464A554A0D",
+        {
+          "id": "5037CBC4C2A34D464A554A0D",
+          "name": "../LocalKit",
+          "type": "local",
+          "path": "../LocalKit"
+        }
+      ]
+    ],
+    "parseSwiftPackageProductDependencies": [
+      [
+        "29CD70E2FD0D616C1F3A4F8C",
+        {
+          "id": "29CD70E2FD0D616C1F3A4F8C",
+          "productName": "Loose",
+          "packageRef": null,
+          "packageName": null
+        }
+      ],
+      [
+        "41DDA4335876A09A7D2ECAA5",
+        {
+          "id": "41DDA4335876A09A7D2ECAA5",
+          "productName": "Unpackaged",
+          "packageRef": null,
+          "packageName": null
+        }
+      ],
+      [
+        "538E09778BB87D3BCEA2F5CB",
+        {
+          "id": "538E09778BB87D3BCEA2F5CB",
+          "productName": "plugin:GenPlugin",
+          "packageRef": "EB892A17B2CC08EA3811E9E0",
+          "packageName": "major-kit"
+        }
+      ],
+      [
+        "5528AE9F22A26DCBA4B29833",
+        {
+          "id": "5528AE9F22A26DCBA4B29833",
+          "productName": "LocalKit",
+          "packageRef": "5037CBC4C2A34D464A554A0D",
+          "packageName": "../LocalKit"
+        }
+      ],
+      [
+        "56900E34E00298888EC6580D",
+        {
+          "id": "56900E34E00298888EC6580D",
+          "productName": "plugin:BranchPlugin",
+          "packageRef": "0A9134C37B3C32F734D64B66",
+          "packageName": "branch-kit"
+        }
+      ],
+      [
+        "A08347FA49F36D026B26B716",
+        {
+          "id": "A08347FA49F36D026B26B716",
+          "productName": "ExactKit",
+          "packageRef": "D73C02D4C72DE877F648834B",
+          "packageName": "exact-kit"
+        }
+      ],
+      [
+        "A75F8FFE2DF35F4B317D153D",
+        {
+          "id": "A75F8FFE2DF35F4B317D153D",
+          "productName": "MajorKit",
+          "packageRef": "EB892A17B2CC08EA3811E9E0",
+          "packageName": "major-kit"
+        }
+      ],
+      [
+        "DC6268EDA936E5483F7153AD",
+        {
+          "id": "DC6268EDA936E5483F7153AD",
+          "productName": "CafeKit",
+          "packageRef": "29594166D3CC0EB48F783788",
+          "packageName": "../Café"
+        }
+      ]
+    ],
+    "parseGroups": [
+      [
+        "2C0CEE01CEAB1A46EF58EAAA",
+        {
+          "id": "2C0CEE01CEAB1A46EF58EAAA",
+          "name": "Sample/Configs",
+          "path": "SampleConfigs",
+          "childIds": [
+            "CBF7D0F72E41E7ED5CF4256A"
+          ]
+        }
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        {
+          "id": "693C113810E7894E444D1C56",
+          "name": "Products",
+          "childIds": [
+            "A0A0A0A0A0A0A0A0A0A0A0A0",
+            "A1A1A1A1A1A1A1A1A1A1A1A1",
+            "A2A2A2A2A2A2A2A2A2A2A2A2"
+          ]
+        }
+      ],
+      [
+        "794E9FCBBFF7C67433E76DEF",
+        {
+          "id": "794E9FCBBFF7C67433E76DEF",
+          "name": "Frameworks",
+          "childIds": [
+            "F9AC6113F8A162265078BB65",
+            "2DD6A1C94FB5078A7695F30C",
+            "487CEA8ACA58FAE3EB629DA0",
+            "1DABC7F490A52CC647C2602F"
+          ]
+        }
+      ],
+      [
+        "81630C11AD80CAA29B10AE61",
+        {
+          "id": "81630C11AD80CAA29B10AE61",
+          "name": "Products",
+          "childIds": []
+        }
+      ],
+      [
+        "894C76DFCBA53EB742FD8B7E",
+        {
+          "id": "894C76DFCBA53EB742FD8B7E",
+          "path": "App",
+          "childIds": [
+            "391FECBCEB26634A446BD8AA",
+            "DEC6673C0BA4828CE419FB8F",
+            "4742387129954C630677487A",
+            "7CFDFC7A6387971F6CC1285A",
+            "763C4AB30844DDE16E7CBEE0",
+            "194EA4CED53A4BC73B7564A7",
+            "4900CE0152107B84411A2CF1",
+            "F99F36ABDD7BA4DD62F4C892",
+            "EC322D760BB32ABD362FABFA",
+            "1560AEF51A64EE9A295758B6",
+            "F687B32726E6C4AF15DC4D46",
+            "8E43046B17A7AF7EB929A94E",
+            "2981697AADFD58B9E8CD4409",
+            "F225DBD2C0A7BD419FAF13C7"
+          ]
+        }
+      ],
+      [
+        "8B8D3DFB977C325B836BE102",
+        {
+          "id": "8B8D3DFB977C325B836BE102",
+          "path": "Configs",
+          "childIds": [
+            "330402383D4EE451A87452B6"
+          ]
+        }
+      ],
+      [
+        "B28B7AF69320201D1CF206EB",
+        {
+          "id": "B28B7AF69320201D1CF206EB",
+          "childIds": [
+            "894C76DFCBA53EB742FD8B7E",
+            "B4A8582D1A0199D5F6D310A6",
+            "5EB8616EC0FE164BE21A4AAC",
+            "8B8D3DFB977C325B836BE102",
+            "2C0CEE01CEAB1A46EF58EAAA",
+            "BE5807F6DD1DFA516C6B832C",
+            "794E9FCBBFF7C67433E76DEF",
+            "2FE9AAFFF3A0B992D5848E29",
+            "82A0B66569E50115279DDFA7",
+            "693C113810E7894E444D1C56"
+          ]
+        }
+      ],
+      [
+        "B4A8582D1A0199D5F6D310A6",
+        {
+          "id": "B4A8582D1A0199D5F6D310A6",
+          "path": "Kit",
+          "childIds": [
+            "3FFC1B970EAA03330D6C9966",
+            "A1D73A4E5C6EA83B09D22676"
+          ]
+        }
+      ],
+      [
+        "BE5807F6DD1DFA516C6B832C",
+        {
+          "id": "BE5807F6DD1DFA516C6B832C",
+          "path": "Vendor",
+          "childIds": [
+            "EE2653A129DD3F8642126100"
+          ]
+        }
+      ],
+      [
+        "D80552606C208C8F64396B24",
+        {
+          "id": "D80552606C208C8F64396B24",
+          "name": "Products",
+          "childIds": []
+        }
+      ],
+      [
+        "5EB8616EC0FE164BE21A4AAC",
+        {
+          "id": "5EB8616EC0FE164BE21A4AAC",
+          "name": "Shared",
+          "path": "Shared",
+          "childIds": []
+        }
+      ]
+    ],
+    "findMainGroupId": "B28B7AF69320201D1CF206EB",
+    "buildGroupDirectories": [
+      [
+        "B28B7AF69320201D1CF206EB",
+        "/project"
+      ],
+      [
+        "894C76DFCBA53EB742FD8B7E",
+        "/project/App"
+      ],
+      [
+        "B4A8582D1A0199D5F6D310A6",
+        "/project/Kit"
+      ],
+      [
+        "5EB8616EC0FE164BE21A4AAC",
+        "/project/Shared"
+      ],
+      [
+        "8B8D3DFB977C325B836BE102",
+        "/project/Configs"
+      ],
+      [
+        "2C0CEE01CEAB1A46EF58EAAA",
+        "/project/SampleConfigs"
+      ],
+      [
+        "BE5807F6DD1DFA516C6B832C",
+        "/project/Vendor"
+      ],
+      [
+        "794E9FCBBFF7C67433E76DEF",
+        "/project"
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath App": "894C76DFCBA53EB742FD8B7E",
+    "resolveGroupForPath Configs": "8B8D3DFB977C325B836BE102",
+    "resolveGroupForPath Kit": "B4A8582D1A0199D5F6D310A6",
+    "resolveGroupForPath SampleConfigs": "2C0CEE01CEAB1A46EF58EAAA",
+    "resolveGroupForPath Shared": "5EB8616EC0FE164BE21A4AAC",
+    "resolveGroupForPath Vendor": "BE5807F6DD1DFA516C6B832C",
+    "resolveGroupForPath Missing": null,
+    "parseVersionGroups": [
+      {
+        "id": "2981697AADFD58B9E8CD4409",
+        "path": "Model.xcdatamodeld",
+        "childIds": [
+          "5A240950F4ED1E50B97A4B3B",
+          "5EDFD53E3A349AED2623CA6F"
+        ],
+        "currentVersionId": "5EDFD53E3A349AED2623CA6F",
+        "sourceTree": "<group>",
+        "startIndex": 3203,
+        "endIndex": 3634
+      },
+      {
+        "id": "F225DBD2C0A7BD419FAF13C7",
+        "path": "Notes.xcdatamodeld",
+        "childIds": [
+          "43D9665790AFE518D4C241EE"
+        ],
+        "sourceTree": "<group>",
+        "startIndex": 3636,
+        "endIndex": 3953
+      }
+    ],
+    "parseSwiftVersion": "5.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "17.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": false,
+    "parseFrameworksBuildPhase FACFDC98E1FC84AF7AFE1581": [
+      "CafeKit",
+      "ExactKit",
+      "plugin:GenPlugin",
+      "LocalKit",
+      "Loose",
+      "MajorKit",
+      "UIKit.framework"
+    ],
+    "parseLinkedFrameworksForTarget FACFDC98E1FC84AF7AFE1581": [
+      "CafeKit",
+      "ExactKit",
+      "plugin:GenPlugin",
+      "LocalKit",
+      "Loose",
+      "MajorKit"
+    ],
+    "parseFrameworksBuildPhase 0CB19B80452D16D2CD521BA7": [],
+    "parseLinkedFrameworksForTarget 0CB19B80452D16D2CD521BA7": [],
+    "parseFrameworksBuildPhase 706D61BEF450B4220193F881": [
+      "XCTest.framework"
+    ],
+    "parseLinkedFrameworksForTarget 706D61BEF450B4220193F881": [
+      "XCTest"
+    ],
+    "parseResourcesBuildPhase B0F1992D054669085006911E": [
+      "Localizable.strings",
+      "Odd <Name>.txt",
+      "Web"
+    ],
+    "parseResourcesForTarget B0F1992D054669085006911E": [
+      {
+        "type": ".process",
+        "path": "Localizable.strings"
+      },
+      {
+        "type": ".copy",
+        "path": "Odd <Name>.txt"
+      },
+      {
+        "type": ".copy",
+        "path": "Web"
+      }
+    ],
+    "folderSpellings": [
+      {
+        "id": "1560AEF51A64EE9A295758B6",
+        "position": 0,
+        "folder": "/project/App/Web"
+      },
+      {
+        "id": "2FE9AAFFF3A0B992D5848E29",
+        "position": 0,
+        "folder": "/project/Other"
+      },
+      {
+        "id": "82A0B66569E50115279DDFA7",
+        "position": 0,
+        "folder": "/project/Nested"
+      },
+      {
+        "id": "5EB8616EC0FE164BE21A4AAC",
+        "position": 0,
+        "folder": "/project/Shared"
+      },
+      {
+        "id": "2C0CEE01CEAB1A46EF58EAAA",
+        "position": 0,
+        "folder": "/project/SampleConfigs"
+      },
+      {
+        "id": "894C76DFCBA53EB742FD8B7E",
+        "position": 0,
+        "folder": "/project/App"
+      },
+      {
+        "id": "8B8D3DFB977C325B836BE102",
+        "position": 0,
+        "folder": "/project/Configs"
+      },
+      {
+        "id": "B4A8582D1A0199D5F6D310A6",
+        "position": 0,
+        "folder": "/project/Kit"
+      },
+      {
+        "id": "BE5807F6DD1DFA516C6B832C",
+        "position": 0,
+        "folder": "/project/Vendor"
+      }
+    ],
+    "findFileReferencePath 194EA4CED53A4BC73B7564A7": "𝒜.swift",
+    "findBuildFileId 194EA4CED53A4BC73B7564A7": "E4724C698BC7533EF1ACC447",
+    "displayName 194EA4CED53A4BC73B7564A7": "𝒜.swift",
+    "buildFilesFor 194EA4CED53A4BC73B7564A7": [
+      "E4724C698BC7533EF1ACC447"
+    ],
+    "phasesOf 194EA4CED53A4BC73B7564A7": {
+      "E4724C698BC7533EF1ACC447": [
+        "067AFEBBA691B52956BE3450"
+      ]
+    },
+    "findFileReferencePath 1DABC7F490A52CC647C2602F": "/opt/example/Absolute.swift",
+    "findBuildFileId 1DABC7F490A52CC647C2602F": "948C0FCC7020955928325D02",
+    "displayName 1DABC7F490A52CC647C2602F": "Absolute.swift",
+    "buildFilesFor 1DABC7F490A52CC647C2602F": [
+      "948C0FCC7020955928325D02"
+    ],
+    "phasesOf 1DABC7F490A52CC647C2602F": {
+      "948C0FCC7020955928325D02": [
+        "C1C1C1C1C1C1C1C1C1C1C1C1"
+      ]
+    },
+    "findFileReferencePath 391FECBCEB26634A446BD8AA": "AppMain.swift",
+    "findBuildFileId 391FECBCEB26634A446BD8AA": "847AC60B406055912CFE0225",
+    "displayName 391FECBCEB26634A446BD8AA": "AppMain.swift",
+    "buildFilesFor 391FECBCEB26634A446BD8AA": [
+      "847AC60B406055912CFE0225"
+    ],
+    "phasesOf 391FECBCEB26634A446BD8AA": {
+      "847AC60B406055912CFE0225": [
+        "067AFEBBA691B52956BE3450"
+      ]
+    },
+    "findFileReferencePath 3FFC1B970EAA03330D6C9966": "Kit.swift",
+    "findBuildFileId 3FFC1B970EAA03330D6C9966": "A2397E7FB890B0AA6DD37941",
+    "displayName 3FFC1B970EAA03330D6C9966": "Kit.swift",
+    "buildFilesFor 3FFC1B970EAA03330D6C9966": [
+      "A2397E7FB890B0AA6DD37941"
+    ],
+    "phasesOf 3FFC1B970EAA03330D6C9966": {
+      "A2397E7FB890B0AA6DD37941": [
+        "C1C1C1C1C1C1C1C1C1C1C1C1"
+      ]
+    },
+    "parentOf B28B7AF69320201D1CF206EB": null,
+    "resolvedPath B28B7AF69320201D1CF206EB": "/project",
+    "parentOf 894C76DFCBA53EB742FD8B7E": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 894C76DFCBA53EB742FD8B7E": "/project/App",
+    "parentOf B4A8582D1A0199D5F6D310A6": "B28B7AF69320201D1CF206EB",
+    "resolvedPath B4A8582D1A0199D5F6D310A6": "/project/Kit",
+    "parentOf 5EB8616EC0FE164BE21A4AAC": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 5EB8616EC0FE164BE21A4AAC": "/project/Shared",
+    "parentOf 8B8D3DFB977C325B836BE102": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 8B8D3DFB977C325B836BE102": "/project/Configs",
+    "parentOf 2C0CEE01CEAB1A46EF58EAAA": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 2C0CEE01CEAB1A46EF58EAAA": "/project/SampleConfigs",
+    "parentOf BE5807F6DD1DFA516C6B832C": "B28B7AF69320201D1CF206EB",
+    "resolvedPath BE5807F6DD1DFA516C6B832C": "/project/Vendor",
+    "parentOf 794E9FCBBFF7C67433E76DEF": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 794E9FCBBFF7C67433E76DEF": "/project",
+    "parentOf 693C113810E7894E444D1C56": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 693C113810E7894E444D1C56": "/project",
+    "parentOf 194EA4CED53A4BC73B7564A7": "894C76DFCBA53EB742FD8B7E",
+    "resolvedPath 194EA4CED53A4BC73B7564A7": "/project/App/𝒜.swift",
+    "parentOf 1DABC7F490A52CC647C2602F": "794E9FCBBFF7C67433E76DEF",
+    "resolvedPath 1DABC7F490A52CC647C2602F": "/opt/example/Absolute.swift",
+    "parentOf 391FECBCEB26634A446BD8AA": "894C76DFCBA53EB742FD8B7E",
+    "resolvedPath 391FECBCEB26634A446BD8AA": "/project/App/AppMain.swift",
+    "parentOf 3FFC1B970EAA03330D6C9966": "B4A8582D1A0199D5F6D310A6",
+    "resolvedPath 3FFC1B970EAA03330D6C9966": "/project/Kit/Kit.swift",
+    "targetOfPhase 067AFEBBA691B52956BE3450": "B0B0B0B0B0B0B0B0B0B0B0B0",
+    "targetOfPhase FACFDC98E1FC84AF7AFE1581": "B0B0B0B0B0B0B0B0B0B0B0B0",
+    "targetOfPhase B0F1992D054669085006911E": "B0B0B0B0B0B0B0B0B0B0B0B0",
+    "targetOfPhase 8CF7CE11FABDAFD0FE3B26F8": "B0B0B0B0B0B0B0B0B0B0B0B0",
+    "targetOfPhase B901ACFFE27EBB1791DFBB3F": "B0B0B0B0B0B0B0B0B0B0B0B0",
+    "targetOfPhase C1C1C1C1C1C1C1C1C1C1C1C1": "B1B1B1B1B1B1B1B1B1B1B1B1",
+    "targetOfPhase C2C2C2C2C2C2C2C2C2C2C2C2": "B1B1B1B1B1B1B1B1B1B1B1B1",
+    "targetOfPhase 0CB19B80452D16D2CD521BA7": "B1B1B1B1B1B1B1B1B1B1B1B1",
+    "targetOfPhase DF4400B02C95A2D823EF1A8D": "B2B2B2B2B2B2B2B2B2B2B2B2",
+    "targetOfPhase 706D61BEF450B4220193F881": "B2B2B2B2B2B2B2B2B2B2B2B2",
+    "groupForFolder .": "B28B7AF69320201D1CF206EB",
+    "groupForFolder App": "894C76DFCBA53EB742FD8B7E",
+    "groupForFolder Configs": "8B8D3DFB977C325B836BE102",
+    "groupForFolder Kit": "B4A8582D1A0199D5F6D310A6",
+    "groupForFolder SampleConfigs": "2C0CEE01CEAB1A46EF58EAAA",
+    "groupForFolder Shared": null,
+    "groupForFolder Vendor": "BE5807F6DD1DFA516C6B832C",
+    "groupForFolder Missing": null
+  }
+}

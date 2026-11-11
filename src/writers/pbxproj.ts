@@ -18,6 +18,7 @@ import {
 } from '../parsers/projectIndex';
 import type { ListEntryLocation, ProjectIndex } from '../parsers/projectIndex';
 import { VERSION_GROUP_SECTION_BEGIN, VERSION_GROUP_SECTION_END } from '../parsers/versionGroups';
+import { isXcprojText } from '../parsers/xcprojIndex';
 
 // ── ID Generation ────────────────────────────────────────
 
@@ -67,10 +68,10 @@ export interface ProjectEdit {
 
 const SECTION_MARKER = /^\/\* Begin [A-Za-z]+ section \*\//m;
 
-/** Starts a run of edits; null when plutil can't read the text, which writers then leave unchanged. */
+/** Starts a run of edits; null when the text can't be read or is a JSON project file, which writers then leave unchanged. */
 export function beginProjectEdit(pbxContents: string): ProjectEdit | null {
     const index = readProject(pbxContents);
-    if (typeof index === 'string') { return null; }
+    if (typeof index === 'string' || index.format === 'xcproj') { return null; }
     return {
         contents: pbxContents,
         index,
@@ -603,6 +604,8 @@ export function updateBuildSetting(
     key: string,
     value: string
 ): string {
+    // pbxproj text only; isXcprojText runs no plutil, which readProject would on each successive call's new text.
+    if (isXcprojText(pbxContents)) { return pbxContents; }
     const block = locateDictionary(pbxContents, configId, 'buildSettings');
     if (!block) { return pbxContents; }
 

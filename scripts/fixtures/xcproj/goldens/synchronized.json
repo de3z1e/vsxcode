@@ -1,0 +1,281 @@
+{
+  "fixture": "scripts/fixtures/xcproj/synchronized.xcproj.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "SyncApp",
+        "productName": "SyncApp",
+        "productType": "com.apple.product-type.application",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "356A7F6682B7D04E3FE893FA",
+        "fileSystemSynchronizedGroupIds": [
+          "DE7DA3ED6DFF6724A6633967"
+        ]
+      }
+    ],
+    "parseTargetDependencies": [],
+    "parseBuildPhaseIds SyncApp": {
+      "sourcesBuildPhaseId": "B2CB5C4367763F6A70AA391D",
+      "frameworksBuildPhaseId": "EDD93FF9F4CCF0B2A926471F",
+      "resourcesBuildPhaseId": "D630805BD5B5E7794228ED0F"
+    },
+    "parseExcludedFiles SyncApp": [
+      "Info.plist",
+      "Supporting Files/Notes.txt"
+    ],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "3BA04114FF1292D4529A89ED",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "6.0"
+          },
+          "swiftVersion": "6.0",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "A49F2EDD2E7FC01590D85ACB",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "6.0"
+          },
+          "swiftVersion": "6.0",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "B3A8C50282E17F3AD0C0BCB7",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+          },
+          "bundleIdentifier": "com.example.SyncApp",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "D65C7EBD319E640955998599",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+          },
+          "bundleIdentifier": "com.example.SyncApp",
+          "productName": "$(TARGET_NAME)"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 614471660AA131A99883C67C": [
+      "3BA04114FF1292D4529A89ED",
+      "A49F2EDD2E7FC01590D85ACB"
+    ],
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "resolveConfigurationListId 356A7F6682B7D04E3FE893FA": [
+      "B3A8C50282E17F3AD0C0BCB7",
+      "D65C7EBD319E640955998599"
+    ],
+    "getBuildSettingsForTarget 356A7F6682B7D04E3FE893FA Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+      },
+      "bundleIdentifier": "com.example.SyncApp",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget 356A7F6682B7D04E3FE893FA Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor"
+      },
+      "bundleIdentifier": "com.example.SyncApp",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "6.0"
+      },
+      "swiftVersion": "6.0",
+      "sdkRoot": "iphoneos"
+    },
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "242601A3BA1F688E7B913075",
+        {
+          "id": "242601A3BA1F688E7B913075",
+          "path": "Extras",
+          "childIds": [
+            "86B05791B9BF71ECB20C3D2A"
+          ]
+        }
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        {
+          "id": "693C113810E7894E444D1C56",
+          "name": "Products",
+          "childIds": [
+            "E70000000000000000000501"
+          ]
+        }
+      ],
+      [
+        "B28B7AF69320201D1CF206EB",
+        {
+          "id": "B28B7AF69320201D1CF206EB",
+          "childIds": [
+            "DE7DA3ED6DFF6724A6633967",
+            "242601A3BA1F688E7B913075",
+            "693C113810E7894E444D1C56"
+          ]
+        }
+      ],
+      [
+        "DE7DA3ED6DFF6724A6633967",
+        {
+          "id": "DE7DA3ED6DFF6724A6633967",
+          "name": "SyncApp",
+          "path": "SyncApp",
+          "childIds": []
+        }
+      ]
+    ],
+    "findMainGroupId": "B28B7AF69320201D1CF206EB",
+    "buildGroupDirectories": [
+      [
+        "B28B7AF69320201D1CF206EB",
+        "/project"
+      ],
+      [
+        "DE7DA3ED6DFF6724A6633967",
+        "/project/SyncApp"
+      ],
+      [
+        "242601A3BA1F688E7B913075",
+        "/project/Extras"
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath Extras": "242601A3BA1F688E7B913075",
+    "resolveGroupForPath SyncApp": "DE7DA3ED6DFF6724A6633967",
+    "resolveGroupForPath Missing": null,
+    "parseVersionGroups": [],
+    "parseSwiftVersion": "6.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "18.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": false,
+    "parseFrameworksBuildPhase EDD93FF9F4CCF0B2A926471F": [],
+    "parseLinkedFrameworksForTarget EDD93FF9F4CCF0B2A926471F": [],
+    "parseResourcesBuildPhase D630805BD5B5E7794228ED0F": [],
+    "parseResourcesForTarget D630805BD5B5E7794228ED0F": [],
+    "folderSpellings": [
+      {
+        "id": "DE7DA3ED6DFF6724A6633967",
+        "position": 0,
+        "folder": "/project/SyncApp"
+      },
+      {
+        "id": "242601A3BA1F688E7B913075",
+        "position": 0,
+        "folder": "/project/Extras"
+      }
+    ],
+    "findFileReferencePath 86B05791B9BF71ECB20C3D2A": "Helper.swift",
+    "findBuildFileId 86B05791B9BF71ECB20C3D2A": "442E9F2F8E16C612DE503739",
+    "displayName 86B05791B9BF71ECB20C3D2A": "Helper.swift",
+    "buildFilesFor 86B05791B9BF71ECB20C3D2A": [
+      "442E9F2F8E16C612DE503739"
+    ],
+    "phasesOf 86B05791B9BF71ECB20C3D2A": {
+      "442E9F2F8E16C612DE503739": [
+        "B2CB5C4367763F6A70AA391D"
+      ]
+    },
+    "parentOf B28B7AF69320201D1CF206EB": null,
+    "resolvedPath B28B7AF69320201D1CF206EB": "/project",
+    "parentOf DE7DA3ED6DFF6724A6633967": "B28B7AF69320201D1CF206EB",
+    "resolvedPath DE7DA3ED6DFF6724A6633967": "/project/SyncApp",
+    "parentOf 242601A3BA1F688E7B913075": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 242601A3BA1F688E7B913075": "/project/Extras",
+    "parentOf 693C113810E7894E444D1C56": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 693C113810E7894E444D1C56": "/project",
+    "parentOf 86B05791B9BF71ECB20C3D2A": "242601A3BA1F688E7B913075",
+    "resolvedPath 86B05791B9BF71ECB20C3D2A": "/project/Extras/Helper.swift",
+    "targetOfPhase B2CB5C4367763F6A70AA391D": "A10000000000000000000601",
+    "targetOfPhase EDD93FF9F4CCF0B2A926471F": "A10000000000000000000601",
+    "targetOfPhase D630805BD5B5E7794228ED0F": "A10000000000000000000601",
+    "groupForFolder .": "B28B7AF69320201D1CF206EB",
+    "groupForFolder Extras": "242601A3BA1F688E7B913075",
+    "groupForFolder SyncApp": null,
+    "groupForFolder Missing": null
+  }
+}

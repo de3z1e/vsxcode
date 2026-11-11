@@ -8,16 +8,24 @@
  * the last duplicate and rejects Infinity and NaN). Every node's offsets must re-read to the same value, and pointers
  * must reach their nodes.
  *
+ * The JSON project is then lowered into the same project index a pbxproj gives (src/parsers/xcprojIndex.ts). For every
+ * valid fixture, what VSXcode reads from that index must equal what it reads from Xcode's own conversion of the file
+ * (`xcodebuild -convert-project pbxproj` on a temp copy, offline); every invalid fixture must be refused both by Xcode and
+ * by the reader, for the reason its header names; and every parser's output is compared with reviewed goldens.
+ *
  * Inputs:
  *  - scripts/fixtures/xcproj/: each pbxproj fixture converted by `xcodebuild -convert-project xcproj` and stored as
- *    Xcode wrote it, plus json5-syntax, a hand-written project in the JSON5 syntax Xcode accepts. The files end in .txt
- *    so the extension never activates on this repository.
+ *    Xcode wrote it; json5-syntax, a hand-written project in the JSON5 syntax Xcode accepts; features, a project using
+ *    every construct the lowering handles, stored in xcprojformatter's canonical form; and invalid-*, one fault each that
+ *    Xcode 27.2 refuses. The files end in .txt so the extension never activates on this repository.
+ *  - scripts/fixtures/xcproj/goldens/: every parser's output on each valid fixture.
  *  - A table of syntax cases recorded on Xcode 27.2, each embedded in a valid project as Xcode would see it, and a few
  *    whole texts. The verdicts aren't stored: each case runs through xcprojformatter, so a newer Xcode that reads JSON5
  *    differently fails this check.
  *
  * Requires Xcode 27.2 or later (xcprojformatter). Re-run after every Xcode upgrade.
- * Usage: npm run test:xcproj
+ * Usage: npm run test:xcproj                  check
+ *        npm run test:xcproj -- --update      rewrite the goldens, then review the diff
  */
 'use strict';
 
@@ -129,9 +137,12 @@ function spanProblems(text, node, where = '') {
 
 const fixtures = fs.readdirSync(FIXTURE_DIR).filter((name) => name.endsWith('.xcproj.txt')).sort();
 const texts = new Map(fixtures.map((name) => [name, fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8')]));
+// invalid-* hold one fault each that Xcode refuses (the refusals section below); every other fixture is a valid project.
+const validFixtures = fixtures.filter((name) => !name.startsWith('invalid-'));
+const invalidFixtures = fixtures.filter((name) => name.startsWith('invalid-'));
 
 console.log('fixtures');
-for (const name of fixtures) {
+for (const name of validFixtures) {
     const text = texts.get(name);
     const { root, threw } = read(text);
     report(root !== undefined && !threw, `${name} reads`, threw || undefined);
@@ -346,6 +357,391 @@ console.log('duplicate keys: the first is kept, as xcprojformatter prints it');
     report(ours?.targets?.[0]?.['build-settings']?.SWIFT_VERSION === '5.0' &&
         canonical?.targets?.[0]?.['build-settings']?.SWIFT_VERSION === '5.0', 'a target build setting');
     report(plutilValue(text)?.['default-configuration'] === 'Release', 'plutil keeps the last, which is why it is not the reference here');
+}
+
+// ── Lowering into the project index ───────────────────────
+
+const UPDATE = process.argv.includes('--update');
+const GOLDEN_DIR = path.join(FIXTURE_DIR, 'goldens');
+// Where resolvedPath and groupForFolder place a fixture project, as in the pbxproj check.
+const PROJECT_DIR = '/project';
+const CONFIGURATIONS = ['Debug', 'Release'];
+const load = (relative) => require(path.join(REPO, 'out', relative));
+const projectIndex = load('parsers/projectIndex.js');
+const xcprojIndex = load('parsers/xcprojIndex.js');
+const targets = load('parsers/targets.js');
+const groups = load('parsers/groups.js');
+const buildSettings = load('parsers/buildSettings.js');
+const packages = load('parsers/packages.js');
+const frameworks = load('parsers/frameworks.js');
+const resources = load('parsers/resources.js');
+const versionGroups = load('parsers/versionGroups.js');
+const project = load('parsers/project.js');
+const writers = load('writers/pbxproj.js');
+
+/** Keys sorted at every level, so two readings compare by content. */
+function canonical(value) {
+    if (Array.isArray(value)) { return value.map(canonical); }
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.keys(value).sort().filter((key) => value[key] !== undefined).map((key) => [key, canonical(value[key])]));
+    }
+    return value;
+}
+
+/**
+ * Xcode's own conversion of the text to a pbxproj (`xcodebuild -convert-project pbxproj` on a temp copy, which resolves no
+ * packages and needs no network): `{ text }`, or `{ refused }` when Xcode can't read the project. The result bundle an
+ * error writes goes into the temp folder rather than the system's.
+ */
+function xcodeConversion(text) {
+    const bundle = bundleWith(text);
+    const result = spawnSync('/usr/bin/xcrun', ['xcodebuild', '-convert-project', 'pbxproj', '-project', bundle,
+        '-resultBundlePath', path.join(path.dirname(bundle), 'result.xcresult')], { encoding: 'utf8' });
+    const output = `${result.stdout}${result.stderr}`;
+    if (/Unable to read project/.test(output)) { return { refused: true }; }
+    const converted = path.join(bundle, 'project.pbxproj');
+    if (result.status !== 0 || !fs.existsSync(converted)) {
+        return { error: output.split('\n').filter((line) => line.trim()).slice(-2).join(' ') };
+    }
+    return { text: fs.readFileSync(converted, 'utf8') };
+}
+
+const SCANNED_ISAS = ['PBXGroup', 'PBXVariantGroup', 'PBXFileReference', 'XCVersionGroup', 'PBXFileSystemSynchronizedRootGroup',
+    'PBXFileSystemSynchronizedBuildFileExceptionSet', 'XCBuildConfiguration', 'XCRemoteSwiftPackageReference',
+    'XCLocalSwiftPackageReference', 'XCSwiftPackageProductDependency', 'PBXBuildFile'];
+
+/**
+ * Everything VSXcode reads from a project index, with ids replaced by stable descriptions (a tree path, a target name),
+ * so the lowering and Xcode's conversion compare by content. Lists keep their order, except packageProductDependencies,
+ * whose order Xcode varies from run to run. lastKnownFileType is left out: Xcode reads it from the disk.
+ */
+function dump(index) {
+    const O = index.objects;
+    const str = (value) => (typeof value === 'string' ? value : undefined);
+    const list = (value) => (Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []);
+    const asSet = (items) => items.map((item) => JSON.stringify(canonical(item))).sort();
+
+    const names = new Map([[index.mainGroupId, '<main>']]);
+    const walk = (id, prefix) => {
+        const seen = new Map();
+        for (const child of list(O[id]?.children)) {
+            const name = projectIndex.displayName(O[child]);
+            const count = seen.get(name) ?? 0;
+            seen.set(name, count + 1);
+            const description = `${prefix}/${name}${count > 0 ? `#${count}` : ''}`;
+            if (!names.has(child)) {
+                names.set(child, description);
+                walk(child, description);
+            }
+        }
+    };
+    walk(index.mainGroupId, '');
+    const references = Array.isArray(index.project?.projectReferences) ? index.project.projectReferences : [];
+    for (const reference of references) {
+        names.set(reference.ProductGroup, `${names.get(reference.ProjectRef) ?? '?'} (Products)`);
+    }
+    const allTargets = ['PBXNativeTarget', 'PBXAggregateTarget', 'PBXLegacyTarget'].flatMap((isa) => index.objectsOfIsa(isa));
+    const phaseOfBuildFile = new Map();
+    for (const { object: target } of allTargets) {
+        for (const phase of list(target.buildPhases)) {
+            names.set(phase, `${target.name}/${O[phase]?.isa}${O[phase]?.name !== undefined ? `:${O[phase].name}` : ''}`);
+            for (const buildFile of list(O[phase]?.files)) { phaseOfBuildFile.set(buildFile, phase); }
+        }
+    }
+    const describe = (id) => (id === undefined ? undefined : names.get(id) ?? (O[id]
+        ? `${O[id].isa}:${O[id].name ?? O[id].productName ?? O[id].repositoryURL ?? O[id].relativePath ?? '?'}`
+        : `missing:${id}`));
+    const packageOf = (id) => (O[id] ? {
+        isa: O[id].isa, repositoryURL: str(O[id].repositoryURL), requirement: O[id].requirement, relativePath: str(O[id].relativePath)
+    } : undefined);
+    const productOf = (id) => ({ productName: str(O[id]?.productName), package: packageOf(O[id]?.package) });
+    const buildFileOf = (id) => ({
+        file: describe(O[id]?.fileRef), product: O[id]?.productRef ? str(O[O[id].productRef]?.productName) : undefined, settings: O[id]?.settings
+    });
+    const configurations = (listId) => list(O[listId]?.buildConfigurations).map((id) => ({
+        name: O[id]?.name,
+        buildSettings: O[id]?.buildSettings,
+        base: describe(O[id]?.baseConfigurationReference),
+        anchor: O[id]?.baseConfigurationReferenceAnchor === undefined ? undefined
+            : `${describe(O[id].baseConfigurationReferenceAnchor)} + ${O[id].baseConfigurationReferenceRelativePath}`
+    }));
+    const element = (id) => {
+        const object = O[id] ?? {};
+        const out = { isa: object.isa, name: str(object.name), path: str(object.path), sourceTree: str(object.sourceTree), explicitFileType: str(object.explicitFileType) };
+        if (object.isa === 'XCVersionGroup') {
+            out.currentVersion = describe(object.currentVersion);
+            out.versionGroupType = str(object.versionGroupType);
+        }
+        if (object.isa === 'PBXFileSystemSynchronizedRootGroup') {
+            out.exceptions = list(object.exceptions).map((setId) => ({
+                isa: O[setId]?.isa, target: str(O[O[setId]?.target]?.name), buildPhase: describe(O[setId]?.buildPhase),
+                membershipExceptions: list(O[setId]?.membershipExceptions)
+            }));
+        }
+        if (object.children !== undefined) { out.children = list(object.children).map(element); }
+        return out;
+    };
+    const targetsOf = (isa) => index.objectsOfIsa(isa).map(({ object: target }) => ({
+        name: target.name,
+        productName: target.productName,
+        productType: target.productType,
+        product: describe(target.productReference),
+        configurations: configurations(target.buildConfigurationList),
+        defaultConfiguration: O[target.buildConfigurationList]?.defaultConfigurationName,
+        phases: list(target.buildPhases).map((phase) => ({ isa: O[phase]?.isa, name: str(O[phase]?.name), files: list(O[phase]?.files).map(buildFileOf) })),
+        dependencies: list(target.dependencies).map((id) => (O[id]?.target ? `target:${O[O[id].target]?.name}`
+            : O[id]?.productRef ? `product:${O[O[id].productRef]?.productName}` : `proxy:${O[O[id]?.targetProxy]?.remoteInfo}`)),
+        packageProductDependencies: asSet(list(target.packageProductDependencies).map(productOf)),
+        fileSystemSynchronizedGroups: list(target.fileSystemSynchronizedGroups).map(describe)
+    }));
+    const scanned = (isa, id, object) => {
+        switch (isa) {
+            case 'XCBuildConfiguration': return { name: object.name, buildSettings: object.buildSettings, base: describe(object.baseConfigurationReference) };
+            case 'PBXFileSystemSynchronizedBuildFileExceptionSet': return { target: str(O[object.target]?.name), membershipExceptions: list(object.membershipExceptions) };
+            case 'XCRemoteSwiftPackageReference':
+            case 'XCLocalSwiftPackageReference': return packageOf(id);
+            case 'XCSwiftPackageProductDependency': return productOf(id);
+            case 'PBXBuildFile': return { phase: describe(phaseOfBuildFile.get(id)), ...buildFileOf(id) };
+            default: return { at: describe(id), name: str(object.name), path: str(object.path), sourceTree: str(object.sourceTree) };
+        }
+    };
+    const P = index.project ?? {};
+    return {
+        developmentRegion: P.developmentRegion,
+        knownRegions: P.knownRegions,
+        productRefGroup: describe(P.productRefGroup),
+        projectReferences: references.map((reference) => ({ project: describe(reference.ProjectRef), products: describe(reference.ProductGroup) })),
+        mainGroup: element(index.mainGroupId),
+        projectConfigurations: configurations(P.buildConfigurationList),
+        projectDefaultConfiguration: O[P.buildConfigurationList]?.defaultConfigurationName,
+        // Definition order, exactly: Package.swift's target order and the auto-configured target come from it.
+        nativeTargets: targetsOf('PBXNativeTarget'),
+        aggregateTargets: targetsOf('PBXAggregateTarget'),
+        legacyTargets: targetsOf('PBXLegacyTarget'),
+        testHosts: Object.entries(P.attributes?.TargetAttributes ?? {})
+            .filter(([, attributes]) => attributes?.TestTargetID)
+            .map(([id, attributes]) => `${O[id]?.name} -> ${O[attributes.TestTargetID]?.name}`).sort(),
+        scans: Object.fromEntries(SCANNED_ISAS.map((isa) => [isa, asSet(index.objectsOfIsa(isa).map(({ id, object }) => scanned(isa, id, object)))]))
+    };
+}
+
+/** Where two dumps differ, as `path: ours / xcode` lines. */
+function differences(ours, theirs, at = '', out = []) {
+    if (JSON.stringify(canonical(ours)) === JSON.stringify(canonical(theirs))) { return out; }
+    if (ours && theirs && typeof ours === 'object' && typeof theirs === 'object') {
+        for (const key of new Set([...Object.keys(ours), ...Object.keys(theirs)])) { differences(ours[key], theirs[key], `${at}/${key}`, out); }
+        return out;
+    }
+    out.push(`${at}: ours ${JSON.stringify(ours)}, xcode ${JSON.stringify(theirs)}`);
+    return out;
+}
+
+console.log('lowering: each valid fixture reads as Xcode\'s own conversion of it reads');
+for (const name of validFixtures) {
+    const text = texts.get(name);
+    const ours = projectIndex.readProject(text);
+    if (typeof ours === 'string') {
+        report(false, `${name}: reads`, `${ours}: ${xcprojIndex.describeXcprojProblem(text)}`);
+        continue;
+    }
+    const conversion = xcodeConversion(text);
+    if (conversion.text === undefined) {
+        report(false, `${name}: Xcode converts it`, conversion.refused ? 'refused' : conversion.error);
+        continue;
+    }
+    const theirs = projectIndex.readProject(conversion.text);
+    const found = typeof theirs === 'string' ? [`Xcode's conversion reads ${theirs}`] : differences(dump(ours), dump(theirs));
+    report(ours.format === 'xcproj' && found.length === 0, `${name}: matches Xcode's conversion`, found.slice(0, 4).join('; ') || undefined);
+}
+
+console.log('refusals: every invalid fixture is refused by Xcode and by the reader, for the reason its header names');
+for (const name of invalidFixtures) {
+    const text = texts.get(name);
+    const expected = /^\/\/ VSXcode: (.+)$/m.exec(text)?.[1];
+    const problem = xcprojIndex.describeXcprojProblem(text);
+    const read = projectIndex.readProject(text);
+    const conversion = xcodeConversion(text);
+    const ok = expected !== undefined && read === 'unparseable' && problem !== undefined && problem.includes(expected) && conversion.refused === true;
+    report(ok, name, ok ? undefined : `reader: ${read === 'unparseable' ? 'refuses' : 'reads'} (${problem}); Xcode: ${conversion.refused ? 'refuses' : 'reads'}`);
+}
+
+console.log('syntax independence: json5-syntax lowers exactly as its canonical form does');
+{
+    const text = texts.get('json5-syntax.xcproj.txt');
+    const canonicalText = xcodeCanonical(text);
+    const lower = (input) => xcprojIndex.lowerXcproj(xcprojIndex.xcprojRoot(input));
+    const ours = lower(text);
+    const theirs = canonicalText === undefined ? undefined : lower(canonicalText);
+    const ok = theirs !== undefined && !('problem' in ours) && !('problem' in theirs) &&
+        same(ours.objects, theirs.objects) && same(ours.order, theirs.order) && same(ours.rootObject, theirs.rootObject) &&
+        same([...ours.sources], [...theirs.sources]);
+    report(ok, 'objects, ids, definition order and source pointers are equal');
+}
+
+console.log('stable ids: a letter-case fix or an added sibling leaves every other object its id and isa');
+{
+    const text = texts.get('explicit-app.xcproj.txt');
+    const original = projectIndex.readProject(text);
+    const variant = (label, from, to) => [label, text.split(from).length === 2 ? text.replace(from, to) : undefined];
+    for (const [label, changed] of [
+        variant('a group path in other letter case', '"path": "Views",', '"path": "VIEWS",'),
+        variant('a compiled file path in other letter case', '{ "path": "AppDelegate.swift",', '{ "path": "APPDELEGATE.swift",'),
+        variant('a file added ahead of its siblings', '{ "path": "AppDelegate.swift",', '{ "path": "Zed.swift" },\n        { "path": "AppDelegate.swift",')
+    ]) {
+        const index = changed === undefined ? 'no such text' : projectIndex.readProject(changed);
+        const lost = typeof original === 'string' || typeof index === 'string' ? ['the text'] :
+            Object.keys(original.objects).filter((id) => index.objects[id]?.isa !== original.objects[id].isa);
+        report(lost.length === 0, label, lost.length === 0 ? undefined : `${typeof index === 'string' ? index : `${lost.length} ids lost`}: ${lost.slice(0, 3).join(', ')}`);
+    }
+}
+
+console.log('SwiftPM-generated ids: only generated-ids is recognized');
+for (const name of validFixtures) {
+    const expected = name === 'generated-ids.xcproj.txt';
+    report(project.usesSwiftPMObjectIds(texts.get(name)) === expected, `${name}: ${expected ? 'recognized' : 'not recognized'}`);
+}
+
+console.log('models: explicit-app\'s version groups, located in the JSON text');
+{
+    const text = texts.get('explicit-app.xcproj.txt');
+    const models = versionGroups.parseVersionGroups(text);
+    const located = models.every((model) => {
+        const node = parseJson5Text(text.slice(model.startIndex, model.endIndex));
+        return node?.kind === 'object' && valueOf(node).kind === 'version-group';
+    });
+    report(models.length === 2 && located, 'two models, each spanning its own JSON object', models.map((model) => model.path).join(', '));
+}
+
+console.log('guards: the pbxproj writers leave JSON text alone');
+for (const name of validFixtures) {
+    const text = texts.get(name);
+    const index = projectIndex.readProject(text);
+    const configuration = typeof index === 'string' ? undefined : index.objectsOfIsa('XCBuildConfiguration')[0]?.id;
+    const ok = writers.beginProjectEdit(text) === null &&
+        writers.updateBuildSetting(text, configuration ?? 'none', 'SWIFT_VERSION', '6.0') === text;
+    report(ok, `${name}: beginProjectEdit gives null and updateBuildSetting the text unchanged`);
+}
+
+console.log('never throws: a project nested deeper than the stack reads as unparseable');
+{
+    const depth = 200000;
+    const text = `{ "zzz": ${'['.repeat(depth)}${']'.repeat(depth)}, ${REST}`;
+    let outcome;
+    try {
+        outcome = projectIndex.readProject(text);
+    } catch (error) {
+        outcome = `threw ${String(error).split('\n')[0]}`;
+    }
+    report(outcome === 'unparseable' || (outcome && typeof outcome === 'object'), 'readProject returns', typeof outcome === 'string' ? outcome : 'an index');
+}
+
+// ── Goldens ───────────────────────────────────────────────
+
+const normalize = (value) => (value === undefined ? null : JSON.parse(JSON.stringify(value)));
+const mapEntries = (map) => [...map.entries()];
+
+function capture(compute) {
+    try {
+        return normalize(compute());
+    } catch (error) {
+        return { threw: String((error && error.message) || error).split('\n')[0] };
+    }
+}
+
+/**
+ * Every parser's output on a JSON project, with inputs taken from its own index: each native target, configuration list,
+ * Frameworks and Resources phase, up to four Swift file references, each group folder and the index helpers on them.
+ */
+function parserEntries(text) {
+    const entries = {};
+    const record = (key, compute) => { entries[key] = capture(compute); };
+    const index = projectIndex.readProject(text);
+    if (typeof index === 'string') { return { readProject: index }; }
+    const nativeTargets = index.objectsOfIsa('PBXNativeTarget').map(({ object }) => object);
+    const phases = nativeTargets.flatMap((target) => (Array.isArray(target.buildPhases) ? target.buildPhases : []));
+    const phasesOfIsa = (isa) => phases.filter((id) => index.objects[id]?.isa === isa);
+    const lists = [index.project?.buildConfigurationList, ...nativeTargets.map((target) => target.buildConfigurationList)].filter(Boolean);
+    const swiftFiles = index.objectsOfIsa('PBXFileReference').map(({ id }) => id)
+        .filter((id) => /\.swift$/.test(index.objects[id].path ?? '')).slice(0, 4);
+    const groupFolders = [...groups.buildGroupDirectories(text, PROJECT_DIR).entries()];
+    const folders = [...new Set(groupFolders.map(([, folder]) => path.posix.relative(PROJECT_DIR, folder)))].sort();
+
+    record('parseNativeTargets', () => targets.parseNativeTargets(text));
+    record('parseTargetDependencies', () => mapEntries(targets.parseTargetDependencies(text)));
+    for (const name of [...nativeTargets.map((target) => target.name), 'NoSuchTarget']) {
+        record(`parseBuildPhaseIds ${name}`, () => targets.parseBuildPhaseIds(text, name));
+        record(`parseExcludedFiles ${name}`, () => project.parseExcludedFiles(text, name));
+    }
+    record('parseBuildConfigurations', () => mapEntries(buildSettings.parseBuildConfigurations(text)));
+    for (const listId of lists) {
+        record(`resolveConfigurationListId ${listId}`, () => buildSettings.resolveConfigurationListId(text, listId));
+        for (const configuration of CONFIGURATIONS) {
+            record(`getBuildSettingsForTarget ${listId} ${configuration}`, () => buildSettings.getBuildSettingsForTarget(text, listId, configuration));
+        }
+    }
+    for (const configuration of CONFIGURATIONS) {
+        record(`getProjectBuildSettings ${configuration}`, () => buildSettings.getProjectBuildSettings(text, configuration));
+    }
+    record('parseSwiftPackageReferences', () => mapEntries(packages.parseSwiftPackageReferences(text)));
+    record('parseSwiftPackageProductDependencies', () => mapEntries(packages.parseSwiftPackageProductDependencies(text)));
+    record('parseGroups', () => mapEntries(groups.parseGroups(text)));
+    record('findMainGroupId', () => groups.findMainGroupId(text));
+    record('buildGroupDirectories', () => groupFolders);
+    for (const relativePath of [...folders.filter((folder) => folder !== ''), 'Missing']) {
+        record(`resolveGroupForPath ${relativePath}`, () => groups.resolveGroupForPath(groups.parseGroups(text), groups.findMainGroupId(text), relativePath));
+    }
+    record('parseVersionGroups', () => versionGroups.parseVersionGroups(text));
+    record('parseSwiftVersion', () => project.parseSwiftVersion(text));
+    record('parseDeploymentTargets', () => project.parseDeploymentTargets(text));
+    record('parseDefaultLocalization', () => project.parseDefaultLocalization(text));
+    record('usesSwiftPMObjectIds', () => project.usesSwiftPMObjectIds(text));
+    for (const phaseId of phasesOfIsa('PBXFrameworksBuildPhase')) {
+        record(`parseFrameworksBuildPhase ${phaseId}`, () => frameworks.parseFrameworksBuildPhase(text, phaseId));
+        record(`parseLinkedFrameworksForTarget ${phaseId}`, () => frameworks.parseLinkedFrameworksForTarget(text, phaseId));
+    }
+    for (const phaseId of phasesOfIsa('PBXResourcesBuildPhase')) {
+        record(`parseResourcesBuildPhase ${phaseId}`, () => resources.parseResourcesBuildPhase(text, phaseId));
+        record(`parseResourcesForTarget ${phaseId}`, () => resources.parseResourcesForTarget(text, phaseId));
+    }
+    record('folderSpellings', () => projectIndex.folderSpellings(index, PROJECT_DIR));
+    for (const id of swiftFiles) {
+        record(`findFileReferencePath ${id}`, () => writers.findFileReferencePath(text, id));
+        record(`findBuildFileId ${id}`, () => writers.findBuildFileId(text, id));
+        record(`displayName ${id}`, () => projectIndex.displayName(index.object(id)));
+        record(`buildFilesFor ${id}`, () => projectIndex.buildFilesFor(index, id));
+        record(`phasesOf ${id}`, () => Object.fromEntries(projectIndex.buildFilesFor(index, id).map((buildFile) => [buildFile, projectIndex.phasesOf(index, buildFile)])));
+    }
+    for (const id of [...groupFolders.map(([id]) => id), ...swiftFiles]) {
+        record(`parentOf ${id}`, () => projectIndex.parentOf(index, id));
+        record(`resolvedPath ${id}`, () => projectIndex.resolvedPath(index, id, PROJECT_DIR));
+    }
+    for (const phaseId of phases) {
+        record(`targetOfPhase ${phaseId}`, () => projectIndex.targetOfPhase(index, phaseId));
+    }
+    for (const folder of [...folders, 'Missing']) {
+        record(`groupForFolder ${folder || '.'}`, () => projectIndex.groupForFolder(index, path.posix.join(PROJECT_DIR, folder), PROJECT_DIR));
+    }
+    return entries;
+}
+
+console.log(`goldens: every parser over every valid fixture${UPDATE ? ' (rewriting)' : ''}`);
+for (const name of validFixtures) {
+    const entries = parserEntries(texts.get(name));
+    const goldenPath = path.join(GOLDEN_DIR, name.replace(/\.xcproj\.txt$/, '.json'));
+    if (UPDATE) {
+        fs.mkdirSync(GOLDEN_DIR, { recursive: true });
+        fs.writeFileSync(goldenPath, `${JSON.stringify({ fixture: path.relative(REPO, path.join(FIXTURE_DIR, name)), entries }, null, 2)}\n`);
+        report(true, `${name}: golden rewritten`, `${Object.keys(entries).length} entries`);
+        continue;
+    }
+    if (!fs.existsSync(goldenPath)) {
+        report(false, `${name}: golden exists`, 'run npm run test:xcproj -- --update');
+        continue;
+    }
+    const golden = JSON.parse(fs.readFileSync(goldenPath, 'utf8')).entries;
+    const changed = [...new Set([...Object.keys(golden), ...Object.keys(entries)])]
+        .filter((key) => JSON.stringify(golden[key]) !== JSON.stringify(entries[key]));
+    report(changed.length === 0, `${name}: matches its golden`, changed.length === 0 ? `${Object.keys(entries).length} entries` : changed.slice(0, 5).join(', '));
 }
 
 console.log(failures === 0 ? '\nAll JSON project file checks passed.' : `\n${failures} check(s) failed.`);

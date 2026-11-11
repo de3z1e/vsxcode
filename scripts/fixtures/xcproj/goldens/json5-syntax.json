@@ -1,0 +1,227 @@
+{
+  "fixture": "scripts/fixtures/xcproj/json5-syntax.xcproj.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "App",
+        "productName": "App",
+        "productType": "com.apple.product-type.application",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "D981AE28C81A4908E947DFA0",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [],
+    "parseBuildPhaseIds App": {
+      "sourcesBuildPhaseId": "B563C59FC46B2BD8003FE485"
+    },
+    "parseExcludedFiles App": [],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "3BA04114FF1292D4529A89ED",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {}
+        }
+      ],
+      [
+        "A36F077E20578BE57EEED73E",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "productName": "$(TARGET_NAME)",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "A49F2EDD2E7FC01590D85ACB",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {}
+        }
+      ],
+      [
+        "EECE7B2118EB6A087FD46F54",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "productName": "$(TARGET_NAME)",
+          "sdkRoot": "iphoneos"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 614471660AA131A99883C67C": [
+      "3BA04114FF1292D4529A89ED",
+      "A49F2EDD2E7FC01590D85ACB"
+    ],
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {}
+    },
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {}
+    },
+    "resolveConfigurationListId D981AE28C81A4908E947DFA0": [
+      "A36F077E20578BE57EEED73E",
+      "EECE7B2118EB6A087FD46F54"
+    ],
+    "getBuildSettingsForTarget D981AE28C81A4908E947DFA0 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "productName": "$(TARGET_NAME)",
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget D981AE28C81A4908E947DFA0 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "productName": "$(TARGET_NAME)",
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {}
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {}
+    },
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "693C113810E7894E444D1C56",
+        {
+          "id": "693C113810E7894E444D1C56",
+          "name": "Products",
+          "childIds": [
+            "AAAAAAAAAAAAAAAAAAAAAAAA"
+          ]
+        }
+      ],
+      [
+        "894C76DFCBA53EB742FD8B7E",
+        {
+          "id": "894C76DFCBA53EB742FD8B7E",
+          "path": "App",
+          "childIds": [
+            "58475CDF1CA3C2C3AABD918A",
+            "8CBE75856CA390FDF3674643"
+          ]
+        }
+      ],
+      [
+        "B28B7AF69320201D1CF206EB",
+        {
+          "id": "B28B7AF69320201D1CF206EB",
+          "childIds": [
+            "894C76DFCBA53EB742FD8B7E",
+            "693C113810E7894E444D1C56"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "B28B7AF69320201D1CF206EB",
+    "buildGroupDirectories": [
+      [
+        "B28B7AF69320201D1CF206EB",
+        "/project"
+      ],
+      [
+        "894C76DFCBA53EB742FD8B7E",
+        "/project/App"
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath App": "894C76DFCBA53EB742FD8B7E",
+    "resolveGroupForPath Missing": null,
+    "parseVersionGroups": [],
+    "parseSwiftVersion": "5.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "26.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": false,
+    "folderSpellings": [
+      {
+        "id": "894C76DFCBA53EB742FD8B7E",
+        "position": 0,
+        "folder": "/project/App"
+      }
+    ],
+    "findFileReferencePath 58475CDF1CA3C2C3AABD918A": "A.swift",
+    "findBuildFileId 58475CDF1CA3C2C3AABD918A": "AC1A96700A6E1576E8F789CC",
+    "displayName 58475CDF1CA3C2C3AABD918A": "A.swift",
+    "buildFilesFor 58475CDF1CA3C2C3AABD918A": [
+      "AC1A96700A6E1576E8F789CC"
+    ],
+    "phasesOf 58475CDF1CA3C2C3AABD918A": {
+      "AC1A96700A6E1576E8F789CC": [
+        "B563C59FC46B2BD8003FE485"
+      ]
+    },
+    "findFileReferencePath 8CBE75856CA390FDF3674643": "B.swift",
+    "findBuildFileId 8CBE75856CA390FDF3674643": "E494482FF7BA0F0664A4464D",
+    "displayName 8CBE75856CA390FDF3674643": "B.swift",
+    "buildFilesFor 8CBE75856CA390FDF3674643": [
+      "E494482FF7BA0F0664A4464D"
+    ],
+    "phasesOf 8CBE75856CA390FDF3674643": {
+      "E494482FF7BA0F0664A4464D": [
+        "B563C59FC46B2BD8003FE485"
+      ]
+    },
+    "parentOf B28B7AF69320201D1CF206EB": null,
+    "resolvedPath B28B7AF69320201D1CF206EB": "/project",
+    "parentOf 894C76DFCBA53EB742FD8B7E": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 894C76DFCBA53EB742FD8B7E": "/project/App",
+    "parentOf 693C113810E7894E444D1C56": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 693C113810E7894E444D1C56": "/project",
+    "parentOf 58475CDF1CA3C2C3AABD918A": "894C76DFCBA53EB742FD8B7E",
+    "resolvedPath 58475CDF1CA3C2C3AABD918A": "/project/App/A.swift",
+    "parentOf 8CBE75856CA390FDF3674643": "894C76DFCBA53EB742FD8B7E",
+    "resolvedPath 8CBE75856CA390FDF3674643": "/project/App/B.swift",
+    "targetOfPhase B563C59FC46B2BD8003FE485": "BBBBBBBBBBBBBBBBBBBBBBBB",
+    "groupForFolder .": "B28B7AF69320201D1CF206EB",
+    "groupForFolder App": "894C76DFCBA53EB742FD8B7E",
+    "groupForFolder Missing": null
+  }
+}

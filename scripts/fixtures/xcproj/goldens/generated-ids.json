@@ -1,0 +1,332 @@
+{
+  "fixture": "scripts/fixtures/xcproj/generated-ids.xcproj.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "SampleKit",
+        "productName": "SampleKit",
+        "productType": "com.apple.product-type.framework",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "0BFAA85D66A23D1E0972C04B",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [],
+    "parseBuildPhaseIds SampleKit": {
+      "sourcesBuildPhaseId": "BCE2ED96BC15CB2711100AE8",
+      "frameworksBuildPhaseId": "5DA4D9B6B3F0F3396632484E"
+    },
+    "parseExcludedFiles SampleKit": [],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "19CB39FC9A4F9896F5172AC6",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "SampleKit",
+            "PRODUCT_NAME": "$(TARGET_NAME:c99extidentifier)",
+            "SWIFT_VERSION": "5.0",
+            "TARGET_NAME": "SampleKit"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "SampleKit",
+          "productName": "$(TARGET_NAME:c99extidentifier)"
+        }
+      ],
+      [
+        "3BA04114FF1292D4529A89ED",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "COMBINE_HIDPI_IMAGES": "YES",
+            "DEBUG_INFORMATION_FORMAT": "dwarf",
+            "MACOSX_DEPLOYMENT_TARGET": "10.13",
+            "SDKROOT": "macosx",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) SWIFT_PACKAGE DEBUG",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "swiftActiveCompilationConditions": [
+            "$(inherited)",
+            "SWIFT_PACKAGE",
+            "DEBUG"
+          ],
+          "sdkRoot": "macosx",
+          "macosxDeploymentTarget": "10.13"
+        }
+      ],
+      [
+        "76FFC45395B1B7E1142FF454",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "SampleKit",
+            "PRODUCT_NAME": "$(TARGET_NAME:c99extidentifier)",
+            "SWIFT_VERSION": "5.0",
+            "TARGET_NAME": "SampleKit"
+          },
+          "swiftVersion": "5.0",
+          "bundleIdentifier": "SampleKit",
+          "productName": "$(TARGET_NAME:c99extidentifier)"
+        }
+      ],
+      [
+        "A49F2EDD2E7FC01590D85ACB",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "COMBINE_HIDPI_IMAGES": "YES",
+            "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+            "MACOSX_DEPLOYMENT_TARGET": "10.13",
+            "SDKROOT": "macosx",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) SWIFT_PACKAGE",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "swiftActiveCompilationConditions": [
+            "$(inherited)",
+            "SWIFT_PACKAGE"
+          ],
+          "sdkRoot": "macosx",
+          "macosxDeploymentTarget": "10.13"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 614471660AA131A99883C67C": [
+      "3BA04114FF1292D4529A89ED",
+      "A49F2EDD2E7FC01590D85ACB"
+    ],
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) SWIFT_PACKAGE DEBUG",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE",
+        "DEBUG"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) SWIFT_PACKAGE",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
+    "resolveConfigurationListId 0BFAA85D66A23D1E0972C04B": [
+      "76FFC45395B1B7E1142FF454",
+      "19CB39FC9A4F9896F5172AC6"
+    ],
+    "getBuildSettingsForTarget 0BFAA85D66A23D1E0972C04B Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "SampleKit",
+        "PRODUCT_NAME": "$(TARGET_NAME:c99extidentifier)",
+        "SWIFT_VERSION": "5.0",
+        "TARGET_NAME": "SampleKit"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "SampleKit",
+      "productName": "$(TARGET_NAME:c99extidentifier)"
+    },
+    "getBuildSettingsForTarget 0BFAA85D66A23D1E0972C04B Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "SampleKit",
+        "PRODUCT_NAME": "$(TARGET_NAME:c99extidentifier)",
+        "SWIFT_VERSION": "5.0",
+        "TARGET_NAME": "SampleKit"
+      },
+      "swiftVersion": "5.0",
+      "bundleIdentifier": "SampleKit",
+      "productName": "$(TARGET_NAME:c99extidentifier)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) SWIFT_PACKAGE DEBUG",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE",
+        "DEBUG"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "COMBINE_HIDPI_IMAGES": "YES",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "MACOSX_DEPLOYMENT_TARGET": "10.13",
+        "SDKROOT": "macosx",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) SWIFT_PACKAGE",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "$(inherited)",
+        "SWIFT_PACKAGE"
+      ],
+      "sdkRoot": "macosx",
+      "macosxDeploymentTarget": "10.13"
+    },
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "9B7C69CC99643F596B9629C1",
+        {
+          "id": "9B7C69CC99643F596B9629C1",
+          "name": "Sources",
+          "childIds": [
+            "FB5A96B5B2DCFD81EDA9D328"
+          ]
+        }
+      ],
+      [
+        "B28B7AF69320201D1CF206EB",
+        {
+          "id": "B28B7AF69320201D1CF206EB",
+          "childIds": [
+            "85CF51F3C71047DBB06AE289",
+            "9B7C69CC99643F596B9629C1",
+            "F8F33AC4DB2CBE1C9B671D9B"
+          ]
+        }
+      ],
+      [
+        "F8F33AC4DB2CBE1C9B671D9B",
+        {
+          "id": "F8F33AC4DB2CBE1C9B671D9B",
+          "name": "Products",
+          "childIds": [
+            "SampleKit::SampleKit::Product"
+          ]
+        }
+      ],
+      [
+        "FB5A96B5B2DCFD81EDA9D328",
+        {
+          "id": "FB5A96B5B2DCFD81EDA9D328",
+          "name": "SampleKit",
+          "path": "Sources/SampleKit",
+          "childIds": [
+            "12B187DBDD3D7622DFB6C90F"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "B28B7AF69320201D1CF206EB",
+    "buildGroupDirectories": [
+      [
+        "B28B7AF69320201D1CF206EB",
+        "/project"
+      ],
+      [
+        "9B7C69CC99643F596B9629C1",
+        "/project"
+      ],
+      [
+        "FB5A96B5B2DCFD81EDA9D328",
+        "/project/Sources/SampleKit"
+      ]
+    ],
+    "resolveGroupForPath Sources/SampleKit": "FB5A96B5B2DCFD81EDA9D328",
+    "resolveGroupForPath Missing": null,
+    "parseVersionGroups": [],
+    "parseSwiftVersion": "5.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "macOS",
+        "version": "10.13"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": true,
+    "parseFrameworksBuildPhase 5DA4D9B6B3F0F3396632484E": [],
+    "parseLinkedFrameworksForTarget 5DA4D9B6B3F0F3396632484E": [],
+    "folderSpellings": [
+      {
+        "id": "FB5A96B5B2DCFD81EDA9D328",
+        "position": 0,
+        "folder": "/project/Sources"
+      },
+      {
+        "id": "FB5A96B5B2DCFD81EDA9D328",
+        "position": 1,
+        "folder": "/project/Sources/SampleKit"
+      }
+    ],
+    "findFileReferencePath 12B187DBDD3D7622DFB6C90F": "SampleKit.swift",
+    "findBuildFileId 12B187DBDD3D7622DFB6C90F": "26AD80169E9AD3306A54441E",
+    "displayName 12B187DBDD3D7622DFB6C90F": "SampleKit.swift",
+    "buildFilesFor 12B187DBDD3D7622DFB6C90F": [
+      "26AD80169E9AD3306A54441E"
+    ],
+    "phasesOf 12B187DBDD3D7622DFB6C90F": {
+      "26AD80169E9AD3306A54441E": [
+        "BCE2ED96BC15CB2711100AE8"
+      ]
+    },
+    "findFileReferencePath 85CF51F3C71047DBB06AE289": "Package.swift",
+    "findBuildFileId 85CF51F3C71047DBB06AE289": null,
+    "displayName 85CF51F3C71047DBB06AE289": "Package.swift",
+    "buildFilesFor 85CF51F3C71047DBB06AE289": [],
+    "phasesOf 85CF51F3C71047DBB06AE289": {},
+    "parentOf B28B7AF69320201D1CF206EB": null,
+    "resolvedPath B28B7AF69320201D1CF206EB": "/project",
+    "parentOf 9B7C69CC99643F596B9629C1": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 9B7C69CC99643F596B9629C1": "/project",
+    "parentOf FB5A96B5B2DCFD81EDA9D328": "9B7C69CC99643F596B9629C1",
+    "resolvedPath FB5A96B5B2DCFD81EDA9D328": "/project/Sources/SampleKit",
+    "parentOf 12B187DBDD3D7622DFB6C90F": "FB5A96B5B2DCFD81EDA9D328",
+    "resolvedPath 12B187DBDD3D7622DFB6C90F": "/project/Sources/SampleKit/SampleKit.swift",
+    "parentOf 85CF51F3C71047DBB06AE289": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 85CF51F3C71047DBB06AE289": "/project/Package.swift",
+    "targetOfPhase BCE2ED96BC15CB2711100AE8": "SampleKit::SampleKit",
+    "targetOfPhase 5DA4D9B6B3F0F3396632484E": "SampleKit::SampleKit",
+    "groupForFolder .": "B28B7AF69320201D1CF206EB",
+    "groupForFolder Sources/SampleKit": "FB5A96B5B2DCFD81EDA9D328",
+    "groupForFolder Missing": null
+  }
+}

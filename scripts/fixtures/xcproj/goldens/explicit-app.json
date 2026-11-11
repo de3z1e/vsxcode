@@ -1,0 +1,904 @@
+{
+  "fixture": "scripts/fixtures/xcproj/explicit-app.xcproj.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "SampleApp",
+        "productName": "SampleApp",
+        "productType": "com.apple.product-type.application",
+        "packageProductDependencyIds": [
+          "6DF8CC63E23D11B7D55FDB3C",
+          "12A95E5ACC8F739986B5A455"
+        ],
+        "buildConfigurationListId": "88C0A32419D8CF2DB1EC810B",
+        "fileSystemSynchronizedGroupIds": []
+      },
+      {
+        "name": "SampleAppUITests",
+        "productName": "SampleAppUITests",
+        "productType": "com.apple.product-type.bundle.ui-testing",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "7F4E656A43EBB5618B0641EB",
+        "fileSystemSynchronizedGroupIds": []
+      },
+      {
+        "name": "SampleAppTests",
+        "productName": "SampleAppTests",
+        "productType": "com.apple.product-type.bundle.unit-test",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "D8BF5FFF54B5A4C91FD7BD78",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [
+      [
+        "SampleAppUITests",
+        [
+          {
+            "targetId": "2A96E3132E2E995738D80EE9",
+            "targetName": "SampleApp"
+          }
+        ]
+      ],
+      [
+        "SampleAppTests",
+        [
+          {
+            "targetId": "27EE30105DFDCD5F2A2D4919",
+            "targetName": "SampleApp"
+          }
+        ]
+      ]
+    ],
+    "parseBuildPhaseIds SampleApp": {
+      "sourcesBuildPhaseId": "4B134DCC387469B5801E86EC",
+      "frameworksBuildPhaseId": "649B6CD02F9081B56EF35804",
+      "resourcesBuildPhaseId": "CA6D4D522CDB26997FC6C86C"
+    },
+    "parseExcludedFiles SampleApp": [],
+    "parseBuildPhaseIds SampleAppUITests": {
+      "sourcesBuildPhaseId": "971A57C17F1702BC4298EC74",
+      "frameworksBuildPhaseId": "D4FBD52DAF315571B9EFA7F7",
+      "resourcesBuildPhaseId": "8B6BDE4BDC4D6F30E3B5ABC3"
+    },
+    "parseExcludedFiles SampleAppUITests": [],
+    "parseBuildPhaseIds SampleAppTests": {
+      "sourcesBuildPhaseId": "F3ADEC45900B6B2E4D2AB18D",
+      "frameworksBuildPhaseId": "EB1D8B1793DEF3CCF9DEDD99",
+      "resourcesBuildPhaseId": "EFD7DE18E965FD2E1380F1BC"
+    },
+    "parseExcludedFiles SampleAppTests": [],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "185A7BE2D75569B050C7DAC5",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+            "HEADER_SEARCH_PATHS": [
+              "$(inherited)",
+              "$(SRCROOT)/Vendor/include"
+            ],
+            "INFOPLIST_FILE": "SampleApp/Info.plist",
+            "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator"
+          },
+          "otherSwiftFlags": [
+            "$(inherited)",
+            "\"-D\"",
+            "\"SAMPLE_FLAG"
+          ],
+          "headerSearchPaths": [
+            "$(inherited)",
+            "$(SRCROOT)/Vendor/include"
+          ],
+          "bundleIdentifier": "com.example.SampleApp",
+          "productName": "$(TARGET_NAME)",
+          "supportedPlatforms": "iphoneos iphonesimulator"
+        }
+      ],
+      [
+        "29B7AF9E006D59E0D65767D7",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+            "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+            "HEADER_SEARCH_PATHS": [
+              "$(inherited)",
+              "$(SRCROOT)/Vendor/include"
+            ],
+            "INFOPLIST_FILE": "SampleApp/Info.plist",
+            "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+            "SWIFT_STRICT_CONCURRENCY": "targeted"
+          },
+          "strictConcurrency": "targeted",
+          "otherSwiftFlags": [
+            "$(inherited)",
+            "\"-D\"",
+            "\"SAMPLE_FLAG"
+          ],
+          "headerSearchPaths": [
+            "$(inherited)",
+            "$(SRCROOT)/Vendor/include"
+          ],
+          "bundleIdentifier": "com.example.SampleApp",
+          "productName": "$(TARGET_NAME)",
+          "supportedPlatforms": "iphoneos iphonesimulator"
+        }
+      ],
+      [
+        "31EC9D3AA5C88B82A06114BA",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "BUNDLE_LOADER": "$(TEST_HOST)",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_VERSION": "6.0",
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+          },
+          "swiftVersion": "6.0",
+          "bundleIdentifier": "com.example.SampleAppTests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "3BA04114FF1292D4529A89ED",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "ALWAYS_SEARCH_USER_PATHS": "NO",
+            "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
+            "DEBUG_INFORMATION_FORMAT": "dwarf",
+            "GCC_PREPROCESSOR_DEFINITIONS": [
+              "DEBUG=1",
+              "$(inherited)"
+            ],
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+            "MACOSX_DEPLOYMENT_TARGET": "14.0",
+            "ONLY_ACTIVE_ARCH": "YES",
+            "SDKROOT": "iphoneos",
+            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+            "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "swiftActiveCompilationConditions": [
+            "DEBUG",
+            "$(inherited)"
+          ],
+          "gccPreprocessorDefinitions": [
+            "DEBUG=1",
+            "$(inherited)"
+          ],
+          "sdkRoot": "iphoneos",
+          "macosxDeploymentTarget": "14.0"
+        }
+      ],
+      [
+        "713A8984E890120CE709EC4C",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "TEST_TARGET_NAME": "SampleApp"
+          },
+          "bundleIdentifier": "com.example.SampleAppUITests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "996650AF9E8B5CEC3CEE402B",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "TEST_TARGET_NAME": "SampleApp"
+          },
+          "bundleIdentifier": "com.example.SampleAppUITests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "A49F2EDD2E7FC01590D85ACB",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "ALWAYS_SEARCH_USER_PATHS": "NO",
+            "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+            "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+            "MACOSX_DEPLOYMENT_TARGET": "14.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_COMPILATION_MODE": "wholemodule",
+            "SWIFT_VERSION": "5.0",
+            "VALIDATE_PRODUCT": "YES"
+          },
+          "swiftVersion": "5.0",
+          "sdkRoot": "iphoneos",
+          "macosxDeploymentTarget": "14.0"
+        }
+      ],
+      [
+        "A50FB940CAB0883D0FC3AFE5",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "BUNDLE_LOADER": "$(TEST_HOST)",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SWIFT_VERSION": "6.0",
+            "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+          },
+          "swiftVersion": "6.0",
+          "bundleIdentifier": "com.example.SampleAppTests",
+          "productName": "$(TARGET_NAME)"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 614471660AA131A99883C67C": [
+      "3BA04114FF1292D4529A89ED",
+      "A49F2EDD2E7FC01590D85ACB"
+    ],
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "ONLY_ACTIVE_ARCH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "$(inherited)"
+      ],
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_COMPILATION_MODE": "wholemodule",
+        "SWIFT_VERSION": "5.0",
+        "VALIDATE_PRODUCT": "YES"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "resolveConfigurationListId 88C0A32419D8CF2DB1EC810B": [
+      "29B7AF9E006D59E0D65767D7",
+      "185A7BE2D75569B050C7DAC5"
+    ],
+    "getBuildSettingsForTarget 88C0A32419D8CF2DB1EC810B Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "$(SRCROOT)/Vendor/include"
+        ],
+        "INFOPLIST_FILE": "SampleApp/Info.plist",
+        "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+        "SWIFT_STRICT_CONCURRENCY": "targeted"
+      },
+      "strictConcurrency": "targeted",
+      "otherSwiftFlags": [
+        "$(inherited)",
+        "\"-D\"",
+        "\"SAMPLE_FLAG"
+      ],
+      "headerSearchPaths": [
+        "$(inherited)",
+        "$(SRCROOT)/Vendor/include"
+      ],
+      "bundleIdentifier": "com.example.SampleApp",
+      "productName": "$(TARGET_NAME)",
+      "supportedPlatforms": "iphoneos iphonesimulator"
+    },
+    "getBuildSettingsForTarget 88C0A32419D8CF2DB1EC810B Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "$(SRCROOT)/Vendor/include"
+        ],
+        "INFOPLIST_FILE": "SampleApp/Info.plist",
+        "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator"
+      },
+      "otherSwiftFlags": [
+        "$(inherited)",
+        "\"-D\"",
+        "\"SAMPLE_FLAG"
+      ],
+      "headerSearchPaths": [
+        "$(inherited)",
+        "$(SRCROOT)/Vendor/include"
+      ],
+      "bundleIdentifier": "com.example.SampleApp",
+      "productName": "$(TARGET_NAME)",
+      "supportedPlatforms": "iphoneos iphonesimulator"
+    },
+    "resolveConfigurationListId 7F4E656A43EBB5618B0641EB": [
+      "713A8984E890120CE709EC4C",
+      "996650AF9E8B5CEC3CEE402B"
+    ],
+    "getBuildSettingsForTarget 7F4E656A43EBB5618B0641EB Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "TEST_TARGET_NAME": "SampleApp"
+      },
+      "bundleIdentifier": "com.example.SampleAppUITests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget 7F4E656A43EBB5618B0641EB Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "TEST_TARGET_NAME": "SampleApp"
+      },
+      "bundleIdentifier": "com.example.SampleAppUITests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "resolveConfigurationListId D8BF5FFF54B5A4C91FD7BD78": [
+      "31EC9D3AA5C88B82A06114BA",
+      "A50FB940CAB0883D0FC3AFE5"
+    ],
+    "getBuildSettingsForTarget D8BF5FFF54B5A4C91FD7BD78 Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "BUNDLE_LOADER": "$(TEST_HOST)",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_VERSION": "6.0",
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+      },
+      "swiftVersion": "6.0",
+      "bundleIdentifier": "com.example.SampleAppTests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget D8BF5FFF54B5A4C91FD7BD78 Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "BUNDLE_LOADER": "$(TEST_HOST)",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_VERSION": "6.0",
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp"
+      },
+      "swiftVersion": "6.0",
+      "bundleIdentifier": "com.example.SampleAppTests",
+      "productName": "$(TARGET_NAME)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]": "iPhone Developer",
+        "DEBUG_INFORMATION_FORMAT": "dwarf",
+        "GCC_PREPROCESSOR_DEFINITIONS": [
+          "DEBUG=1",
+          "$(inherited)"
+        ],
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "ONLY_ACTIVE_ARCH": "YES",
+        "SDKROOT": "iphoneos",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+        "SWIFT_OPTIMIZATION_LEVEL": "-Onone",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "swiftActiveCompilationConditions": [
+        "DEBUG",
+        "$(inherited)"
+      ],
+      "gccPreprocessorDefinitions": [
+        "DEBUG=1",
+        "$(inherited)"
+      ],
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "ALWAYS_SEARCH_USER_PATHS": "NO",
+        "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+        "MACOSX_DEPLOYMENT_TARGET": "14.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_COMPILATION_MODE": "wholemodule",
+        "SWIFT_VERSION": "5.0",
+        "VALIDATE_PRODUCT": "YES"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos",
+      "macosxDeploymentTarget": "14.0"
+    },
+    "parseSwiftPackageReferences": [
+      [
+        "9E52B3BE24C4FFBDFB80671C",
+        {
+          "id": "9E52B3BE24C4FFBDFB80671C",
+          "name": "swift-collections",
+          "type": "remote",
+          "url": "https://github.com/apple/swift-collections.git",
+          "requirement": {
+            "kind": "upToNextMajorVersion",
+            "minimumVersion": "1.1.0"
+          }
+        }
+      ],
+      [
+        "5037CBC4C2A34D464A554A0D",
+        {
+          "id": "5037CBC4C2A34D464A554A0D",
+          "name": "../LocalKit",
+          "type": "local",
+          "path": "../LocalKit"
+        }
+      ]
+    ],
+    "parseSwiftPackageProductDependencies": [
+      [
+        "12A95E5ACC8F739986B5A455",
+        {
+          "id": "12A95E5ACC8F739986B5A455",
+          "productName": "Collections",
+          "packageRef": "9E52B3BE24C4FFBDFB80671C",
+          "packageName": "swift-collections"
+        }
+      ],
+      [
+        "6DF8CC63E23D11B7D55FDB3C",
+        {
+          "id": "6DF8CC63E23D11B7D55FDB3C",
+          "productName": "LocalKit",
+          "packageRef": "5037CBC4C2A34D464A554A0D",
+          "packageName": "../LocalKit"
+        }
+      ]
+    ],
+    "parseGroups": [
+      [
+        "51C11A20A9078AA337C8F71D",
+        {
+          "id": "51C11A20A9078AA337C8F71D",
+          "path": "SampleAppTests",
+          "childIds": [
+            "F7EBEC34045239E277F11DE0"
+          ]
+        }
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        {
+          "id": "693C113810E7894E444D1C56",
+          "name": "Products",
+          "childIds": [
+            "5A0000000000000000000501",
+            "C30000000000000000000502",
+            "5A0000000000000000000503"
+          ]
+        }
+      ],
+      [
+        "6B1957190707DA9C5F090C84",
+        {
+          "id": "6B1957190707DA9C5F090C84",
+          "path": "Rows",
+          "childIds": [
+            "87191F2577762BFEA49B0164"
+          ]
+        }
+      ],
+      [
+        "794E9FCBBFF7C67433E76DEF",
+        {
+          "id": "794E9FCBBFF7C67433E76DEF",
+          "name": "Frameworks",
+          "childIds": [
+            "F9AC6113F8A162265078BB65",
+            "FDE1E90A67545C06BE232B76"
+          ]
+        }
+      ],
+      [
+        "B28B7AF69320201D1CF206EB",
+        {
+          "id": "B28B7AF69320201D1CF206EB",
+          "childIds": [
+            "FE3C0760BC3A00D0CE7F0758",
+            "51C11A20A9078AA337C8F71D",
+            "D01856A7A9967184C0117119",
+            "794E9FCBBFF7C67433E76DEF",
+            "693C113810E7894E444D1C56"
+          ]
+        }
+      ],
+      [
+        "B2BC27D244FCE74A85D8F58A",
+        {
+          "id": "B2BC27D244FCE74A85D8F58A",
+          "name": "Support",
+          "childIds": [
+            "91FB7EAD4BFCEC935EEF9375",
+            "30CE921400AD4BAC16E6CD15"
+          ]
+        }
+      ],
+      [
+        "D01856A7A9967184C0117119",
+        {
+          "id": "D01856A7A9967184C0117119",
+          "path": "SampleAppUITests",
+          "childIds": [
+            "F15357DB7EF8CF40C3490DEC"
+          ]
+        }
+      ],
+      [
+        "E27014C40CDBB076B59D1051",
+        {
+          "id": "E27014C40CDBB076B59D1051",
+          "path": "Shared",
+          "childIds": [
+            "85049DAD55B57E13EB9234F4"
+          ]
+        }
+      ],
+      [
+        "F8718FD410567CA5396838EB",
+        {
+          "id": "F8718FD410567CA5396838EB",
+          "path": "Views",
+          "childIds": [
+            "1D7EA61D06281AEA7497AAB3",
+            "157D56309F4EA8F4D2A791A9",
+            "86F238BDCDE7E700CA4C41BF",
+            "6B1957190707DA9C5F090C84"
+          ]
+        }
+      ],
+      [
+        "FE3C0760BC3A00D0CE7F0758",
+        {
+          "id": "FE3C0760BC3A00D0CE7F0758",
+          "path": "SampleApp",
+          "childIds": [
+            "66AC68305F66143CADAB14FF",
+            "16433209C835DC9965C39C4E",
+            "F8718FD410567CA5396838EB",
+            "B2BC27D244FCE74A85D8F58A",
+            "E27014C40CDBB076B59D1051",
+            "A317B02CB4120A1BB8CCFA10",
+            "B2A7277DE9C1FCB64FB1F5A6",
+            "2962D42BDDBFF0E8D6E0C7CF",
+            "6FBAB873B8C0E9C0223B0A65",
+            "BB1958C6BEFF860D812AA958",
+            "DFCD1964638CF68FFA65A323",
+            "220ED71C1CAF714CE54A42C6"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "B28B7AF69320201D1CF206EB",
+    "buildGroupDirectories": [
+      [
+        "B28B7AF69320201D1CF206EB",
+        "/project"
+      ],
+      [
+        "FE3C0760BC3A00D0CE7F0758",
+        "/project/SampleApp"
+      ],
+      [
+        "F8718FD410567CA5396838EB",
+        "/project/SampleApp/Views"
+      ],
+      [
+        "6B1957190707DA9C5F090C84",
+        "/project/SampleApp/Views/Rows"
+      ],
+      [
+        "B2BC27D244FCE74A85D8F58A",
+        "/project/SampleApp"
+      ],
+      [
+        "E27014C40CDBB076B59D1051",
+        "/project/Shared"
+      ],
+      [
+        "51C11A20A9078AA337C8F71D",
+        "/project/SampleAppTests"
+      ],
+      [
+        "D01856A7A9967184C0117119",
+        "/project/SampleAppUITests"
+      ],
+      [
+        "794E9FCBBFF7C67433E76DEF",
+        "/project"
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath SampleApp": "FE3C0760BC3A00D0CE7F0758",
+    "resolveGroupForPath SampleApp/Views": "F8718FD410567CA5396838EB",
+    "resolveGroupForPath SampleApp/Views/Rows": "6B1957190707DA9C5F090C84",
+    "resolveGroupForPath SampleAppTests": "51C11A20A9078AA337C8F71D",
+    "resolveGroupForPath SampleAppUITests": "D01856A7A9967184C0117119",
+    "resolveGroupForPath Shared": null,
+    "resolveGroupForPath Missing": null,
+    "parseVersionGroups": [
+      {
+        "id": "30CE921400AD4BAC16E6CD15",
+        "path": "Archive.xcdatamodeld",
+        "childIds": [
+          "A20C11ECD58AB7A040B3274D",
+          "819DA92EA98347A12095326E"
+        ],
+        "currentVersionId": "819DA92EA98347A12095326E",
+        "sourceTree": "<group>",
+        "startIndex": 1569,
+        "endIndex": 2074
+      },
+      {
+        "id": "6FBAB873B8C0E9C0223B0A65",
+        "path": "Model.xcdatamodeld",
+        "childIds": [
+          "8432C5AD90B43827557C14FB"
+        ],
+        "currentVersionId": "8432C5AD90B43827557C14FB",
+        "sourceTree": "<group>",
+        "startIndex": 3157,
+        "endIndex": 3530
+      }
+    ],
+    "parseSwiftVersion": "6.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "17.0"
+      },
+      {
+        "platform": "macOS",
+        "version": "14.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": false,
+    "parseFrameworksBuildPhase 649B6CD02F9081B56EF35804": [
+      "Collections",
+      "LocalKit",
+      "UIKit.framework",
+      "libz.tbd"
+    ],
+    "parseLinkedFrameworksForTarget 649B6CD02F9081B56EF35804": [
+      "Collections",
+      "LocalKit",
+      "z"
+    ],
+    "parseFrameworksBuildPhase D4FBD52DAF315571B9EFA7F7": [],
+    "parseLinkedFrameworksForTarget D4FBD52DAF315571B9EFA7F7": [],
+    "parseFrameworksBuildPhase EB1D8B1793DEF3CCF9DEDD99": [],
+    "parseLinkedFrameworksForTarget EB1D8B1793DEF3CCF9DEDD99": [],
+    "parseResourcesBuildPhase CA6D4D522CDB26997FC6C86C": [
+      "Assets.xcassets",
+      "Localizable.strings",
+      "Main.storyboard"
+    ],
+    "parseResourcesForTarget CA6D4D522CDB26997FC6C86C": [
+      {
+        "type": ".process",
+        "path": "Assets.xcassets"
+      },
+      {
+        "type": ".process",
+        "path": "Localizable.strings"
+      },
+      {
+        "type": ".process",
+        "path": "Main.storyboard"
+      }
+    ],
+    "parseResourcesBuildPhase 8B6BDE4BDC4D6F30E3B5ABC3": [],
+    "parseResourcesForTarget 8B6BDE4BDC4D6F30E3B5ABC3": [],
+    "parseResourcesBuildPhase EFD7DE18E965FD2E1380F1BC": [],
+    "parseResourcesForTarget EFD7DE18E965FD2E1380F1BC": [],
+    "folderSpellings": [
+      {
+        "id": "86F238BDCDE7E700CA4C41BF",
+        "position": 0,
+        "folder": "/project/SampleApp/Views/Components"
+      },
+      {
+        "id": "91FB7EAD4BFCEC935EEF9375",
+        "position": 1,
+        "folder": "/project/Legacy"
+      },
+      {
+        "id": "51C11A20A9078AA337C8F71D",
+        "position": 0,
+        "folder": "/project/SampleAppTests"
+      },
+      {
+        "id": "6B1957190707DA9C5F090C84",
+        "position": 0,
+        "folder": "/project/SampleApp/Views/Rows"
+      },
+      {
+        "id": "D01856A7A9967184C0117119",
+        "position": 0,
+        "folder": "/project/SampleAppUITests"
+      },
+      {
+        "id": "E27014C40CDBB076B59D1051",
+        "position": 0,
+        "folder": "/project/Shared"
+      },
+      {
+        "id": "F8718FD410567CA5396838EB",
+        "position": 0,
+        "folder": "/project/SampleApp/Views"
+      },
+      {
+        "id": "FE3C0760BC3A00D0CE7F0758",
+        "position": 0,
+        "folder": "/project/SampleApp"
+      }
+    ],
+    "findFileReferencePath 157D56309F4EA8F4D2A791A9": "DetailView.swift",
+    "findBuildFileId 157D56309F4EA8F4D2A791A9": "E966A08268559D7E8ABDB0F7",
+    "displayName 157D56309F4EA8F4D2A791A9": "DetailView.swift",
+    "buildFilesFor 157D56309F4EA8F4D2A791A9": [
+      "E966A08268559D7E8ABDB0F7"
+    ],
+    "phasesOf 157D56309F4EA8F4D2A791A9": {
+      "E966A08268559D7E8ABDB0F7": [
+        "4B134DCC387469B5801E86EC"
+      ]
+    },
+    "findFileReferencePath 16433209C835DC9965C39C4E": "ContentView.swift",
+    "findBuildFileId 16433209C835DC9965C39C4E": "9DE92E80EDD450DE441E7943",
+    "displayName 16433209C835DC9965C39C4E": "ContentView.swift",
+    "buildFilesFor 16433209C835DC9965C39C4E": [
+      "9DE92E80EDD450DE441E7943"
+    ],
+    "phasesOf 16433209C835DC9965C39C4E": {
+      "9DE92E80EDD450DE441E7943": [
+        "4B134DCC387469B5801E86EC"
+      ]
+    },
+    "findFileReferencePath 1D7EA61D06281AEA7497AAB3": "ListView.swift",
+    "findBuildFileId 1D7EA61D06281AEA7497AAB3": "5E364A0F8B61D53B94234825",
+    "displayName 1D7EA61D06281AEA7497AAB3": "ListView.swift",
+    "buildFilesFor 1D7EA61D06281AEA7497AAB3": [
+      "5E364A0F8B61D53B94234825"
+    ],
+    "phasesOf 1D7EA61D06281AEA7497AAB3": {
+      "5E364A0F8B61D53B94234825": [
+        "4B134DCC387469B5801E86EC"
+      ]
+    },
+    "findFileReferencePath 66AC68305F66143CADAB14FF": "AppDelegate.swift",
+    "findBuildFileId 66AC68305F66143CADAB14FF": "7E244CEDE185637205AF9F84",
+    "displayName 66AC68305F66143CADAB14FF": "AppDelegate.swift",
+    "buildFilesFor 66AC68305F66143CADAB14FF": [
+      "7E244CEDE185637205AF9F84"
+    ],
+    "phasesOf 66AC68305F66143CADAB14FF": {
+      "7E244CEDE185637205AF9F84": [
+        "4B134DCC387469B5801E86EC"
+      ]
+    },
+    "parentOf B28B7AF69320201D1CF206EB": null,
+    "resolvedPath B28B7AF69320201D1CF206EB": "/project",
+    "parentOf FE3C0760BC3A00D0CE7F0758": "B28B7AF69320201D1CF206EB",
+    "resolvedPath FE3C0760BC3A00D0CE7F0758": "/project/SampleApp",
+    "parentOf F8718FD410567CA5396838EB": "FE3C0760BC3A00D0CE7F0758",
+    "resolvedPath F8718FD410567CA5396838EB": "/project/SampleApp/Views",
+    "parentOf 6B1957190707DA9C5F090C84": "F8718FD410567CA5396838EB",
+    "resolvedPath 6B1957190707DA9C5F090C84": "/project/SampleApp/Views/Rows",
+    "parentOf B2BC27D244FCE74A85D8F58A": "FE3C0760BC3A00D0CE7F0758",
+    "resolvedPath B2BC27D244FCE74A85D8F58A": "/project/SampleApp",
+    "parentOf E27014C40CDBB076B59D1051": "FE3C0760BC3A00D0CE7F0758",
+    "resolvedPath E27014C40CDBB076B59D1051": "/project/Shared",
+    "parentOf 51C11A20A9078AA337C8F71D": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 51C11A20A9078AA337C8F71D": "/project/SampleAppTests",
+    "parentOf D01856A7A9967184C0117119": "B28B7AF69320201D1CF206EB",
+    "resolvedPath D01856A7A9967184C0117119": "/project/SampleAppUITests",
+    "parentOf 794E9FCBBFF7C67433E76DEF": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 794E9FCBBFF7C67433E76DEF": "/project",
+    "parentOf 693C113810E7894E444D1C56": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 693C113810E7894E444D1C56": "/project",
+    "parentOf 157D56309F4EA8F4D2A791A9": "F8718FD410567CA5396838EB",
+    "resolvedPath 157D56309F4EA8F4D2A791A9": "/project/SampleApp/Views/DetailView.swift",
+    "parentOf 16433209C835DC9965C39C4E": "FE3C0760BC3A00D0CE7F0758",
+    "resolvedPath 16433209C835DC9965C39C4E": "/project/SampleApp/ContentView.swift",
+    "parentOf 1D7EA61D06281AEA7497AAB3": "F8718FD410567CA5396838EB",
+    "resolvedPath 1D7EA61D06281AEA7497AAB3": "/project/SampleApp/Views/ListView.swift",
+    "parentOf 66AC68305F66143CADAB14FF": "FE3C0760BC3A00D0CE7F0758",
+    "resolvedPath 66AC68305F66143CADAB14FF": "/project/SampleApp/AppDelegate.swift",
+    "targetOfPhase 4B134DCC387469B5801E86EC": "5A0000000000000000000601",
+    "targetOfPhase 649B6CD02F9081B56EF35804": "5A0000000000000000000601",
+    "targetOfPhase CA6D4D522CDB26997FC6C86C": "5A0000000000000000000601",
+    "targetOfPhase 971A57C17F1702BC4298EC74": "5A0000000000000000000603",
+    "targetOfPhase D4FBD52DAF315571B9EFA7F7": "5A0000000000000000000603",
+    "targetOfPhase 8B6BDE4BDC4D6F30E3B5ABC3": "5A0000000000000000000603",
+    "targetOfPhase F3ADEC45900B6B2E4D2AB18D": "C30000000000000000000602",
+    "targetOfPhase EB1D8B1793DEF3CCF9DEDD99": "C30000000000000000000602",
+    "targetOfPhase EFD7DE18E965FD2E1380F1BC": "C30000000000000000000602",
+    "groupForFolder .": "B28B7AF69320201D1CF206EB",
+    "groupForFolder SampleApp": "FE3C0760BC3A00D0CE7F0758",
+    "groupForFolder SampleApp/Views": "F8718FD410567CA5396838EB",
+    "groupForFolder SampleApp/Views/Rows": "6B1957190707DA9C5F090C84",
+    "groupForFolder SampleAppTests": "51C11A20A9078AA337C8F71D",
+    "groupForFolder SampleAppUITests": "D01856A7A9967184C0117119",
+    "groupForFolder Shared": "E27014C40CDBB076B59D1051",
+    "groupForFolder Missing": null
+  }
+}

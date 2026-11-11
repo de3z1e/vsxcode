@@ -65,8 +65,12 @@ export function parseExcludedFiles(pbxContents: string, targetName: string): str
     return excluded;
 }
 
-/** Whether the project uses SwiftPM's `OBJ_<n>` object ids, the form `swift package generate-xcodeproj` writes. */
+/**
+ * Whether the project uses the object ids `swift package generate-xcodeproj` writes: `OBJ_<n>`, or, in a JSON project file,
+ * which keeps only target and product ids, SwiftPM's `<package>::<target>` ones.
+ */
 export function usesSwiftPMObjectIds(pbxContents: string): boolean {
     const index = readProject(pbxContents);
-    return typeof index !== 'string' && Object.keys(index.objects).some((id) => /^OBJ_\d+$/.test(id));
+    return typeof index !== 'string' && Object.keys(index.objects).some((id) =>
+        /^OBJ_\d+$/.test(id) || (index.format === 'xcproj' && id.includes('::')));
 }

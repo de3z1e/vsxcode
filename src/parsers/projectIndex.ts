@@ -1,6 +1,9 @@
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
+import { lowerXcproj, xcprojRoot } from './xcprojIndex';
+import type { JsonPointer } from './xcprojIndex';
+
 /** One entry of a project's `objects` dictionary as plutil renders it: strings, lists and dictionaries. */
 export interface ProjectObject {
     isa?: string;
@@ -8,6 +11,8 @@ export interface ProjectObject {
 }
 
 export interface ProjectIndex {
+    /** The file read: project.pbxproj, or the JSON project.xcproj of Xcode 27.2 and later, lowered to the same objects. */
+    format: 'pbxproj' | 'xcproj';
     objects: Readonly<Record<string, ProjectObject>>;
     /** Every object id, in the order the project file defines them. */
     ids: readonly string[];
@@ -17,6 +22,8 @@ export interface ProjectIndex {
     object(id: unknown): ProjectObject | undefined;
     /** Objects of one isa, in the order the project file defines them. */
     objectsOfIsa(isa: string): ReadonlyArray<{ readonly id: string; readonly object: ProjectObject }>;
+    /** For a JSON project file: the JSON pointer of each object that stands for a node of the file. */
+    sources?: ReadonlyMap<string, JsonPointer>;
 }
 
 /** Why plutil produced no index: the text isn't a property list (a merge conflict, say), or its JSON is too large. */
@@ -28,7 +35,7 @@ const MAX_JSON_BYTES = 256 * 1024 * 1024;
 let lastContents: string | undefined;
 let lastResult: ProjectIndex | ProjectReadError | undefined;
 
-/** The project read through /usr/bin/plutil; the result is reused while callers pass the same contents. */
+/** The project read through /usr/bin/plutil, or a JSON project file lowered to the same objects; reused for the same contents. */
 export function readProject(contents: string): ProjectIndex | ProjectReadError {
     if (lastResult === undefined || contents !== lastContents) {
         lastResult = buildIndex(contents);
@@ -38,6 +45,14 @@ export function readProject(contents: string): ProjectIndex | ProjectReadError {
 }
 
 function buildIndex(contents: string): ProjectIndex | ProjectReadError {
+    // Not plutil: it keeps the last duplicate key and rejects Infinity/NaN, where Xcode keeps the first and accepts them.
+    const json = xcprojRoot(contents);
+    if (json) {
+        const lowered = lowerXcproj(json);
+        if ('problem' in lowered) { return 'unparseable'; }
+        return indexOf('xcproj', lowered.objects, lowered.rootObject, lowered.order, lowered.sources);
+    }
+
     let graph: { objects?: unknown; rootObject?: unknown } | null;
     try {
         const json = execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], {
@@ -53,10 +68,20 @@ function buildIndex(contents: string): ProjectIndex | ProjectReadError {
         return 'unparseable';
     }
     const objects = graph.objects as Record<string, ProjectObject>;
-    const order = objectOrder(contents, objects);
-    const project = typeof graph.rootObject === 'string' ? objects[graph.rootObject] : undefined;
+    return indexOf('pbxproj', objects, graph.rootObject, objectOrder(contents, objects));
+}
+
+function indexOf(
+    format: ProjectIndex['format'],
+    objects: Record<string, ProjectObject>,
+    rootObject: unknown,
+    order: string[],
+    sources?: ReadonlyMap<string, JsonPointer>
+): ProjectIndex {
+    const project = typeof rootObject === 'string' ? objects[rootObject] : undefined;
     const byIsa = new Map<string, { id: string; object: ProjectObject }[]>();
     return {
+        format,
         objects,
         ids: order,
         project,
@@ -69,7 +94,8 @@ function buildIndex(contents: string): ProjectIndex | ProjectReadError {
                 byIsa.set(isa, entries);
             }
             return entries;
-        }
+        },
+        sources
     };
 }
 

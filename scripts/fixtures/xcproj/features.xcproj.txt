@@ -1,0 +1,370 @@
+{
+  "default-configuration": "Release",
+  "configurations": [
+    { "name": "Debug", "file": "./Configs/Base.xcconfig" },
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+      "fr",
+    ],
+  },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/example/major-kit.git",
+      "version": {
+        "up-to-next-major-version": "1.2.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/minor-kit.git",
+      "version": {
+        "up-to-next-minor-version": "1.2.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/exact-kit.git",
+      "version": {
+        "version": "1.2.3",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/range-kit.git",
+      "version": {
+        "version-range": "1.0.0..<2.0.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/beta-kit.git",
+      "version": {
+        "version-range-min": "1.0.0-beta",
+        "version-range-max": "2.0.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/branch-kit.git",
+      "version": {
+        "branch": "main",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/revision-kit.git",
+      "version": {
+        "revision": "0123456789abcdef0123456789abcdef01234567",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/open-kit.git",
+    }, {
+      "kind": "local",
+      "path": "../LocalKit",
+    }, {
+      "kind": "local",
+      "path": "../Café",
+    },
+  ],
+  "files": [
+    {
+      "kind": "group",
+      "path": "App",
+      "children": [
+        { "path": "AppMain.swift", "target-membership": [ "App/compile-sources" ] },
+        { "path": "Z.swift", "target-membership": [ "App/compile-sources" ] },
+        { "path": "z.swift", "target-membership": [ "App/compile-sources" ] },
+        { "path": "é.swift", "target-membership": [ "App/compile-sources" ] },
+        { "path": "éx.swift", "target-membership": [ "App/compile-sources" ] },
+        { "path": "𝒜.swift", "target-membership": [ "App/compile-sources" ] },
+        { "path": "ｚ.swift", "target-membership": [ "App/compile-sources" ] },
+        {
+          "path": "Flags.swift",
+          "target-membership": [
+            { "build-phase": "App/compile-sources", "platforms": [ "ios" ], "arguments": "-DFLAGGED" },
+            "id:C1C1C1C1C1C1C1C1C1C1C1C1",
+          ],
+        },
+        { "path": "Odd \\<Name>.txt", "target-membership": [ "App/resources" ] },
+        { "path": "Web", "type": "folder", "target-membership": [ "App/resources" ] },
+        { "path": "Plugin.bundle", "target-membership": [ "App/copy/Embed Café" ] },
+        {
+          "kind": "variant-group",
+          "name": "Localizable.strings",
+          "target-membership": [
+            "App/resources",
+          ],
+          "children": [
+            {
+              "path": "en.lproj/Localizable.strings",
+            }, {
+              "path": "fr.lproj/Localizable.strings",
+            },
+          ],
+        }, {
+          "kind": "version-group",
+          "path": "Model.xcdatamodeld",
+          "current-version": "Model 2.xcdatamodel",
+          "type": "wrapper.xcdatamodel",
+          "target-membership": [
+            "App/compile-sources",
+          ],
+          "children": [
+            {
+              "path": "Model.xcdatamodel",
+            }, {
+              "path": "Model 2.xcdatamodel",
+            },
+          ],
+        }, {
+          "kind": "version-group",
+          "path": "Notes.xcdatamodeld",
+          "type": "wrapper.xcdatamodel",
+          "target-membership": [
+            "App/compile-sources",
+          ],
+          "children": [
+            {
+              "path": "Notes.xcdatamodel",
+            },
+          ],
+        },
+      ],
+    }, {
+      "kind": "group",
+      "path": "Kit",
+      "children": [
+        { "path": "Kit.swift", "target-membership": [ "id:C1C1C1C1C1C1C1C1C1C1C1C1" ] },
+        { "path": "KitExtra.swift", "target-membership": [ "id:C2C2C2C2C2C2C2C2C2C2C2C2" ] },
+      ],
+    }, {
+      "kind": "folder",
+      "path": "Shared",
+      "target-membership": [
+        "App",
+      ],
+      "membership-exceptions": [
+        {
+          "build-phase": "App/copy/Embed Café",
+          "inclusions": [
+            "Helper.bundle",
+          ],
+        }, {
+          "target": "Kit",
+          "inclusions": [
+            "Common.swift",
+          ],
+        }, {
+          "target": "App",
+          "exclusions": [
+            "Info.plist",
+            "Notes/Readme.md",
+          ],
+        }, {
+          "target": "AppTests",
+        }, {
+          "target": "App",
+          "exclusions": [
+            "Notes/Readme.md",
+            "Zeta.txt",
+          ],
+        },
+      ],
+    }, {
+      "kind": "group",
+      "path": "Configs",
+      "children": [
+        { "path": "Base.xcconfig" },
+      ],
+    }, {
+      "kind": "group",
+      "path": "SampleConfigs",
+      "name": "Sample/Configs",
+      "children": [
+        { "path": "App.xcconfig" },
+      ],
+    }, {
+      "kind": "group",
+      "path": "<PROJECT>/Vendor",
+      "children": [
+        { "path": "Vendor.swift", "target-membership": [ "App/compile-sources" ] },
+      ],
+    }, {
+      "kind": "group",
+      "name": "Frameworks",
+      "children": [
+        { "path": "<SDK>/System/Library/Frameworks/UIKit.framework", "target-membership": [ "App/frameworks" ] },
+        { "path": "<DEVELOPER>/Library/Frameworks/XCTest.framework", "target-membership": [ "AppTests/frameworks" ] },
+        { "path": "<USER:MY_ROOT>/Shared/Root.swift", "target-membership": [ "id:C2C2C2C2C2C2C2C2C2C2C2C2" ] },
+        { "path": "/opt/example/Absolute.swift", "target-membership": [ "id:C1C1C1C1C1C1C1C1C1C1C1C1" ] },
+      ],
+    },
+    { "path": "Other/Other.xcodeproj", "type": "wrapper.pb-project" },
+    { "path": "Nested/alpha.xcodeproj" },
+    {
+      "kind": "group",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/App.app", "id": "A0A0A0A0A0A0A0A0A0A0A0A0", "type": "wrapper.application", "index": false },
+        { "path": "<PRODUCTS>/Kit.framework", "id": "A1A1A1A1A1A1A1A1A1A1A1A1", "type": "wrapper.framework", "index": false },
+        { "path": "<PRODUCTS>/AppTests.xctest", "id": "A2A2A2A2A2A2A2A2A2A2A2A2", "type": "wrapper.cfbundle", "index": false },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "App",
+      "id": "B0B0B0B0B0B0B0B0B0B0B0B0",
+      "product": "id:A0A0A0A0A0A0A0A0A0A0A0A0",
+      "product-type": "application",
+      "specialized-configurations": [
+        { "name": "Debug", "file": [ { "name": "Sample/Configs" }, "App.xcconfig" ] },
+        { "name": "Release", "file": { "anchor": "Shared", "relative-path": "Config/Release.xcconfig" } },
+        { "name": "Staging", "file": "App/AppMain.swift/../../Configs/Base.xcconfig" },
+      ],
+      "dependencies": [
+        "Kit",
+        { "target": "Tōols", "platforms": [ "ios" ] },
+        { "kind": "remoteTarget", "project": "Other.xcodeproj", "target": "OtherKit", "target-id": "D0D0D0D0D0D0D0D0D0D0D0D0" },
+        { "kind": "package", "package": "branch-kit", "product-name": "BranchPlugin", "product-type": "build-tool-plugin" },
+        { "kind": "package", "product-name": "Unpackaged" },
+      ],
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+        "resources",
+        {
+          "kind": "copy",
+          "name": "Embed Café",
+          "bundle-base-path": "plugins-directory",
+        }, {
+          "kind": "script",
+          "name": "Lint",
+          "shell": "/bin/sh",
+          "script": "echo lint",
+        },
+      ],
+      "package-product-members": [
+        {
+          "product-name": "Loose",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "Café",
+          "product-name": "CafeKit",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "LocalKit",
+          "product-name": "LocalKit",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "exact-kit",
+          "product-name": "ExactKit",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "major-kit",
+          "product-name": "GenPlugin",
+          "product-type": "build-tool-plugin",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "major-kit",
+          "product-name": "MajorKit",
+          "build-phase": { "build-phase": "frameworks" },
+        },
+      ],
+      "build-settings": {
+        "ARCHS": [
+          "arm64",
+        ],
+        "GHOST[config=Nope]": "gone",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "\"Vendor Headers/include\"",
+          "include",
+        ],
+        "INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]": "UIStatusBarStyleDefault",
+        "OTHER_CFLAGS": [
+          "-DA",
+          "B C",
+        ],
+        "OTHER_LDFLAGS": "-ObjC -lz",
+        "OTHER_SWIFT_FLAGS": [
+          "$(inherited)",
+          "-DAPP",
+        ],
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SHADOW[config=Debug][sdk=iphoneos*]": "conditioned",
+        "SHADOW[sdk=iphoneos*]": "plain",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": [
+          "FEATURE_X",
+          "$(inherited)",
+        ],
+        "SWIFT_STRICT_CONCURRENCY[config=Debug]": "complete",
+        "SWIFT_VERSION": "5.0",
+        "SWIFT_VERSION[config=Release]": "6.0",
+        "WARNING_CFLAGS": [
+        ],
+        "ZZ_PAIR[sdk=iphoneos*][config=Debug]": "second",
+      },
+    }, {
+      "name": "Kit",
+      "id": "B1B1B1B1B1B1B1B1B1B1B1B1",
+      "product": "Products/Kit.framework",
+      "product-type": "framework",
+      "specialized-configurations": [
+        { "id": "E0E0E0E0E0E0E0E0E0E0E0E0", "name": "Debug" },
+      ],
+      "build-phases": [
+        { "kind": "compile-sources", "id": "C1C1C1C1C1C1C1C1C1C1C1C1" },
+        { "kind": "compile-sources", "id": "C2C2C2C2C2C2C2C2C2C2C2C2" },
+        "frameworks",
+      ],
+      "build-settings": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES",
+      },
+    }, {
+      "name": "AppTests",
+      "id": "B2B2B2B2B2B2B2B2B2B2B2B2",
+      "product": "Products/AppTests.xctest",
+      "product-type": "bundle.unit-test",
+      "test-host-target": "App",
+      "dependencies": [
+        "App",
+      ],
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+      ],
+      "build-settings": {
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/App.app/App",
+      },
+    }, {
+      "name": "Tōols",
+      "id": "B3B3B3B3B3B3B3B3B3B3B3B3",
+      "kind": "aggregate",
+      "build-phases": [
+        {
+          "kind": "script",
+          "name": "Generate",
+          "shell": "/bin/sh",
+          "script": "echo generate",
+        },
+      ],
+    }, {
+      "name": "Make",
+      "id": "B4B4B4B4B4B4B4B4B4B4B4B4",
+      "kind": "external-build-system",
+      "build-tool-path": "/usr/bin/make",
+      "build-tool-arguments": "$(ACTION)",
+    },
+  ],
+  "build-settings": {
+    "DEBUG_INFORMATION_FORMAT[config=Debug]": "dwarf",
+    "GCC_PREPROCESSOR_DEFINITIONS[config=Debug]": [
+      "DEBUG=1",
+      "$(inherited)",
+    ],
+    "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+    "SDKROOT": "iphoneos",
+  },
+}

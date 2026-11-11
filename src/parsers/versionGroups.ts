@@ -1,4 +1,6 @@
 import { locateObject, readProject, stringList, stringValue } from './projectIndex';
+import type { ObjectLocation } from './projectIndex';
+import { nodeAt, parseJson5Text } from './xcprojText';
 
 export const VERSION_GROUP_SECTION_BEGIN = '/* Begin XCVersionGroup section */';
 export const VERSION_GROUP_SECTION_END = '/* End XCVersionGroup section */';
@@ -14,9 +16,9 @@ export interface XCVersionGroupInfo {
     currentVersionId?: string;
     /** Raw sourceTree value, e.g. "<group>" or "SOURCE_ROOT". */
     sourceTree?: string;
-    /** Offset of the entry's first character in the source, at the start of its line. */
+    /** Offset of the entry's first character in the source, at the start of its line; in a JSON project file, of its `{`. */
     startIndex: number;
-    /** Offset just past the entry's terminating `};` and line break. */
+    /** Offset just past the entry's terminating `};` and line break; in a JSON project file, just past its `}`. */
     endIndex: number;
 }
 
@@ -25,10 +27,18 @@ export function parseVersionGroups(pbxContents: string): XCVersionGroupInfo[] {
     const index = readProject(pbxContents);
     if (typeof index === 'string') { return []; }
 
+    const jsonRoot = index.format === 'xcproj' ? parseJson5Text(pbxContents) : undefined;
+    const locate = (id: string): Pick<ObjectLocation, 'startIndex' | 'endIndex'> | undefined => {
+        if (index.format === 'pbxproj') { return locateObject(pbxContents, id); }
+        const pointer = index.sources?.get(id);
+        const node = jsonRoot && pointer ? nodeAt(jsonRoot, pointer) : undefined;
+        return node ? { startIndex: node.start, endIndex: node.end } : undefined;
+    };
+
     const groups: XCVersionGroupInfo[] = [];
     for (const { id, object } of index.objectsOfIsa('XCVersionGroup')) {
         // An entry the text walk can't place is left out rather than given guessed offsets.
-        const location = locateObject(pbxContents, id);
+        const location = locate(id);
         if (!location) { continue; }
         groups.push({
             id,

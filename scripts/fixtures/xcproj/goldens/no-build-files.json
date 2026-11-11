@@ -1,0 +1,228 @@
+{
+  "fixture": "scripts/fixtures/xcproj/no-build-files.xcproj.txt",
+  "entries": {
+    "parseNativeTargets": [
+      {
+        "name": "EmptyKit",
+        "productName": "EmptyKit",
+        "productType": "com.apple.product-type.library.static",
+        "packageProductDependencyIds": [],
+        "buildConfigurationListId": "CEBEA087218485A1A90F3DAD",
+        "fileSystemSynchronizedGroupIds": []
+      }
+    ],
+    "parseTargetDependencies": [],
+    "parseBuildPhaseIds EmptyKit": {
+      "sourcesBuildPhaseId": "571E21DE64423B3B97F7909B",
+      "frameworksBuildPhaseId": "818BF927EFFAD3C94D43D138"
+    },
+    "parseExcludedFiles EmptyKit": [],
+    "parseBuildPhaseIds NoSuchTarget": {},
+    "parseExcludedFiles NoSuchTarget": [],
+    "parseBuildConfigurations": [
+      [
+        "0230E796866B8E66FB8B51DF",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SKIP_INSTALL": "YES"
+          },
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "2C877A3959EDA70B81BF6BCF",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "PRODUCT_NAME": "$(TARGET_NAME)",
+            "SKIP_INSTALL": "YES"
+          },
+          "productName": "$(TARGET_NAME)"
+        }
+      ],
+      [
+        "3BA04114FF1292D4529A89ED",
+        {
+          "configurationName": "Debug",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "sdkRoot": "iphoneos"
+        }
+      ],
+      [
+        "A49F2EDD2E7FC01590D85ACB",
+        {
+          "configurationName": "Release",
+          "targetId": null,
+          "raw": {
+            "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+            "SDKROOT": "iphoneos",
+            "SWIFT_VERSION": "5.0"
+          },
+          "swiftVersion": "5.0",
+          "sdkRoot": "iphoneos"
+        }
+      ]
+    ],
+    "resolveConfigurationListId 614471660AA131A99883C67C": [
+      "3BA04114FF1292D4529A89ED",
+      "A49F2EDD2E7FC01590D85ACB"
+    ],
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getBuildSettingsForTarget 614471660AA131A99883C67C Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "resolveConfigurationListId CEBEA087218485A1A90F3DAD": [
+      "2C877A3959EDA70B81BF6BCF",
+      "0230E796866B8E66FB8B51DF"
+    ],
+    "getBuildSettingsForTarget CEBEA087218485A1A90F3DAD Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES"
+      },
+      "productName": "$(TARGET_NAME)"
+    },
+    "getBuildSettingsForTarget CEBEA087218485A1A90F3DAD Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES"
+      },
+      "productName": "$(TARGET_NAME)"
+    },
+    "getProjectBuildSettings Debug": {
+      "configurationName": "Debug",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "getProjectBuildSettings Release": {
+      "configurationName": "Release",
+      "targetId": null,
+      "raw": {
+        "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0"
+      },
+      "swiftVersion": "5.0",
+      "sdkRoot": "iphoneos"
+    },
+    "parseSwiftPackageReferences": [],
+    "parseSwiftPackageProductDependencies": [],
+    "parseGroups": [
+      [
+        "30323153BCD07FA2B9378F4E",
+        {
+          "id": "30323153BCD07FA2B9378F4E",
+          "path": "EmptyKit",
+          "childIds": [
+            "B1DF8A9DB15454B1F18936FA"
+          ]
+        }
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        {
+          "id": "693C113810E7894E444D1C56",
+          "name": "Products",
+          "childIds": [
+            "7F0000000000000000000501"
+          ]
+        }
+      ],
+      [
+        "B28B7AF69320201D1CF206EB",
+        {
+          "id": "B28B7AF69320201D1CF206EB",
+          "childIds": [
+            "30323153BCD07FA2B9378F4E",
+            "693C113810E7894E444D1C56"
+          ]
+        }
+      ]
+    ],
+    "findMainGroupId": "B28B7AF69320201D1CF206EB",
+    "buildGroupDirectories": [
+      [
+        "B28B7AF69320201D1CF206EB",
+        "/project"
+      ],
+      [
+        "30323153BCD07FA2B9378F4E",
+        "/project/EmptyKit"
+      ],
+      [
+        "693C113810E7894E444D1C56",
+        "/project"
+      ]
+    ],
+    "resolveGroupForPath EmptyKit": "30323153BCD07FA2B9378F4E",
+    "resolveGroupForPath Missing": null,
+    "parseVersionGroups": [],
+    "parseSwiftVersion": "5.0",
+    "parseDeploymentTargets": [
+      {
+        "platform": "iOS",
+        "version": "16.0"
+      }
+    ],
+    "parseDefaultLocalization": "en",
+    "usesSwiftPMObjectIds": false,
+    "parseFrameworksBuildPhase 818BF927EFFAD3C94D43D138": [],
+    "parseLinkedFrameworksForTarget 818BF927EFFAD3C94D43D138": [],
+    "folderSpellings": [
+      {
+        "id": "30323153BCD07FA2B9378F4E",
+        "position": 0,
+        "folder": "/project/EmptyKit"
+      }
+    ],
+    "parentOf B28B7AF69320201D1CF206EB": null,
+    "resolvedPath B28B7AF69320201D1CF206EB": "/project",
+    "parentOf 30323153BCD07FA2B9378F4E": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 30323153BCD07FA2B9378F4E": "/project/EmptyKit",
+    "parentOf 693C113810E7894E444D1C56": "B28B7AF69320201D1CF206EB",
+    "resolvedPath 693C113810E7894E444D1C56": "/project",
+    "targetOfPhase 571E21DE64423B3B97F7909B": "B20000000000000000000601",
+    "targetOfPhase 818BF927EFFAD3C94D43D138": "B20000000000000000000601",
+    "groupForFolder .": "B28B7AF69320201D1CF206EB",
+    "groupForFolder EmptyKit": "30323153BCD07FA2B9378F4E",
+    "groupForFolder Missing": null
+  }
+}

@@ -1,0 +1,19 @@
+// Refused by Xcode 27.2: an exception set naming no target.
+// Xcode: Could not uniquely resolve the target name “Nope”
+// VSXcode: names no target
+{
+  "default-configuration": "Release",
+  "configurations": ["Debug","Release"],
+  "localizations": {"development":"en","supported":["fr"]},
+  "packages": [{"kind":"local","path":"../Kit"}],
+  "files": [
+    {"kind":"group","path":"App","children":[{"path":"App.swift","target-membership":["App/compile-sources"]},{"path":"Base.xcconfig"}]},
+    {"kind":"folder","path":"Shared","target-membership":["App"],"membership-exceptions":[{"target":"Nope","exclusions":["Notes.txt"]},{"build-phase":"App/copy/Embed","inclusions":["Helper.bundle"]}]},
+    {"kind":"version-group","path":"Model.xcdatamodeld","current-version":"Model.xcdatamodel","type":"wrapper.xcdatamodel","target-membership":["App/compile-sources"],"children":[{"path":"Model.xcdatamodel"}]},
+    {"kind":"group","name":"Products","children":[{"path":"<PRODUCTS>/App.app","id":"A0A0A0A0A0A0A0A0A0A0A0A0","type":"wrapper.application","index":false},{"path":"<PRODUCTS>/AppTests.xctest","id":"A1A1A1A1A1A1A1A1A1A1A1A1","type":"wrapper.cfbundle","index":false}]}
+  ],
+  "targets": [
+    {"name":"App","id":"B0B0B0B0B0B0B0B0B0B0B0B0","product":"Products/App.app","product-type":"application","build-phases":["compile-sources","frameworks","resources",{"kind":"copy","name":"Embed","bundle-base-path":"plugins-directory"}],"package-product-members":[{"package":"Kit","product-name":"Kit","build-phase":{"build-phase":"frameworks"}}],"specialized-configurations":[{"name":"Debug","file":"App/Base.xcconfig"}],"build-settings":{"PRODUCT_NAME":"$(TARGET_NAME)"}},
+    {"name":"AppTests","id":"B1B1B1B1B1B1B1B1B1B1B1B1","product":"Products/AppTests.xctest","product-type":"bundle.unit-test","test-host-target":"App","dependencies":["App"],"build-phases":["compile-sources"]}
+  ]
+}
