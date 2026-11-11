@@ -632,6 +632,9 @@ const SCENARIOS = [
             expect.that(of(unchanged, 'inputBox').length === 1 && of(changed, 'inputBox').length === 1, 'the command asked for no bundle id');
             expect.that(!unchanged.changed.includes(projectFile), 'the unchanged value rewrote project.xcproj');
             expect.that(unchanged.times[projectFile] === edited.times[projectFile], 'the unchanged value touched project.xcproj');
+            // With nothing written there's no watcher event, so the command reloads the sidebar's data itself.
+            expect.that(logLines(unchanged, 'already holds that value').length === 1 && logLines(unchanged, '[sidebar] project data loaded').length === 1,
+                "the unchanged value didn't reload the sidebar");
             expect.that(changed.changed.includes(projectFile), 'the new value was not written');
             const text = fs.readFileSync(path.join(workspace.root, projectFile), 'utf8');
             expect.that(text.includes('"com.example.BrandNew"') && !text.includes('"com.example.Renamed"'), 'project.xcproj misses the new bundle id');

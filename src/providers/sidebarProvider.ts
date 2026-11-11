@@ -133,6 +133,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
     private projectData: ProjectData | null = null;
+    /** A load publishes only while still the latest, so one that read the file before a later change can't paint over newer data. */
+    private loadGeneration = 0;
 
     constructor(
         private workspaceState: vscode.Memento,
@@ -140,6 +142,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     ) {}
 
     refresh(): void {
+        this.loadGeneration++;
         this.projectData = null;
         this._onDidChangeTreeData.fire();
     }
@@ -302,6 +305,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     async loadProjectData(config?: BuildTaskConfig | null): Promise<void> {
         const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!rootPath) { return; }
+        const generation = ++this.loadGeneration;
 
         this.log('[sidebar] loading project data…');
         // simctl/devicectl block indefinitely until first-launch completes, so gate up
@@ -420,6 +424,10 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             this.evaluateBundleIds(xcodeReady && projectFile ? path.join(rootPath, projectFile) : undefined, bundleIdByTarget),
         ]);
 
+        if (generation !== this.loadGeneration) {
+            this.log('[sidebar] project data superseded by a newer load, discarded');
+            return;
+        }
         this.projectData = { xcodeProjects, definitionFileName, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, builtBundleIdByTarget, productNameByTarget, macSupportByTarget, xcodeReady, supportedSwiftVersions, staleSimulatorInstalls };
         this.log(`[sidebar] project data loaded — ${targets.length} target(s), ${schemes.length} scheme(s), ${simulators.length} simulator(s), ${physicalDevices.length} device(s)`);
         // Force a fresh render now data is in; otherwise the spinner can persist until the view is re-entered.

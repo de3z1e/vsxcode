@@ -296,7 +296,8 @@
         "test:debug-stops": "npm run compile && node scripts/debug-stops-check.js",
         "test:device-support": "npm run compile && node scripts/device-support-check.js",
         "test:agent-guide": "npm run compile && node scripts/agent-guide-check.js",
-        "test:sourcekit-lsp": "npm run compile && node scripts/sourcekit-lsp-check.js"
+        "test:sourcekit-lsp": "npm run compile && node scripts/sourcekit-lsp-check.js",
+        "test:sidebar": "npm run compile && node scripts/sidebar-check.js"
     },
     "files": [
         "out",

@@ -1612,6 +1612,8 @@ export function activate(context: vscode.ExtensionContext): void {
         const bundlePath = path.join(rootPath, projectFile);
         let declined: string | undefined;
         let unwritten: string | undefined;
+        let written = false;
+        let failed = false;
         try {
             await enqueueWrite(async () => {
                 const definition = definitionFileOf(bundlePath);
@@ -1620,18 +1622,27 @@ export function activate(context: vscode.ExtensionContext): void {
                 for (const configId of resolveConfigurationListId(original, configurationListId)) {
                     text = updateBuildSetting(text, configId, key, value, (reason) => { declined ??= reason; });
                 }
-                if (text === original) { return; }
+                if (text === original) {
+                    log(`[settings] ${key} already holds that value in ${path.basename(definition.path)}; reloading the sidebar`);
+                    return;
+                }
                 // A skipped write logs why; the same words go into the warning.
-                const written = await writeProjectFile(bundlePath, definition.format, text, (message) => {
+                written = await writeProjectFile(bundlePath, definition.format, text, (message) => {
                     log(message);
                     unwritten = message.replace(/^\[project-file\] /, '');
                 });
                 if (!written) { unwritten ??= `${path.basename(definition.path)} wasn't written`; }
             });
         } catch (e) {
+            failed = true;
             vscode.window.showErrorMessage(`Failed to update ${key}: ${(e as Error).message}`);
-            return;
         }
+        // No write means no watcher refresh, so reload in place: unlike refresh(), the current data stays for commands started meanwhile.
+        if (!written) {
+            sidebarProvider.loadProjectData(context.workspaceState.get<BuildTaskConfig>('buildTaskConfig'))
+                .catch((error) => log(`[settings] sidebar reload failed: ${error}`));
+        }
+        if (failed) { return; }
         if (unwritten !== undefined) {
             log(`[settings] ${key} not written: ${unwritten}`);
             vscode.window.showWarningMessage(`VSXcode didn't change ${key}: ${unwritten}.`);
