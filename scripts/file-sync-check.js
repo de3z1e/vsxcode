@@ -9,8 +9,17 @@
  * as stated; every other Swift file reference and Core Data model must come out unchanged, ids included, nothing else may
  * join a Sources phase, and the project must still lint.
  *
+ * Every scenario runs twice: on the pbxproj fixture, and on Xcode's JSON conversion of it (scripts/fixtures/xcproj/
+ * FixtureApp.xcproj.txt). The JSON run reads its result through Xcode itself: `xcodebuild -convert-project pbxproj` on a
+ * copy beside the project, then the same plutil read, so a result Xcode can't open fails the scenario. Xcode's
+ * conversion draws new ids for every file element, so the JSON run compares entries by resolved path, targets and
+ * settings, and translates the entry ids a scenario's result names into the JSON fixture's. A few scenarios run on the
+ * JSON format only: edits the JSON writer declines, which must leave the rest of their batch or repair to land.
+ *
  * VS Code's extension host dispatches a batch's creates before its deletes, so creates-first is the default event
  * order; reversed and duplicated deliveries are scenarios of their own.
+ *
+ * The JSON run needs Xcode 27.2 or later (xcprojformatter, and the conversion).
  *
  * Usage: npm run test:file-sync
  */
@@ -21,12 +30,14 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const Module = require('module');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..');
 const OUT = path.join(REPO, 'out');
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'file-sync');
 const PROJECT_TEXT = fs.readFileSync(path.join(FIXTURE_DIR, 'FixtureApp.pbxproj.txt'), 'utf8');
+// Xcode's conversion of FixtureApp.pbxproj.txt to the JSON format: the same project.
+const JSON_PROJECT_TEXT = fs.readFileSync(path.join(__dirname, 'fixtures', 'xcproj', 'FixtureApp.xcproj.txt'), 'utf8');
 const SOURCES = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, 'sources.json'), 'utf8')).files;
 
 // Past the 300 ms Swift batch quiet window and Core Data debounce in src/sync/pbxprojSync.ts (not exported).
@@ -85,10 +96,32 @@ const load = (relative) => require(path.join(OUT, relative));
 const { createSwiftFileWatcher, reconcileSwiftFiles } = load('sync/swiftFileSync.js');
 const { createDataModelWatcher, reconcileDataModels } = load('sync/dataModelSync.js');
 const { enqueueWrite } = load('sync/pbxprojSync.js');
+const { readProject, resolvedPath } = load('parsers/projectIndex.js');
+
+// ── Formats ──────────────────────────────────────────────────────────────────────────
+
+const FORMATS = [
+    { name: 'pbxproj', fileName: 'project.pbxproj', text: PROJECT_TEXT },
+    { name: 'xcproj', fileName: 'project.xcproj', text: JSON_PROJECT_TEXT }
+];
+/** The format the current run uses. */
+let format = FORMATS[0];
+
+/** A per-format value (`{ pbxproj, xcproj }`) for the current run; anything else is the same in both. */
+const byFormat = (value) => (value && typeof value === 'object' && 'pbxproj' in value && 'xcproj' in value ? value[format.name] : value);
+
+/** `text` with `from` replaced by `to`, which must occur exactly once, so a transform can't silently do nothing. */
+function replaceOnce(text, from, to) {
+    const count = text.split(from).length - 1;
+    if (count !== 1) { throw new Error(`the project text holds ${count} of ${JSON.stringify(from)}, not one`); }
+    return text.replace(from, () => to);
+}
 
 // ── Reading a project ────────────────────────────────────────────────────────────────
 
-const projectPath = (root) => path.join(root, 'FixtureApp.xcodeproj', 'project.pbxproj');
+const projectPath = (root) => path.join(root, 'FixtureApp.xcodeproj', format.fileName);
+/** The project file's path relative to the workspace, for its change event. */
+const projectFileEvent = () => `FixtureApp.xcodeproj/${format.fileName}`;
 
 function plutil(args, input) {
     return execFileSync('/usr/bin/plutil', args, { input, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -114,8 +147,12 @@ function canonical(value) {
 const same = (left, right) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 const show = (value) => (value === undefined ? '(absent)' : JSON.stringify(canonical(value)));
 
-/** Swift file references and XCVersionGroups keyed by Xcode-resolved path, plus dangling Sources entries, Sources entries for anything else, repeated group children, and folders several own-path groups resolve to. */
-function readState(text) {
+/**
+ * Swift file references and XCVersionGroups keyed by Xcode-resolved path, plus dangling Sources entries, Sources entries for
+ * anything else, repeated group children, and folders several own-path groups resolve to. Without ids (the JSON run), an
+ * unresolved entry is keyed by its path alone.
+ */
+function readState(text, { withIds = true } = {}) {
     const { objects, rootObject } = JSON.parse(plutil(['-convert', 'json', '-o', '-', '-'], text));
     const parentOf = new Map();
     // A path resolves through one parent, so a second listing would otherwise leave no trace.
@@ -171,7 +208,7 @@ function readState(text) {
     const models = {};
     const record = (table, id, details) => {
         const resolved = resolve(id);
-        const key = resolved === null ? `(unresolved ${id}) ${objects[id].path}` : resolved;
+        const key = resolved === null ? `(unresolved${withIds ? ` ${id}` : ''}) ${objects[id].path}` : resolved;
         const entry = { ids: [id], ...details, targets: (compiledBy.get(id) || []).sort() };
         if (table[key]) {
             entry.ids = [...table[key].ids, id].sort();
@@ -204,6 +241,106 @@ function readState(text) {
         duplicateGroupFolders: [...groupsByFolder].filter(([, count]) => count > 1).map(([folder, count]) => `${folder} (${count} groups)`).sort(),
         ids: new Set(Object.keys(objects))
     };
+}
+
+/** A state without ids, for the JSON run: `ids` dropped from every entry, unresolved keys without their id. */
+function withoutIds(state) {
+    const strip = (table) => {
+        const stripped = {};
+        for (const [key, entry] of Object.entries(table)) {
+            const { ids, ...details } = entry;
+            stripped[key.replace(/^\(unresolved [^)]*\)/, '(unresolved)')] = details;
+        }
+        return stripped;
+    };
+    return { ...state, swift: strip(state.swift), models: strip(state.models), ids: new Set() };
+}
+
+/**
+ * Xcode's own conversion of a JSON project text to a pbxproj: `xcodebuild -convert-project pbxproj` on a copy placed beside
+ * the project in `root`, so its paths resolve against the same folder. The result bundle goes into `root` too.
+ */
+let conversions = 0;
+function xcodeConversion(text, root) {
+    const bundle = path.join(root, `Oracle${++conversions}.xcodeproj`);
+    fs.mkdirSync(bundle);
+    fs.writeFileSync(path.join(bundle, 'project.xcproj'), text);
+    const result = spawnSync('/usr/bin/xcrun', ['xcodebuild', '-convert-project', 'pbxproj', '-project', bundle,
+        '-resultBundlePath', path.join(root, `.oracle-${conversions}.xcresult`)], { encoding: 'utf8' });
+    const converted = path.join(bundle, 'project.pbxproj');
+    if (result.status !== 0 || !fs.existsSync(converted)) {
+        const output = `${result.stdout}${result.stderr}`.split('\n').filter((line) => line.trim());
+        return { problem: `Xcode can't read the project: ${output.slice(-3).join(' ')}` };
+    }
+    return { text: fs.readFileSync(converted, 'utf8') };
+}
+
+/** A project text's state in the current format: through plutil for a pbxproj, through Xcode's conversion for JSON. */
+function readProjectState(text, root) {
+    if (format.name === 'pbxproj') {
+        return lints(text) ? { state: readState(text) } : { problem: 'the project no longer passes plutil -lint' };
+    }
+    const converted = xcodeConversion(text, root);
+    return converted.problem ? converted : { state: withoutIds(readState(converted.text, { withIds: false })) };
+}
+
+/** The state of a fixture text before any scenario, read in a temp folder holding the fixture's sources; cached per text. */
+const fixtureStates = new Map();
+function fixtureState(text) {
+    const key = `${format.name}\n${text}`;
+    if (!fixtureStates.has(key)) {
+        const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vsxcode-file-sync-')));
+        try {
+            for (const [relative, contents] of Object.entries(SOURCES)) {
+                fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
+                fs.writeFileSync(path.join(root, relative), contents);
+            }
+            fixtureStates.set(key, readProjectState(text, root));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    }
+    return fixtureStates.get(key);
+}
+
+/**
+ * Entry ids a scenario's result names, in the current format: the pbxproj fixture's own, or in the JSON run the JSON
+ * fixture's synthetic id of the element at the same resolved path (the two fixtures are one project). The synthetic ids
+ * are VSXcode's own handles, so they come from its lowering; the paths come from the plutil read of the pbxproj fixture.
+ */
+let jsonIds;
+function translateIds(value) {
+    if (format.name === 'pbxproj') { return value; }
+    if (!jsonIds) {
+        const fixtureRoot = path.join(os.tmpdir(), 'vsxcode-fixture');
+        const index = readProject(JSON_PROJECT_TEXT);
+        const byPath = new Map();
+        for (const isa of ['PBXFileReference', 'XCVersionGroup']) {
+            for (const { id } of index.objectsOfIsa(isa)) {
+                const resolved = resolvedPath(index, id, fixtureRoot);
+                if (resolved) { byPath.set(path.relative(fixtureRoot, resolved), id); }
+            }
+        }
+        jsonIds = new Map();
+        const pbx = readState(PROJECT_TEXT);
+        for (const table of [pbx.swift, pbx.models]) {
+            for (const [key, entry] of Object.entries(table)) {
+                for (const id of entry.ids) {
+                    if (byPath.has(key)) { jsonIds.set(id, byPath.get(key)); }
+                }
+            }
+        }
+    }
+    const translate = (item) => {
+        if (Array.isArray(item)) { return item.map(translate); }
+        if (item && typeof item === 'object') { return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, translate(entry)])); }
+        if (typeof item === 'string' && /^[0-9A-F]{24}$/.test(item)) {
+            if (!jsonIds.has(item)) { throw new Error(`no JSON fixture element stands for ${item}`); }
+            return jsonIds.get(item);
+        }
+        return item;
+    };
+    return translate(value);
 }
 
 // ── Expectations ─────────────────────────────────────────────────────────────────────
@@ -285,7 +422,7 @@ const BASELINE_MODELS = {
     [STORE]: { versions: ['Store.xcdatamodel'], current: 'Store.xcdatamodel', targets: ['MyApp'] }
 };
 
-function baselineProblems() {
+function baselineProblems(state) {
     const expected = {
         swift: Object.fromEntries(Object.entries(BASELINE_SWIFT).map(([key, targets]) => [key, { ids: ANY_ID, targets }])),
         models: Object.fromEntries(Object.entries(BASELINE_MODELS).map(([key, entry]) => [key, { ids: ANY_ID, ...entry }])),
@@ -294,7 +431,7 @@ function baselineProblems() {
         duplicateChildren: [],
         duplicateGroupFolders: []
     };
-    const problems = stateProblems(readState(PROJECT_TEXT), expected, new Set());
+    const problems = stateProblems(state, format.name === 'pbxproj' ? expected : withoutIds(expected), new Set());
     for (const file of [...Object.keys(BASELINE_SWIFT), `${STORE}/.xccurrentversion`, `${STORE}/Store.xcdatamodel/contents`]) {
         if (!(file in SOURCES)) { problems.push(`sources.json has no ${file}`); }
     }
@@ -420,19 +557,42 @@ const memory = (ids = []) => {
     return { get: () => kept, set: async (next) => { kept = [...next]; } };
 };
 
-/** Rewrites the project text for a shape the fixture lacks, then lets the watcher record identities from it, as a project-file change would. */
-const rewriteProject = async (s, transform) => {
-    fs.writeFileSync(projectPath(s.root), transform(s.projectText()));
-    s.fire('change', 'FixtureApp.xcodeproj/project.pbxproj');
+/** Rewrites the project text for a shape the fixture lacks (a transform per format), then lets the watcher record identities from it, as a project-file change would. */
+const rewriteProject = async (s, transforms) => {
+    fs.writeFileSync(projectPath(s.root), byFormat(transforms)(s.projectText(), s.root));
+    s.fire('change', projectFileEvent());
     await s.wait(500);
 };
 
+// The JSON fixture's lines the transforms below edit.
+const JSON_LINE = {
+    myAppHelpers: '        { "path": "Helpers.swift", "target-membership": [ "MyApp/compile-sources" ] },\n',
+    bar: '            { "path": "Bar.swift", "target-membership": [ "MyApp/compile-sources" ] },\n',
+    rename: '            { "path": "Rename.swift", "target-membership": [ "MyApp/compile-sources" ] },\n'
+};
+/** A JSON file element compiled by MyApp, as a line of the MyApp group (`indent` 8) or a group below it. */
+const jsonFileLine = (filePath, indent = 8) => `${' '.repeat(indent)}{ "path": "${filePath}", "target-membership": [ "MyApp/compile-sources" ] },\n`;
+/** The JSON fixture with a MyApp-compiled file listed first in the MyApp group, in place of its line in Views. */
+const jsonMovedToMyApp = (text, viewsLine, filePath) =>
+    replaceOnce(replaceOnce(text, viewsLine, ''), JSON_LINE.myAppHelpers, JSON_LINE.myAppHelpers + jsonFileLine(filePath));
+
 /** Bar.swift listed in the MyApp group under a two-component path, the shape Xcode writes for a file outside its group's folder. */
-const barUnderMyApp = (text) => text
-    .replace('\t\t\t\tAA0000000000000000000112 /* Bar.swift */,\n', '')
-    .replace('\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n',
-        '\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n\t\t\t\tAA0000000000000000000112 /* Bar.swift */,\n')
-    .replace('path = Bar.swift; sourceTree = "<group>";', 'name = Bar.swift; path = Views/Bar.swift; sourceTree = "<group>";');
+const barUnderMyApp = {
+    pbxproj: (text) => [
+        ['\t\t\t\tAA0000000000000000000112 /* Bar.swift */,\n', ''],
+        ['\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n',
+            '\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n\t\t\t\tAA0000000000000000000112 /* Bar.swift */,\n'],
+        ['path = Bar.swift; sourceTree = "<group>";', 'name = Bar.swift; path = Views/Bar.swift; sourceTree = "<group>";']
+    ].reduce((current, [from, to]) => replaceOnce(current, from, to), text),
+    xcproj: (text) => jsonMovedToMyApp(text, JSON_LINE.bar, 'Views/Bar.swift')
+};
+
+/** The Services group repeating a key, which Xcode reads (the first wins) and VSXcode's JSON writer declines to edit. */
+const SERVICES_REPEATS_A_KEY = {
+    pbxproj: (text) => text,
+    xcproj: (text) => replaceOnce(text, '          "kind": "group",\n          "path": "Services",',
+        '          "kind": "group",\n          "kind": "group",\n          "path": "Services",')
+};
 
 /** The Views entries, AA…0111–AA…0113, keyed under another folder. */
 const viewsUnder = (folder) => ({
@@ -573,8 +733,11 @@ const SCENARIOS = [
         name: 'Swift file with an absolute path renamed in letter case only',
         run: (s) => {
             // The fixture has no <absolute> reference, so Bar.swift's is pointed at its own file first.
-            const text = s.projectText().replace('path = Bar.swift; sourceTree = "<group>";',
-                `path = "${s.root}/MyApp/Views/Bar.swift"; sourceTree = "<absolute>";`);
+            const text = byFormat({
+                pbxproj: (current) => replaceOnce(current, 'path = Bar.swift; sourceTree = "<group>";',
+                    `path = "${s.root}/MyApp/Views/Bar.swift"; sourceTree = "<absolute>";`),
+                xcproj: (current) => replaceOnce(current, JSON_LINE.bar, jsonFileLine(`${s.root}/MyApp/Views/Bar.swift`, 12))
+            })(s.projectText());
             fs.writeFileSync(projectPath(s.root), text);
             return moveEntry(s, 'MyApp/Views/Bar.swift', 'MyApp/Views/bar.swift', 'creates first');
         },
@@ -741,7 +904,7 @@ const SCENARIOS = [
         name: 'identities recorded between a rename and its events keep it pairable',
         run: async (s) => {
             s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Renamed.swift');
-            s.fire('change', 'FixtureApp.xcodeproj/project.pbxproj');
+            s.fire('change', projectFileEvent());
             await s.wait(700);
             s.fire('create', 'MyApp/Views/Renamed.swift');
             s.fire('delete', 'MyApp/Views/Rename.swift');
@@ -826,7 +989,10 @@ const SCENARIOS = [
     {
         name: 'SOURCE_ROOT group folder renamed',
         run: async (s) => {
-            await rewriteProject(s, (text) => text.replace('path = Shared;\n\t\t\tsourceTree = "<group>";', 'path = Shared;\n\t\t\tsourceTree = SOURCE_ROOT;'));
+            await rewriteProject(s, {
+                pbxproj: (text) => replaceOnce(text, 'path = Shared;\n\t\t\tsourceTree = "<group>";', 'path = Shared;\n\t\t\tsourceTree = SOURCE_ROOT;'),
+                xcproj: (text) => replaceOnce(text, '      "kind": "group",\n      "path": "Shared",', '      "kind": "group",\n      "path": "<PROJECT>/Shared",')
+            });
             await moveEntry(s, 'Shared', 'Common', 'creates first');
         },
         changes: (before) => ({ swift: { 'Shared/SharedUtil.swift': null, 'Common/SharedUtil.swift': before.swift['Shared/SharedUtil.swift'] } })
@@ -843,11 +1009,17 @@ const SCENARIOS = [
         name: 'folder spelled after a .. segment renamed',
         run: async (s) => {
             // Rename.swift listed in the Shared group, reaching its file through the parent folder.
-            await rewriteProject(s, (text) => text
-                .replace('\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n', '')
-                .replace('\t\t\t\tAA0000000000000000000310 /* SharedUtil.swift */,\n',
-                    '\t\t\t\tAA0000000000000000000310 /* SharedUtil.swift */,\n\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n')
-                .replace('path = Rename.swift; sourceTree = "<group>";', 'name = Rename.swift; path = ../MyApp/Views/Rename.swift; sourceTree = "<group>";'));
+            await rewriteProject(s, {
+                pbxproj: (text) => [
+                    ['\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n', ''],
+                    ['\t\t\t\tAA0000000000000000000310 /* SharedUtil.swift */,\n',
+                        '\t\t\t\tAA0000000000000000000310 /* SharedUtil.swift */,\n\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n'],
+                    ['path = Rename.swift; sourceTree = "<group>";', 'name = Rename.swift; path = ../MyApp/Views/Rename.swift; sourceTree = "<group>";']
+                ].reduce((current, [from, to]) => replaceOnce(current, from, to), text),
+                xcproj: (text) => replaceOnce(replaceOnce(text, JSON_LINE.rename, ''),
+                    '      "path": "Shared",\n      "children": [\n',
+                    `      "path": "Shared",\n      "children": [\n${jsonFileLine('../MyApp/Views/Rename.swift')}`)
+            });
             await moveEntry(s, 'MyApp/Views', 'MyApp/Screens', 'creates first');
         },
         changes: { swift: viewsUnder('MyApp/Screens') }
@@ -856,11 +1028,15 @@ const SCENARIOS = [
         name: 'folder whose name repeats earlier in a path renamed',
         run: async (s) => {
             s.move('MyApp/Views/Rename.swift', 'MyApp/Views/Sub/Views/Rename.swift');
-            await rewriteProject(s, (text) => text
-                .replace('\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n', '')
-                .replace('\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n',
-                    '\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n')
-                .replace('path = Rename.swift; sourceTree = "<group>";', 'name = Rename.swift; path = Views/Sub/Views/Rename.swift; sourceTree = "<group>";'));
+            await rewriteProject(s, {
+                pbxproj: (text) => [
+                    ['\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n', ''],
+                    ['\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n',
+                        '\t\t\t\tAA0000000000000000000110 /* Helpers.swift */,\n\t\t\t\tAA0000000000000000000113 /* Rename.swift */,\n'],
+                    ['path = Rename.swift; sourceTree = "<group>";', 'name = Rename.swift; path = Views/Sub/Views/Rename.swift; sourceTree = "<group>";']
+                ].reduce((current, [from, to]) => replaceOnce(current, from, to), text),
+                xcproj: (text) => jsonMovedToMyApp(text, JSON_LINE.rename, 'Views/Sub/Views/Rename.swift')
+            });
             await moveEntry(s, 'MyApp/Views/Sub/Views', 'MyApp/Views/Sub/Screens', 'creates first');
         },
         // Only the component at the renamed folder's position changes; the first `Views` stays.
@@ -910,7 +1086,10 @@ const SCENARIOS = [
         name: 'folder moved while an entry inside it reaches out with ..',
         run: async (s) => {
             s.move('MyApp/Views/Rename.swift', 'MyApp/Rename.swift');
-            await rewriteProject(s, (text) => text.replace('path = Rename.swift; sourceTree = "<group>";', 'path = ../Rename.swift; sourceTree = "<group>";'));
+            await rewriteProject(s, {
+                pbxproj: (text) => replaceOnce(text, 'path = Rename.swift; sourceTree = "<group>";', 'path = ../Rename.swift; sourceTree = "<group>";'),
+                xcproj: (text) => replaceOnce(text, JSON_LINE.rename, jsonFileLine('../Rename.swift', 12))
+            });
             await moveEntry(s, 'MyApp/Views', 'MyApp/Features/Views', 'creates first');
         },
         // Rename.swift's base folder moves with Views, so its path is recomputed to keep pointing at MyApp/Rename.swift.
@@ -1291,6 +1470,76 @@ const SCENARIOS = [
         },
         result: { added: 0, updated: 0, removed: 1 },
         changes: { models: { [STORE]: null } }
+    },
+    {
+        name: 'a declined add leaves the rest of its batch to land',
+        formats: ['xcproj'],
+        project: SERVICES_REPEATS_A_KEY,
+        run: (s) => {
+            s.write('MyApp/Services/Declined.swift', 'struct Declined {}\n');
+            s.write('MyApp/Views/Landed.swift', 'struct Landed {}\n');
+            s.fire('create', 'MyApp/Services/Declined.swift');
+            s.fire('create', 'MyApp/Views/Landed.swift');
+        },
+        logIncludes: ['left undone, with the rest of its change: the object at', 'repeats "kind"'],
+        logExcludes: ['Declined.swift to'],
+        changes: { swift: { 'MyApp/Views/Landed.swift': { ids: NEW_ID, targets: ['MyApp'] } } }
+    },
+    {
+        name: 'repair counts only the add that landed',
+        formats: ['xcproj'],
+        project: SERVICES_REPEATS_A_KEY,
+        run: (s) => {
+            s.write('MyApp/Services/Declined.swift', 'struct Declined {}\n');
+            s.write('MyKit/Landed.swift', 'struct Landed {}\n');
+            return s.repair();
+        },
+        result: counts({ added: 1 }),
+        logIncludes: ['repeats "kind"'],
+        changes: { swift: { 'MyKit/Landed.swift': { ids: NEW_ID, targets: ['MyKit'] } } }
+    },
+    {
+        name: 'Remove counts only the removals that landed',
+        formats: ['xcproj'],
+        project: SERVICES_REPEATS_A_KEY,
+        run: async (s) => {
+            s.remove('MyApp/Services/Service.swift');
+            s.remove('MyApp/Views/Bar.swift');
+            const removed = [];
+            const result = await s.repair({ confirmRemoval: prompt(['remove']), onRemoved: (count) => removed.push(count) });
+            return { asked: result.asked, removed };
+        },
+        result: { asked: 2, removed: [1] },
+        logIncludes: ['repeats "kind"'],
+        changes: { swift: { 'MyApp/Views/Bar.swift': null } }
+    },
+    {
+        name: 'a declined Core Data add registers nothing and counts nothing',
+        formats: ['xcproj'],
+        project: SERVICES_REPEATS_A_KEY,
+        run: (s) => {
+            s.writeModel('MyApp/Services/Archive.xcdatamodeld', 'Archive.xcdatamodel');
+            return reconcileDataModels(s.root, s.log);
+        },
+        result: { added: 0, updated: 0, removed: 0 },
+        logIncludes: ['repeats "kind"', 'Archive.xcdatamodeld left unregistered'],
+        logExcludes: ['Registered'],
+        textUnchanged: true
+    },
+    {
+        name: 'a moved model whose versions changed keeps the refresh when its move declines',
+        formats: ['xcproj'],
+        project: SERVICES_REPEATS_A_KEY,
+        run: (s) => {
+            s.move(STORE, 'MyApp/Services/Store.xcdatamodeld');
+            s.writeModel('MyApp/Services/Store.xcdatamodeld', 'Store 2.xcdatamodel');
+            return reconcileDataModels(s.root, s.log);
+        },
+        result: { added: 0, updated: 1, removed: 0 },
+        logIncludes: ['repeats "kind"', 'its group entry stays where it was', 'versions changed on disk, refreshing'],
+        changes: (before) => ({
+            models: { [STORE]: { ...before.models[STORE], versions: ['Store 2.xcdatamodel', 'Store.xcdatamodel'], current: 'Store 2.xcdatamodel' } }
+        })
     }
 ];
 
@@ -1298,14 +1547,17 @@ async function runScenario(scenario) {
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vsxcode-file-sync-')));
     const logs = [];
     try {
+        const projectText = scenario.project ? byFormat(scenario.project)(format.text) : format.text;
+        const initial = fixtureState(projectText);
+        if (initial.problem) { return { problems: [`the starting project: ${initial.problem}`], logs }; }
         fs.mkdirSync(path.dirname(projectPath(root)));
-        fs.writeFileSync(projectPath(root), PROJECT_TEXT);
+        fs.writeFileSync(projectPath(root), projectText);
         for (const [relative, contents] of Object.entries(SOURCES)) {
             fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
             fs.writeFileSync(path.join(root, relative), contents);
         }
         idCounter = 0;
-        const before = readState(PROJECT_TEXT);
+        const before = initial.state;
         const log = (message) => logs.push(message);
         const context = scenarioContext(root, log);
         const disposables = [];
@@ -1326,14 +1578,24 @@ async function runScenario(scenario) {
         }
 
         const after = fs.readFileSync(projectPath(root), 'utf8');
-        if (!lints(after)) { return { problems: ['the project no longer passes plutil -lint'], logs }; }
+        const read = readProjectState(after, root);
+        if (read.problem) { return { problems: [read.problem], logs }; }
         const problems = [];
-        if (scenario.textUnchanged && after !== PROJECT_TEXT) { problems.push('the project text changed'); }
-        if (scenario.result !== undefined && !same(result, scenario.result)) {
-            problems.push(`returned ${show(result)}, expected ${show(scenario.result)}`);
+        if (scenario.textUnchanged && after !== projectText) { problems.push('the project text changed'); }
+        const expectedResult = translateIds(scenario.result);
+        if (scenario.result !== undefined && !same(result, expectedResult)) {
+            problems.push(`returned ${show(result)}, expected ${show(expectedResult)}`);
+        }
+        for (const text of scenario.logIncludes || []) {
+            if (!logs.some((message) => message.includes(text))) { problems.push(`no log line says "${text}"`); }
+        }
+        for (const text of scenario.logExcludes || []) {
+            const found = logs.find((message) => message.includes(text));
+            if (found) { problems.push(`a log line says "${text}": ${found}`); }
         }
         const changes = typeof scenario.changes === 'function' ? scenario.changes(before, root) : scenario.changes || {};
-        problems.push(...stateProblems(readState(after), withChanges(before, changes), before.ids));
+        const expected = withChanges(before, changes);
+        problems.push(...stateProblems(read.state, format.name === 'pbxproj' ? expected : withoutIds(expected), before.ids));
         return { problems, logs };
     } catch (error) {
         return { problems: [`threw: ${(error && error.stack) || error}`], logs };
@@ -1356,15 +1618,34 @@ function report(name, problems, logs = []) {
     }
 }
 
+/** Whether Xcode 27.2 or later is selected: the JSON run's conversions need it. */
+function hasJsonXcode() {
+    try {
+        return execFileSync('/usr/bin/xcrun', ['-f', 'xcprojformatter'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() !== '';
+    } catch {
+        return false;
+    }
+}
+
 async function main() {
+    if (!hasJsonXcode()) {
+        console.error('test:file-sync needs Xcode 27.2 or later selected for its JSON run: `xcrun -f xcprojformatter` found nothing.');
+        process.exitCode = 1;
+        return;
+    }
     let failures = 0;
-    const baseline = baselineProblems();
-    report('fixture baseline', baseline);
-    if (baseline.length > 0) { failures++; }
-    for (const scenario of SCENARIOS) {
-        const { problems, logs } = await runScenario(scenario);
-        report(scenario.name, problems, logs);
-        if (problems.length > 0) { failures++; }
+    for (const runFormat of FORMATS) {
+        format = runFormat;
+        console.log(`${format.fileName}:`);
+        const initial = fixtureState(format.text);
+        const baseline = initial.problem ? [initial.problem] : baselineProblems(initial.state);
+        report('fixture baseline', baseline);
+        if (baseline.length > 0) { failures++; }
+        for (const scenario of SCENARIOS.filter((candidate) => !candidate.formats || candidate.formats.includes(format.name))) {
+            const { problems, logs } = await runScenario(scenario);
+            report(scenario.name, problems, logs);
+            if (problems.length > 0) { failures++; }
+        }
     }
     if (failures > 0) {
         console.log(`\n${failures} check(s) failed.`);

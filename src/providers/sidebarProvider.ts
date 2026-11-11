@@ -10,6 +10,8 @@ import { getBuildSettingsForTarget, getProjectBuildSettings, platformsSupported 
 import { getDestinationType } from '../utils/destination';
 import { detectSupportedSwiftVersions, isXcodeFirstLaunchComplete } from '../utils/version';
 import { listInstalledSimulatorApps, effectiveBundleId, DEV_BUNDLE_ID_SUFFIX, type InstalledAppSummary } from '../utils/bundleId';
+import { describeResolution, resolveProjectFile } from '../utils/projectFile';
+import { describeXcprojProblem } from '../parsers/xcprojIndex';
 
 const execFile = promisify(execFileCallback);
 
@@ -102,6 +104,8 @@ export class SidebarItem extends vscode.TreeItem {
 
 export interface ProjectData {
     xcodeProjects: string[];
+    /** The definition file the targets were read from (`project.pbxproj` or `project.xcproj`); undefined when none was read. */
+    definitionFileName?: string;
     targets: NativeTarget[];
     schemes: string[];
     simulators: SimulatorDevice[];
@@ -212,13 +216,14 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     // an orphan from a previous rename.
     private createBundleIdItem(config: BuildTaskConfig): SidebarItem {
         const fromPbx = this.projectData?.bundleIdByTarget[config.targetName] || '';
+        const definitionFile = this.projectData?.definitionFileName ?? 'The project file';
         const stale = this.projectData?.staleSimulatorInstalls || [];
         const hasStaleInstall = stale.length > 0;
         const devEnabled = config.devBundleId === true;
         const builtId = effectiveBundleId(fromPbx, devEnabled);
         const devLabel = devEnabled ? 'Dev: On' : 'Dev: Off';
         const devTooltip = devEnabled
-            ? `\n\nDev Bundle ID is on: builds append "${DEV_BUNDLE_ID_SUFFIX}"${fromPbx ? ` and install as ${builtId}` : ''}, so the development app sits alongside the shipping one. project.pbxproj keeps ${fromPbx || 'its own value'}. Use the ✓ button on this row to turn it off.`
+            ? `\n\nDev Bundle ID is on: builds append "${DEV_BUNDLE_ID_SUFFIX}"${fromPbx ? ` and install as ${builtId}` : ''}, so the development app sits alongside the shipping one. ${definitionFile} keeps ${fromPbx || 'its own value'}. Use the ✓ button on this row to turn it off.`
             : `\n\nDev Bundle ID is off: builds use the bundle id exactly as committed. Use the ○ button on this row to build as ${fromPbx ? effectiveBundleId(fromPbx, true) : `…${DEV_BUNDLE_ID_SUFFIX}`} instead, so a development build installs alongside the shipping app.`;
         // Encoded into contextValue so package.json can pick which half of the toggle pair to render.
         const devContext = devEnabled ? 'devOn' : 'devOff';
@@ -234,7 +239,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             item.contextValue = `config-bundleId-stale-${devContext}`;
         } else {
             item.iconPath = new vscode.ThemeIcon('tag');
-            item.tooltip = `Bundle id from project.pbxproj (the source of truth). Click to edit PRODUCT_BUNDLE_IDENTIFIER.${devTooltip}`;
+            item.tooltip = `Bundle id from ${this.projectData?.definitionFileName ?? 'the project file'} (the source of truth). Click to edit PRODUCT_BUNDLE_IDENTIFIER.${devTooltip}`;
             item.contextValue = `config-bundleId-${devContext}`;
         }
         return item;
@@ -316,11 +321,19 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         const macSupportByTarget: Record<string, boolean> = {};
 
         const projectFile = config?.projectFile || xcodeProjects[0];
+        let definitionFileName: string | undefined;
         if (projectFile) {
-            const pbxprojPath = path.join(rootPath, projectFile, 'project.pbxproj');
+            const bundlePath = path.join(rootPath, projectFile);
+            const resolution = resolveProjectFile(bundlePath);
             try {
-                const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+                if ('error' in resolution) { throw new Error(describeResolution(bundlePath, resolution)); }
+                const pbxContents = await fsp.readFile(resolution.path, 'utf8');
+                definitionFileName = path.basename(resolution.path);
                 targets = parseNativeTargets(pbxContents);
+                if (targets.length === 0 && resolution.format === 'xcproj') {
+                    const problem = describeXcprojProblem(pbxContents);
+                    if (problem) { this.log(`[sidebar] Xcode can't read ${projectFile}/${definitionFileName}: ${problem}`); }
+                }
                 // Project-level settings act as the inheritance fallback for the
                 // per-target lookups below (platforms, swift version, bundle id).
                 const projectSettings = getProjectBuildSettings(pbxContents, 'Debug');
@@ -371,7 +384,11 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                         }
                     }
                 }
-            } catch { /* no pbxproj */ }
+            } catch (error) {
+                // No targets: the bundle holds no definition file, or two, or one that can't be read.
+                const message = (error as { message?: string }).message || String(error);
+                this.log(`[sidebar] no targets: ${message}`);
+            }
 
             // Scheme discovery needs xcodebuild; skip it when Xcode isn't ready.
             if (xcodeReady) {
@@ -397,7 +414,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             this.findStaleSimulatorInstalls(config, bundleIdByTarget, productNameByTarget),
         ]);
 
-        this.projectData = { xcodeProjects, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, macSupportByTarget, xcodeReady, supportedSwiftVersions, staleSimulatorInstalls };
+        this.projectData = { xcodeProjects, definitionFileName, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, macSupportByTarget, xcodeReady, supportedSwiftVersions, staleSimulatorInstalls };
         this.log(`[sidebar] project data loaded — ${targets.length} target(s), ${schemes.length} scheme(s), ${simulators.length} simulator(s), ${physicalDevices.length} device(s)`);
         // Force a fresh render now data is in; otherwise the spinner can persist until the view is re-entered.
         this._onDidChangeTreeData.fire();
@@ -478,8 +495,11 @@ export async function autoConfigureBuildTasks(
         }
         const projectFile = xcodeProjects[0];
 
-        const pbxprojPath = path.join(rootPath, projectFile, 'project.pbxproj');
-        const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+        const resolution = resolveProjectFile(path.join(rootPath, projectFile));
+        if ('error' in resolution) {
+            return false;
+        }
+        const pbxContents = await fsp.readFile(resolution.path, 'utf8');
         const nativeTargets = parseNativeTargets(pbxContents);
         const nonTestTargets = nativeTargets.filter((t) => !isTestTarget(t.productType));
         if (nonTestTargets.length === 0) {

@@ -31,7 +31,18 @@ import { listAvailableSimulators, listPhysicalDevices, devicectlInstall, checkDe
 import { findDeviceSymbols, deviceSupportFolderName, prepareDeviceSupport, PrepareAbortedError } from './utils/deviceSupport';
 import type { SimulatorAppQuery, SimulatorAppProcess, PhysicalDevice } from './utils/simulator';
 import { getDestinationType, builtAppPath, derivedDataBasePath } from './utils/destination';
-import { detectXcodeToolchain, revealSimulator, canPrepareDeviceSupport } from './utils/xcodeToolchain';
+import { detectXcodeToolchain, revealSimulator, canPrepareDeviceSupport, needsNewerXcodeForJSON } from './utils/xcodeToolchain';
+import type { XcodeToolchain } from './utils/xcodeToolchain';
+import {
+    PROJECT_FILE_NAMES,
+    describeResolution,
+    findProjectBundle,
+    resolveProjectFile,
+    sameResolution,
+    writeProjectFile
+} from './utils/projectFile';
+import type { ProjectFileFormat, ProjectFileResolution } from './utils/projectFile';
+import { describeXcprojProblem } from './parsers/xcprojIndex';
 import { classifyStop, pendingUserStopAfterRequest } from './utils/debugStops';
 import type { PendingUserStop, StoppedEventBody } from './utils/debugStops';
 import { agentGuidePrompt, agentGuideUrl } from './utils/agentGuide';
@@ -49,6 +60,7 @@ import { SidebarProvider, autoConfigureBuildTasks, promptXcodeFirstLaunch } from
 import { XCTestController } from './providers/testController';
 import { updateBuildSetting } from './writers/projectEdit';
 import { createSwiftFileWatcher, reconcileSwiftFiles } from './sync/swiftFileSync';
+import { canonicalPath, enqueueWrite } from './sync/pbxprojSync';
 import { createDataModelWatcher, reconcileDataModels } from './sync/dataModelSync';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
 import { CodeQualityWebviewProvider } from './providers/codeQualityWebviewProvider';
@@ -182,6 +194,79 @@ async function configureSourceKitLSP(dest: DestinationType, platforms: Deploymen
     }
 }
 
+// ── The project's definition file ─────────────────────────
+
+/** How long a bundle must hold both definition files before VSXcode says so: Xcode's format switch passes through that state. */
+const BOTH_FILES_RECHECK_MS = 1000;
+const bothFilesShown = new Set<string>();
+const bothFilesPending = new Set<string>();
+
+/** Shows Xcode's refusal of a bundle holding both definition files, once per bundle per session, if it outlasts the re-check. */
+function reportBothDefinitionFiles(bundlePath: string): void {
+    const key = path.resolve(bundlePath);
+    if (bothFilesShown.has(key) || bothFilesPending.has(key)) { return; }
+    bothFilesPending.add(key);
+    setTimeout(() => {
+        bothFilesPending.delete(key);
+        const resolution = resolveProjectFile(bundlePath);
+        if (!('error' in resolution) || resolution.error !== 'both') { return; }
+        bothFilesShown.add(key);
+        const bundle = path.basename(bundlePath);
+        void vscode.window.showErrorMessage(
+            `The project “${bundle}” has multiple project definition files, and is invalid. Only one of “${bundle}/${PROJECT_FILE_NAMES.xcproj}” or “${bundle}/${PROJECT_FILE_NAMES.pbxproj}” should exist. Remove the obsolete file and reopen the project.`
+        );
+    }, BOTH_FILES_RECHECK_MS);
+}
+
+/** The definition file to read in a project bundle; throws, in words, while there is none or there are two. */
+function definitionFileOf(bundlePath: string): { path: string; format: ProjectFileFormat } {
+    const resolution = resolveProjectFile(bundlePath);
+    if ('error' in resolution) {
+        if (resolution.error === 'both') { reportBothDefinitionFiles(bundlePath); }
+        throw new Error(describeResolution(bundlePath, resolution));
+    }
+    return resolution;
+}
+
+/** The definition file's path for readers that fall back when the project can't be read: undefined instead of an error. */
+function definitionFileIfAny(bundlePath: string): string | undefined {
+    try {
+        return definitionFileOf(bundlePath).path;
+    } catch {
+        return undefined;
+    }
+}
+
+/** An error for a project that yielded no targets, saying why Xcode would refuse it when it is a JSON file Xcode can't read. */
+function noTargetsError(message: string, projectFile: { path: string; format: ProjectFileFormat }, contents: string): Error {
+    const problem = projectFile.format === 'xcproj' ? describeXcprojProblem(contents) : undefined;
+    return new Error(problem ? `${message} Xcode can't read ${path.basename(projectFile.path)}: ${problem}.` : message);
+}
+
+/** The bundle VSXcode works on: the configured project, else the first `.xcodeproj` in the workspace root. */
+function workspaceProjectBundle(workspaceState: vscode.Memento): string | undefined {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root) { return undefined; }
+    const configured = workspaceState.get<BuildTaskConfig>('buildTaskConfig')?.projectFile;
+    return configured ? path.join(root, configured) : findProjectBundle(root) ?? undefined;
+}
+
+let newerXcodeWarned = false;
+
+/** Warns once per session when the project is in the JSON format and the selected Xcode, older than 27, can't open it. */
+function warnIfXcodeCantOpenJSON(bundlePath: string | undefined, toolchain: XcodeToolchain, log: (message: string) => void): void {
+    if (newerXcodeWarned || !bundlePath || !toolchain.version || !needsNewerXcodeForJSON(toolchain)) { return; }
+    const resolution = resolveProjectFile(bundlePath);
+    if ('error' in resolution || resolution.format !== 'xcproj') { return; }
+    newerXcodeWarned = true;
+    const bundle = path.basename(bundlePath);
+    const version = `${toolchain.version.major}.${toolchain.version.minor}`;
+    log(`[xcode] ${bundle} is in the JSON project format, which Xcode ${version} can't open`);
+    void vscode.window.showWarningMessage(
+        `${bundle} uses Xcode's JSON project format (${PROJECT_FILE_NAMES.xcproj}), which needs Xcode 27 or later, and the selected Xcode is ${version}. Builds will fail until a newer Xcode is selected with xcode-select.`
+    );
+}
+
 /**
  * Reconfigure SourceKit-LSP to match the config's destination without
  * regenerating Package.swift.
@@ -192,7 +277,7 @@ async function reconfigureSourceKitLSP(projectRoot: string, config: BuildTaskCon
     if (dest !== 'mac') {
         // Only the iOS branch needs the deployment version for the triple.
         try {
-            const pbx = await fsp.readFile(path.join(projectRoot, config.projectFile, 'project.pbxproj'), 'utf8');
+            const pbx = await fsp.readFile(definitionFileOf(path.join(projectRoot, config.projectFile)).path, 'utf8');
             platforms = parseDeploymentTargets(pbx);
         } catch { /* ignore — configureSourceKitLSP clears when no iOS platform */ }
     }
@@ -243,13 +328,13 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
         selectedProject = pick;
     }
 
-    const pbxprojPath = path.join(rootPath, selectedProject, 'project.pbxproj');
+    const projectFile = definitionFileOf(path.join(rootPath, selectedProject));
     let pbxContents: string;
     try {
-        pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+        pbxContents = await fsp.readFile(projectFile.path, 'utf8');
     } catch (error) {
         const message = (error as { message?: string }).message;
-        throw new Error(`Unable to read ${pbxprojPath}: ${message}`);
+        throw new Error(`Unable to read ${projectFile.path}: ${message}`);
     }
 
     // A SwiftPM-generated project sits beside the package's own manifest, so a Generate command settles that first.
@@ -274,7 +359,7 @@ async function generatePackageSwiftSerialized(rootPath: string, configurationNam
     const projectBuildSettings = getProjectBuildSettings(pbxContents, configurationName);
 
     if (nativeTargets.length === 0) {
-        throw new Error('No native targets found in the Xcode project.');
+        throw noTargetsError('No native targets found in the Xcode project.', projectFile, pbxContents);
     }
 
     const packageName = path.basename(selectedProject, '.xcodeproj');
@@ -581,18 +666,18 @@ async function configureBuildTasks(rootPath: string, workspaceState: vscode.Meme
         selectedProject = pick;
     }
 
-    const pbxprojPath = path.join(rootPath, selectedProject, 'project.pbxproj');
+    const projectFile = definitionFileOf(path.join(rootPath, selectedProject));
     let pbxContents: string;
     try {
-        pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+        pbxContents = await fsp.readFile(projectFile.path, 'utf8');
     } catch (error) {
         const message = (error as { message?: string }).message;
-        throw new Error(`Unable to read ${pbxprojPath}: ${message}`);
+        throw new Error(`Unable to read ${projectFile.path}: ${message}`);
     }
 
     const nativeTargets = parseNativeTargets(pbxContents);
     if (nativeTargets.length === 0) {
-        throw new Error('No targets found in the Xcode project.');
+        throw noTargetsError('No targets found in the Xcode project.', projectFile, pbxContents);
     }
 
     const nonTestTargets = nativeTargets.filter((t) => !isTestTarget(t.productType));
@@ -847,8 +932,10 @@ async function handlePossibleBundleIdRename(
 ): Promise<boolean> {
     const config = workspaceState.get<BuildTaskConfig>('buildTaskConfig');
     if (!config) { return false; }
-    const pbxprojPath = path.join(projectRoot, config.projectFile, 'project.pbxproj');
-    const fromPbx = await parseBundleIdFromPbxproj(pbxprojPath, config.targetName, 'Debug');
+    const bundlePath = path.join(projectRoot, config.projectFile);
+    const projectFilePath = definitionFileIfAny(bundlePath);
+    if (!projectFilePath) { return false; }
+    const fromPbx = await parseBundleIdFromPbxproj(projectFilePath, config.targetName, 'Debug');
     if (!fromPbx) { return false; }
     const previous = lastKnownPbxBundleId;
     lastKnownPbxBundleId = fromPbx;
@@ -893,7 +980,8 @@ async function handlePossibleBundleIdRename(
     if (choice !== 'Uninstall') { return false; }
 
     // The prompt outlives further edits, so a revert meanwhile could make "previous" the current id again.
-    const currentPbx = await parseBundleIdFromPbxproj(pbxprojPath, config.targetName, 'Debug');
+    const currentPath = definitionFileIfAny(bundlePath);
+    const currentPbx = currentPath ? await parseBundleIdFromPbxproj(currentPath, config.targetName, 'Debug') : undefined;
     if (currentPbx === previous) {
         log(`[pbxproj-watcher] skipping uninstall — ${previous} is the current bundle id again`);
         return false;
@@ -989,13 +1077,18 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[${timestamp}] ${message}`);
     };
 
-    // Prime the selected-Xcode description so task creation only pays the cheap `xcode-select -p` probe.
-    detectXcodeToolchain().then(
+    // Prime the selected-Xcode description so task creation only pays the cheap `xcode-select -p` probe; a JSON project
+    // is checked against the same description.
+    const toolchainAtActivation = detectXcodeToolchain().then(
         (toolchain) => {
             const version = toolchain.version ? `Xcode ${toolchain.version.major}.${toolchain.version.minor}` : 'Xcode of unknown version';
             log(`[xcode] ${version} at ${toolchain.developerDir || '(nothing selected)'}; simulator UI: ${toolchain.simulatorUI?.kind ?? 'none'}`);
+            return toolchain;
         },
-        (error) => log(`[xcode] toolchain detection failed: ${error}`)
+        (error) => {
+            log(`[xcode] toolchain detection failed: ${error}`);
+            return undefined;
+        }
     );
 
     // Register sidebar and no-project placeholder
@@ -1025,12 +1118,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     /** The first `.xcodeproj` in the workspace root: the project that generation, file sync and build-task setup read. */
     function firstXcodeProject(): string | undefined {
-        try {
-            return fs.readdirSync(projectRoot, { withFileTypes: true })
-                .find((entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj'))?.name;
-        } catch {
-            return undefined;
-        }
+        const bundle = findProjectBundle(projectRoot);
+        return bundle ? path.basename(bundle) : undefined;
     }
 
     if (!firstXcodeProject()) {
@@ -1333,8 +1422,9 @@ export function activate(context: vscode.ExtensionContext): void {
     (async () => {
         const current = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
         if (!current) { return; }
-        const pbxprojPath = path.join(projectRoot, current.projectFile, 'project.pbxproj');
-        const seed = await parseBundleIdFromPbxproj(pbxprojPath, current.targetName, 'Debug');
+        const projectFilePath = definitionFileIfAny(path.join(projectRoot, current.projectFile));
+        if (!projectFilePath) { return; }
+        const seed = await parseBundleIdFromPbxproj(projectFilePath, current.targetName, 'Debug');
         if (seed && lastKnownPbxBundleId === undefined) { lastKnownPbxBundleId = seed; }
     })();
 
@@ -1473,10 +1563,9 @@ export function activate(context: vscode.ExtensionContext): void {
             if (pick) {
                 const target = data.targets.find((t) => t.name === pick.targetName)!;
                 const rootPath = vscode.workspace.workspaceFolders![0].uri.fsPath;
-                const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
                 let productName = target.productName || target.name;
                 try {
-                    const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
+                    const pbxContents = await fsp.readFile(definitionFileOf(path.join(rootPath, config.projectFile)).path, 'utf8');
                     if (target.buildConfigurationListId) {
                         const settings = getBuildSettingsForTarget(
                             pbxContents, target.buildConfigurationListId, 'Debug'
@@ -1513,6 +1602,45 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    /**
+     * Sets a build setting in every configuration of a target. The read, edit and write run on the sync's write queue, so a
+     * sync job can't interleave; the text is written only when it changed, and only into the file it was read from.
+     */
+    async function setTargetBuildSetting(projectFile: string, configurationListId: string, key: string, value: string): Promise<void> {
+        const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!rootPath) { return; }
+        const bundlePath = path.join(rootPath, projectFile);
+        let declined: string | undefined;
+        let unwritten: string | undefined;
+        try {
+            await enqueueWrite(async () => {
+                const definition = definitionFileOf(bundlePath);
+                const original = await fsp.readFile(definition.path, 'utf8');
+                let text = original;
+                for (const configId of resolveConfigurationListId(original, configurationListId)) {
+                    text = updateBuildSetting(text, configId, key, value, (reason) => { declined ??= reason; });
+                }
+                if (text === original) { return; }
+                // A skipped write logs why; the same words go into the warning.
+                const written = await writeProjectFile(bundlePath, definition.format, text, (message) => {
+                    log(message);
+                    unwritten = message.replace(/^\[project-file\] /, '');
+                });
+                if (!written) { unwritten ??= `${path.basename(definition.path)} wasn't written`; }
+            });
+        } catch (e) {
+            vscode.window.showErrorMessage(`Failed to update ${key}: ${(e as Error).message}`);
+            return;
+        }
+        if (unwritten !== undefined) {
+            log(`[settings] ${key} not written: ${unwritten}`);
+            vscode.window.showWarningMessage(`VSXcode didn't change ${key}: ${unwritten}.`);
+        } else if (declined !== undefined) {
+            log(`[settings] ${key} not changed in every configuration: ${declined}`);
+            vscode.window.showWarningMessage(`VSXcode couldn't change ${key} in the project file: ${declined}`);
+        }
+    }
+
     const changeBundleIdCmd = vscode.commands.registerCommand(
         'vsxcode.sidebar.changeBundleId',
         async () => {
@@ -1527,26 +1655,9 @@ export function activate(context: vscode.ExtensionContext): void {
             });
             if (input === undefined || input === currentValue) { return; }
 
-            const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            if (!rootPath) { return; }
-            const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
-            try {
-                let pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-                const target = data?.targets.find(t => t.name === config.targetName);
-                if (!target?.buildConfigurationListId) { return; }
-                const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
-                let declined: string | undefined;
-                for (const configId of configIds) {
-                    pbxContents = updateBuildSetting(pbxContents, configId, 'PRODUCT_BUNDLE_IDENTIFIER', input, (reason) => { declined ??= reason; });
-                }
-                await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
-                if (declined !== undefined) {
-                    log(`[settings] PRODUCT_BUNDLE_IDENTIFIER not changed in every configuration: ${declined}`);
-                    vscode.window.showWarningMessage(`VSXcode couldn't change PRODUCT_BUNDLE_IDENTIFIER in the project file: ${declined}`);
-                }
-            } catch (e) {
-                vscode.window.showErrorMessage(`Failed to update PRODUCT_BUNDLE_IDENTIFIER: ${(e as Error).message}`);
-            }
+            const target = data?.targets.find(t => t.name === config.targetName);
+            if (!target?.buildConfigurationListId) { return; }
+            await setTargetBuildSetting(config.projectFile, target.buildConfigurationListId, 'PRODUCT_BUNDLE_IDENTIFIER', input);
         }
     );
 
@@ -1584,7 +1695,7 @@ export function activate(context: vscode.ExtensionContext): void {
             // Redraw, not reload — no cached project data is keyed on this flag.
             sidebarProvider.notifyConfigChanged();
             const base = sidebarProvider.getProjectData()?.bundleIdByTarget[config.targetName];
-            const built = base ? effectiveBundleId(base, next) : `(from pbxproj)${next ? DEV_BUNDLE_ID_SUFFIX : ''}`;
+            const built = base ? effectiveBundleId(base, next) : `(from the project file)${next ? DEV_BUNDLE_ID_SUFFIX : ''}`;
             log(`[dev-bundle-id] ${next ? 'enabled' : 'disabled'} — builds install as ${built}`);
             if (next) { await warnIfProjectHasExtensions(); }
         }
@@ -1759,27 +1870,10 @@ export function activate(context: vscode.ExtensionContext): void {
             });
             if (!pick || pick.version === normalizedCurrent) { return; }
 
-            const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            if (!rootPath) { return; }
-            const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
-            try {
-                let pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-                const target = data?.targets.find(t => t.name === config.targetName);
-                if (!target?.buildConfigurationListId) { return; }
-                const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
-                let declined: string | undefined;
-                for (const configId of configIds) {
-                    const pbxValue = pick.version.includes('.') ? pick.version : `${pick.version}.0`;
-                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_VERSION', pbxValue, (reason) => { declined ??= reason; });
-                }
-                await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
-                if (declined !== undefined) {
-                    log(`[settings] SWIFT_VERSION not changed in every configuration: ${declined}`);
-                    vscode.window.showWarningMessage(`VSXcode couldn't change SWIFT_VERSION in the project file: ${declined}`);
-                }
-            } catch (e) {
-                vscode.window.showErrorMessage(`Failed to update SWIFT_VERSION: ${(e as Error).message}`);
-            }
+            const target = data?.targets.find(t => t.name === config.targetName);
+            if (!target?.buildConfigurationListId) { return; }
+            const projectValue = pick.version.includes('.') ? pick.version : `${pick.version}.0`;
+            await setTargetBuildSetting(config.projectFile, target.buildConfigurationListId, 'SWIFT_VERSION', projectValue);
         }
     );
 
@@ -1808,26 +1902,9 @@ export function activate(context: vscode.ExtensionContext): void {
             });
             if (!pick || pick.value === currentValue) { return; }
 
-            const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            if (!rootPath) { return; }
-            const pbxprojPath = path.join(rootPath, config.projectFile, 'project.pbxproj');
-            try {
-                let pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-                const target = data?.targets.find(t => t.name === config.targetName);
-                if (!target?.buildConfigurationListId) { return; }
-                const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
-                let declined: string | undefined;
-                for (const configId of configIds) {
-                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_STRICT_CONCURRENCY', pick.value, (reason) => { declined ??= reason; });
-                }
-                await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
-                if (declined !== undefined) {
-                    log(`[settings] SWIFT_STRICT_CONCURRENCY not changed in every configuration: ${declined}`);
-                    vscode.window.showWarningMessage(`VSXcode couldn't change SWIFT_STRICT_CONCURRENCY in the project file: ${declined}`);
-                }
-            } catch (e) {
-                vscode.window.showErrorMessage(`Failed to update SWIFT_STRICT_CONCURRENCY: ${(e as Error).message}`);
-            }
+            const target = data?.targets.find(t => t.name === config.targetName);
+            if (!target?.buildConfigurationListId) { return; }
+            await setTargetBuildSetting(config.projectFile, target.buildConfigurationListId, 'SWIFT_STRICT_CONCURRENCY', pick.value);
         }
     );
 
@@ -1901,12 +1978,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const resolved = await resolveBundleIdForLaunch({
             appPath,
-            pbxprojPath: path.join(projectRoot, config.projectFile, 'project.pbxproj'),
+            pbxprojPath: definitionFileIfAny(path.join(projectRoot, config.projectFile)),
             targetName: config.targetName,
             devBundleId: config.devBundleId,
         });
         if (!resolved) {
-            log('[simulator-debug] ERROR: could not resolve bundle id (no Info.plist, no pbxproj)');
+            log('[simulator-debug] ERROR: could not resolve bundle id (no Info.plist, no project file)');
             vscode.window.showErrorMessage('Could not resolve bundle id for launch. Check the build output.');
             return;
         }
@@ -2285,12 +2362,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const resolved = await resolveBundleIdForLaunch({
             appPath,
-            pbxprojPath: path.join(projectRoot, config.projectFile, 'project.pbxproj'),
+            pbxprojPath: definitionFileIfAny(path.join(projectRoot, config.projectFile)),
             targetName: config.targetName,
             devBundleId: config.devBundleId,
         });
         if (!resolved) {
-            log('[physical-debug] ERROR: could not resolve bundle id (no Info.plist, no pbxproj)');
+            log('[physical-debug] ERROR: could not resolve bundle id (no Info.plist, no project file)');
             vscode.window.showErrorMessage('Could not resolve bundle id for launch. Check the build output.');
             return;
         }
@@ -2628,8 +2705,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── File watcher ──────────────────────────────────────────
 
-    const watcher = vscode.workspace.createFileSystemWatcher('**/*.pbxproj');
-    const onProjectChange = watcher.onDidChange(async () => {
+    // A change to a project file refreshes everything, in either format, as it always has. Creating or deleting the workspace
+    // project's definition file matters only when it changes what the bundle resolves to: a format switch, or a second file
+    // that Xcode would refuse. An atomic save, which can arrive as a create, resolves as before and does nothing more.
+    const onProjectFileChanged = (): void => {
         sidebarProvider.refresh();
         testController.refresh();
         regeneratePackageSwift('[file-watcher]');
@@ -2637,7 +2716,50 @@ export function activate(context: vscode.ExtensionContext): void {
         handlePossibleBundleIdRename(log, context.workspaceState, projectRoot)
             .then((didUninstall) => { if (didUninstall) { sidebarProvider.refresh(); } })
             .catch((error) => log(`[pbxproj-watcher] rename check failed: ${error}`));
-    });
+    };
+
+    const definitionFileNames = new Set<string>(Object.values(PROJECT_FILE_NAMES));
+    const lastResolutions = new Map<string, ProjectFileResolution>();
+    const activationBundle = workspaceProjectBundle(context.workspaceState);
+    if (activationBundle) {
+        const resolution = resolveProjectFile(activationBundle);
+        lastResolutions.set(canonicalPath(activationBundle), resolution);
+        if ('error' in resolution && resolution.error === 'both') { reportBothDefinitionFiles(activationBundle); }
+        if (!('error' in resolution) && resolution.format === 'xcproj') {
+            void toolchainAtActivation.then((toolchain) => {
+                if (toolchain) { warnIfXcodeCantOpenJSON(activationBundle, toolchain, log); }
+            });
+        }
+    }
+    const onDefinitionFileCreatedOrDeleted = (uri: vscode.Uri): void => {
+        // Read when the event arrives, so a project picked since activation is the one followed.
+        const bundle = workspaceProjectBundle(context.workspaceState);
+        if (!bundle || !definitionFileNames.has(path.basename(uri.fsPath))) { return; }
+        // Only the workspace project's own files: a project inside a package checkout under the workspace isn't it.
+        const key = canonicalPath(bundle);
+        if (canonicalPath(path.dirname(uri.fsPath)) !== key) { return; }
+        const resolution = resolveProjectFile(bundle);
+        const previous = lastResolutions.get(key);
+        if (sameResolution(previous, resolution)) { return; }
+        lastResolutions.set(key, resolution);
+        log(`[file-watcher] ${'error' in resolution ? describeResolution(bundle, resolution) : `${path.basename(bundle)} now uses ${path.basename(resolution.path)}`}`);
+        if ('error' in resolution) {
+            if (resolution.error === 'both') { reportBothDefinitionFiles(bundle); }
+        } else if (resolution.format === 'xcproj' && (previous === undefined || 'error' in previous || previous.format !== 'xcproj')) {
+            // A switch to JSON: the selected Xcode may be too old to open it.
+            detectXcodeToolchain().then(
+                (toolchain) => warnIfXcodeCantOpenJSON(bundle, toolchain, log),
+                (error) => log(`[xcode] toolchain detection failed: ${error}`)
+            );
+        }
+        onProjectFileChanged();
+    };
+    const projectWatchers = ['**/*.pbxproj', '**/*.xcproj'].map((glob) => vscode.workspace.createFileSystemWatcher(glob));
+    const projectWatcherListeners = projectWatchers.flatMap((projectWatcher) => [
+        projectWatcher.onDidChange(onProjectFileChanged),
+        projectWatcher.onDidCreate(onDefinitionFileCreatedOrDeleted),
+        projectWatcher.onDidDelete(onDefinitionFileCreatedOrDeleted)
+    ]);
 
     // ── Sync Files command ────────────────────────────────────
 
@@ -2745,7 +2867,7 @@ export function activate(context: vscode.ExtensionContext): void {
             const appPath = builtAppPath(config);
             const resolved = await resolveBundleIdForLaunch({
                 appPath,
-                pbxprojPath: path.join(projectRoot, config.projectFile, 'project.pbxproj'),
+                pbxprojPath: definitionFileIfAny(path.join(projectRoot, config.projectFile)),
                 targetName: config.targetName,
                 devBundleId: config.devBundleId,
             });
@@ -2790,7 +2912,7 @@ export function activate(context: vscode.ExtensionContext): void {
         toggleDevBundleIdCmd, enableDevBundleIdCmd, disableDevBundleIdCmd, uninstallStaleAppsCmd,
         selectSimulatorCmd, changeSwiftVersionCmd, changeStrictConcurrencyCmd, buildCmd, buildAndRunCmd, refreshCmd,
         cleanDerivedDataCmd, copyAgentPromptCmd,
-        watcher, onProjectChange, dyldTracker, onDebugStart, onDebugEnd, onTaskEnd,
+        ...projectWatchers, ...projectWatcherListeners, dyldTracker, onDebugStart, onDebugEnd, onTaskEnd,
         outputChannel
     );
 

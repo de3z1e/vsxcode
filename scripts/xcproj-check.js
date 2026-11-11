@@ -13,6 +13,10 @@
  * (`xcodebuild -convert-project pbxproj` on a temp copy, offline); every invalid fixture must be refused both by Xcode and
  * by the reader, for the reason its header names; and every parser's output is compared with reviewed goldens.
  *
+ * Last, the definition file itself (src/utils/projectFile.ts): which of project.pbxproj and project.xcproj a bundle
+ * resolves to, writes that go only into the file that was read and never create one, and whether a JSON project needs a
+ * newer Xcode than the selected one (src/utils/xcodeToolchain.ts).
+ *
  * Inputs:
  *  - scripts/fixtures/xcproj/: each pbxproj fixture converted by `xcodebuild -convert-project xcproj` and stored as
  *    Xcode wrote it; json5-syntax, a hand-written project in the JSON5 syntax Xcode accepts; features, a project using
@@ -1466,5 +1470,93 @@ for (const name of validFixtures) {
     report(changed.length === 0, `${name}: matches its golden`, changed.length === 0 ? `${Object.keys(entries).length} entries` : changed.slice(0, 5).join(', '));
 }
 
-console.log(failures === 0 ? '\nAll JSON project file checks passed.' : `\n${failures} check(s) failed.`);
-process.exit(failures === 0 ? 0 : 1);
+// ── Definition files ──────────────────────────────────────
+
+const projectFile = require(path.join(REPO, 'out', 'utils', 'projectFile.js'));
+const { needsNewerXcodeForJSON } = require(path.join(REPO, 'out', 'utils', 'xcodeToolchain.js'));
+
+/** A fresh `.xcodeproj` holding the given files. */
+function bundleHolding(files) {
+    const bundle = path.join(TEMP, `case-${bundles++}`, 'App.xcodeproj');
+    fs.mkdirSync(bundle, { recursive: true });
+    for (const [name, text] of Object.entries(files)) { fs.writeFileSync(path.join(bundle, name), text); }
+    return bundle;
+}
+
+/** The bundle's files and their contents. */
+function bundleFiles(bundle) {
+    return Object.fromEntries(fs.readdirSync(bundle).sort().map((name) => [name, fs.readFileSync(path.join(bundle, name), 'utf8')]));
+}
+
+async function definitionFileChecks() {
+    console.log('definition files: which one a bundle holds');
+    const resolved = (files) => {
+        const resolution = projectFile.resolveProjectFile(bundleHolding(files));
+        return 'error' in resolution ? resolution.error : `${path.basename(resolution.path)} as ${resolution.format}`;
+    };
+    for (const [label, files, expected] of [
+        ['a pbxproj alone', { 'project.pbxproj': 'p' }, 'project.pbxproj as pbxproj'],
+        ['a JSON file alone', { 'project.xcproj': 'j' }, 'project.xcproj as xcproj'],
+        ['both files, which Xcode refuses', { 'project.pbxproj': 'p', 'project.xcproj': 'j' }, 'both'],
+        ['neither file', {}, 'missing'],
+        ['backups beside the file are ignored', { 'project.xcproj': 'j', 'project.pbxproj_backup': 'p', 'project.xcproj_backup-2': 'j' }, 'project.xcproj as xcproj']
+    ]) {
+        const actual = resolved(files);
+        report(actual === expected, `resolve: ${label}`, actual);
+    }
+
+    console.log('definition files: a write goes only into the file that was read, and never creates one');
+    const logs = [];
+    const write = (bundle, format, text) => projectFile.writeProjectFile(bundle, format, text, (message) => logs.push(message));
+    for (const [label, files, format, text, expected] of [
+        ['the expected file gone gives false and creates nothing', { 'project.xcproj': 'j' }, 'pbxproj', 'new', { written: false, files: { 'project.xcproj': 'j' } }],
+        ['both files present give false and change neither', { 'project.pbxproj': 'p', 'project.xcproj': 'j' }, 'xcproj', 'new', { written: false, files: { 'project.pbxproj': 'p', 'project.xcproj': 'j' } }],
+        ['neither file gives false and creates none', {}, 'xcproj', 'new', { written: false, files: {} }],
+        ['a text shorter than the file leaves it exactly the text', { 'project.xcproj': 'a much longer original text\n'.repeat(8) }, 'xcproj', 'short\n', { written: true, files: { 'project.xcproj': 'short\n' } }],
+        ['the expected file alone is written', { 'project.pbxproj': 'old' }, 'pbxproj', 'new text', { written: true, files: { 'project.pbxproj': 'new text' } }]
+    ]) {
+        const bundle = bundleHolding(files);
+        const written = await write(bundle, format, text);
+        const after = bundleFiles(bundle);
+        report(written === expected.written && JSON.stringify(after) === JSON.stringify(expected.files), `write: ${label}`,
+            `${written}, ${JSON.stringify(after)}`);
+    }
+    // The file can vanish between the re-check and the open; the write then skips like the others instead of throwing.
+    const vanishing = bundleHolding({ 'project.pbxproj': 'p' });
+    const open = fs.promises.open;
+    fs.promises.open = async (...args) => {
+        fs.promises.open = open;
+        const error = new Error(`ENOENT: no such file or directory, open '${args[0]}'`);
+        error.code = 'ENOENT';
+        throw error;
+    };
+    let vanished;
+    try {
+        vanished = await write(vanishing, 'pbxproj', 'new');
+    } catch (error) {
+        vanished = `threw ${error.message}`;
+    } finally {
+        fs.promises.open = open;
+    }
+    report(vanished === false && JSON.stringify(bundleFiles(vanishing)) === JSON.stringify({ 'project.pbxproj': 'p' }),
+        'write: a file gone between the re-check and the open gives false', String(vanished));
+    report(logs.length === 4 && logs.every((message) => message.startsWith('[project-file] ') && message.includes("wasn't written")),
+        'write: each skip logs why, once', JSON.stringify(logs));
+
+    console.log('Xcode version: a JSON project needs Xcode 27 or later');
+    for (const [label, version, expected] of [
+        ['Xcode 26.6 needs a newer one', { major: 26, minor: 6 }, true],
+        ['Xcode 27.0 opens it', { major: 27, minor: 0 }, false],
+        ['an unknown version gives no grounds to warn', null, false]
+    ]) {
+        report(needsNewerXcodeForJSON({ version }) === expected, label);
+    }
+}
+
+definitionFileChecks().then(() => {
+    console.log(failures === 0 ? '\nAll JSON project file checks passed.' : `\n${failures} check(s) failed.`);
+    process.exit(failures === 0 ? 0 : 1);
+}, (error) => {
+    console.error(error);
+    process.exit(1);
+});

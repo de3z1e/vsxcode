@@ -37,7 +37,8 @@
     ],
     "activationEvents": [
         "onDebug",
-        "workspaceContains:**/*.pbxproj"
+        "workspaceContains:**/*.pbxproj",
+        "workspaceContains:**/project.xcproj"
     ],
     "main": "./out/extension.js",
     "contributes": {

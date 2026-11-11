@@ -32,6 +32,9 @@ import {
     setFileReferencePath
 } from '../writers/projectEdit';
 import type { ElementPathChange, ProjectEdit } from '../writers/projectEdit';
+import { compareCodePoints, describeXcprojProblem } from '../parsers/xcprojIndex';
+import { PROJECT_FILE_NAMES, describeResolution, findProjectBundle, projectFileForJob, resolveProjectFile, writeProjectFile } from '../utils/projectFile';
+import type { ProjectFile } from '../utils/projectFile';
 import {
     buildTargetMappings,
     canonicalPath,
@@ -39,7 +42,6 @@ import {
     createOperationScheduler,
     enqueueWrite,
     findMappingForFile,
-    findPbxprojPath,
     isFilteredFolder,
     isFilteredPath,
     isUnderSynchronizedRoot,
@@ -94,6 +96,7 @@ interface Rename {
 /** One read of the project for a batch or a repair, and the edits made on it. */
 interface SyncPass {
     root: string;
+    project: ProjectFile;
     index: ProjectIndex;
     edit: ProjectEdit;
     mappings: TargetDirectoryMapping[];
@@ -154,14 +157,15 @@ function swiftReferences(index: ProjectIndex, root: string, canonical: (target: 
 /** Reads the project once for a pass: its Swift references and target mappings, in on-disk form; null when unreadable. */
 function openPass(
     root: string,
-    pbxprojPath: string,
+    project: ProjectFile,
     contents: string,
     log: (message: string) => void,
     identities: IdentityStore
 ): SyncPass | null {
     const edit = beginProjectEdit(contents, log);
     if (!edit) {
-        log(`${LOG_PREFIX} ${path.basename(path.dirname(pbxprojPath))} can't be read, skipping`);
+        const problem = project.format === 'xcproj' ? describeXcprojProblem(contents) : undefined;
+        log(`${LOG_PREFIX} ${describeResolution(project.bundle, project)} can't be read${problem ? `: ${problem}` : ''}, skipping`);
         return null;
     }
     const canonical = canonicalForms();
@@ -173,13 +177,13 @@ function openPass(
         byPath.set(reference.path, [...(byPath.get(reference.path) ?? []), reference]);
     }
 
-    const mappings = buildTargetMappings(root, contents, pbxprojPath).map((mapping) => ({
+    const mappings = buildTargetMappings(root, contents, project.path).map((mapping) => ({
         ...mapping,
         absolutePath: canonical(mapping.absolutePath),
         synchronizedRoots: mapping.synchronizedRoots.map(canonical)
     }));
     return {
-        root, index, edit, mappings, references, byPath, canonical,
+        root, project, index, edit, mappings, references, byPath, canonical,
         createdGroups: new Map(), rehomed: new Set(), identities, statted: new Map(), log
     };
 }
@@ -243,8 +247,10 @@ function recordIdentities(store: IdentityStore, index: ProjectIndex, root: strin
 }
 
 /** Records identities from the project file as it is on disk; an unreadable project leaves them as they were. */
-async function recordProjectIdentities(root: string, pbxprojPath: string, store: IdentityStore): Promise<void> {
-    const index = readProject(await fsp.readFile(pbxprojPath, 'utf8'));
+async function recordProjectIdentities(root: string, bundle: string, store: IdentityStore): Promise<void> {
+    const resolution = resolveProjectFile(bundle);
+    if ('error' in resolution) { return; }
+    const index = readProject(await fsp.readFile(resolution.path, 'utf8'));
     if (typeof index === 'string') { return; }
     recordIdentities(store, index, root, canonicalForms());
 }
@@ -421,7 +427,7 @@ function folderCaseChanges(pass: SyncPass, entry: SpelledFolder): { changes: Ele
 function moveFolder(pass: SyncPass, { from, to }: FolderPair): number {
     const groupId = destinationGroup(pass, path.dirname(to));
     if (!groupId) {
-        pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, path.dirname(to))}, leaving ${relativeTo(pass, from.path)}'s entries for repair`);
+        pass.log(`${LOG_PREFIX} No group for ${relativeTo(pass, path.dirname(to))}, leaving ${relativeTo(pass, from.path)}'s entries for repair`);
         return 0;
     }
     const oldFolder = from.folder;
@@ -584,7 +590,7 @@ function moveReferences(pass: SyncPass, references: SwiftReference[], destinatio
             if (groupId) { rehomeSwiftFile(pass.edit, reference.id, groupId, fileName); }
         });
         if (!groupId) {
-            if (landed) { pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, folder)}, leaving ${oldName} to the name rules`); }
+            if (landed) { pass.log(`${LOG_PREFIX} No group for ${relativeTo(pass, folder)}, leaving ${oldName} to the name rules`); }
             continue;
         }
         if (!landed) { continue; }
@@ -674,7 +680,7 @@ function placePresentFile(pass: SyncPass, filePath: string): void {
         }
     });
     if (!groupId) {
-        if (landed) { pass.log(`${LOG_PREFIX} No PBXGroup for ${relativeTo(pass, folder)}, skipping ${fileName}`); }
+        if (landed) { pass.log(`${LOG_PREFIX} No group for ${relativeTo(pass, folder)}, skipping ${fileName}`); }
         return;
     }
     if (!landed) { return; }
@@ -747,12 +753,12 @@ async function settleMissingFile(pass: SyncPass, filePath: string): Promise<void
         return;
     }
     if (inChange(pass, () => { for (const reference of remaining) { removeSwiftFile(pass.edit, reference.id); } })) {
-        pass.log(`${LOG_PREFIX} Removed ${fileName} from pbxproj`);
+        pass.log(`${LOG_PREFIX} Removed ${fileName} from ${path.basename(pass.project.path)}`);
     }
 }
 
 /** Writes a pass's text when it changed, and records identities from what was written. */
-async function writePass(pass: SyncPass, pbxprojPath: string, contents: string): Promise<string> {
+async function writePass(pass: SyncPass, contents: string): Promise<string> {
     const text = projectEditText(pass.edit);
     if (text === contents) {
         // A JSON session whose text didn't read back writes nothing; its changes are then not counted as made.
@@ -760,7 +766,11 @@ async function writePass(pass: SyncPass, pbxprojPath: string, contents: string):
         if (reason !== undefined) { pass.unwritten = reason; }
         return contents;
     }
-    await fsp.writeFile(pbxprojPath, text, 'utf8');
+    // Never creates a definition file: a format switch since the read leaves the pass unwritten, counted as nothing done.
+    if (!await writeProjectFile(pass.project.bundle, pass.project.format, text, pass.log)) {
+        pass.unwritten = 'the project file changed before the write';
+        return contents;
+    }
     const written = readProject(text);
     if (typeof written !== 'string') { recordIdentities(pass.identities, written, pass.root, pass.canonical); }
     return text;
@@ -773,7 +783,7 @@ async function writePass(pass: SyncPass, pbxprojPath: string, contents: string):
  */
 async function syncBatch(
     root: string,
-    pbxprojPath: string,
+    bundle: string,
     paths: string[],
     log: (message: string) => void,
     identities: IdentityStore,
@@ -784,18 +794,20 @@ async function syncBatch(
     const folderPaths = unique.filter((candidate) => !isSwiftPath(candidate));
     const fileRenames = renames.filter(({ from, to }) => isSwiftPath(from) && isSwiftPath(to));
     const folderRenames = renames.filter(({ from, to }) => !isSwiftPath(from) && !isSwiftPath(to));
-    let contents = await fsp.readFile(pbxprojPath, 'utf8');
+    const project = projectFileForJob(bundle, log, LOG_PREFIX);
+    if (!project) { return; }
+    let contents = await fsp.readFile(project.path, 'utf8');
 
     if (folderPaths.length > 0 || folderRenames.length > 0) {
-        const pass = openPass(root, pbxprojPath, contents, log, identities);
+        const pass = openPass(root, project, contents, log, identities);
         if (!pass) { return; }
         syncFolders(pass, folderPaths, folderRenames);
-        contents = await writePass(pass, pbxprojPath, contents);
+        contents = await writePass(pass, contents);
     }
     if (filePaths.length === 0 && fileRenames.length === 0) { return; }
 
     // The same text costs no second parse: the index is memoized per contents.
-    const pass = openPass(root, pbxprojPath, contents, log, identities);
+    const pass = openPass(root, project, contents, log, identities);
     if (!pass) { return; }
     const present = filePaths.filter((filePath) => statOnce(pass, filePath) !== undefined);
     followRenames(pass, fileRenames);
@@ -806,7 +818,7 @@ async function syncBatch(
     for (const filePath of filePaths.filter((candidate) => !present.includes(candidate) && !fs.existsSync(candidate))) {
         await settleMissingFile(pass, filePath);
     }
-    await writePass(pass, pbxprojPath, contents);
+    await writePass(pass, contents);
 }
 
 /** Runs a job on the shared write queue and logs its failure, since nothing awaits it and enqueueWrite hands a rejection to its caller. */
@@ -825,18 +837,19 @@ export function createSwiftFileWatcher(
     rootPath: string,
     log: (message: string) => void
 ): vscode.Disposable[] {
-    const pbxprojPath = findPbxprojPath(rootPath);
-    if (!pbxprojPath) {
+    // Each job resolves the definition file when it runs, so a format switch needs no restart.
+    const bundle = findProjectBundle(rootPath);
+    if (!bundle) {
         log(`${LOG_PREFIX} No xcodeproj found, skipping Swift file watcher`);
         return [];
     }
 
     const root = canonicalPath(rootPath);
     const identities = emptyIdentities();
-    queueLogged(log, () => recordProjectIdentities(root, pbxprojPath, identities));
+    queueLogged(log, () => recordProjectIdentities(root, bundle, identities));
 
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.swift');
-    const batches = createBatchScheduler(root, log, LOG_PREFIX, (paths) => syncBatch(root, pbxprojPath, paths, log, identities));
+    const batches = createBatchScheduler(root, log, LOG_PREFIX, (paths) => syncBatch(root, bundle, paths, log, identities));
     // A batch decides each path from disk, so the event kind isn't kept.
     const queue = (uri: vscode.Uri): void => batches.add(canonicalPath(uri.fsPath));
     const onCreate = watcher.onDidCreate(queue);
@@ -872,25 +885,27 @@ export function createSwiftFileWatcher(
         // A letter-case rename maps both paths to one on-disk path, which the batch's case rules handle without a pair.
         const renames = reported.filter(({ from, to }) => from !== to);
         const paths = reported.flatMap(({ from, to }) => [from, to]);
-        queueLogged(log, () => syncBatch(root, pbxprojPath, paths, log, identities, renames));
+        queueLogged(log, () => syncBatch(root, bundle, paths, log, identities, renames));
     });
 
-    // Entries registered from outside (Xcode, git) get their identities shortly after the project file changes.
-    const projectFile = canonicalPath(pbxprojPath);
+    // Entries registered from outside (Xcode, git) get their identities shortly after the project file changes, in either
+    // format; a switch between them (a create and a delete) re-records from whichever file then resolves.
+    const definitionFiles = new Set(Object.values(PROJECT_FILE_NAMES).map((name) => canonicalPath(path.join(bundle, name))));
     const records = createOperationScheduler(log, LOG_PREFIX);
-    const projectWatcher = vscode.workspace.createFileSystemWatcher('**/*.pbxproj');
     const onProjectEvent = (uri: vscode.Uri): void => {
-        if (canonicalPath(uri.fsPath) === projectFile) {
-            records.schedule(projectFile, () => recordProjectIdentities(root, pbxprojPath, identities));
+        if (definitionFiles.has(canonicalPath(uri.fsPath))) {
+            records.schedule(bundle, () => recordProjectIdentities(root, bundle, identities));
         }
     };
-    const onProjectChange = projectWatcher.onDidChange(onProjectEvent);
-    const onProjectCreate = projectWatcher.onDidCreate(onProjectEvent);
+    const projectWatchers = ['**/*.pbxproj', '**/*.xcproj'].map((glob) => vscode.workspace.createFileSystemWatcher(glob));
+    const projectListeners = projectWatchers.flatMap((projectWatcher) => [
+        projectWatcher.onDidChange(onProjectEvent), projectWatcher.onDidCreate(onProjectEvent), projectWatcher.onDidDelete(onProjectEvent)
+    ]);
 
     log(`${LOG_PREFIX} Swift file watcher active`);
     return [
         watcher, onCreate, onDelete, onChange, folderWatcher, onFolderCreate, onFolderDelete, onRename, batches,
-        projectWatcher, onProjectChange, onProjectCreate, records
+        ...projectWatchers, ...projectListeners, records
     ];
 }
 
@@ -935,7 +950,9 @@ function repointMissingFolders(pass: SyncPass): number {
     let repointed = 0;
     const changes: ElementPathChange[] = [];
     const messages: string[] = [];
-    for (const entry of spelled.values()) {
+    // In path order: when one sibling holds two gone folders' files, the first taken wins, and the project's object order
+    // means nothing to the user (a JSON project's follows hashed ids).
+    for (const entry of [...spelled.values()].sort((a, b) => compareCodePoints(a.folder, b.folder))) {
         const names = childNames.get(entry.folder);
         if (entry.exists || !names) { continue; }
         const parent = path.dirname(entry.folder);
@@ -1053,12 +1070,14 @@ export interface SwiftReconcileResult {
 
 /** Removes the given references when they are still in the project and their files are still missing; returns how many. */
 export function removeMissingSwiftEntries(rootPath: string, ids: readonly string[], log: (message: string) => void): Promise<number> {
-    const pbxprojPath = findPbxprojPath(rootPath);
-    if (!pbxprojPath) { return Promise.resolve(0); }
+    const bundle = findProjectBundle(rootPath);
+    if (!bundle) { return Promise.resolve(0); }
     const root = canonicalPath(rootPath);
     return enqueueWrite(async () => {
-        const contents = await fsp.readFile(pbxprojPath, 'utf8');
-        const pass = openPass(root, pbxprojPath, contents, log, emptyIdentities());
+        const project = projectFileForJob(bundle, log, LOG_PREFIX);
+        if (!project) { return 0; }
+        const contents = await fsp.readFile(project.path, 'utf8');
+        const pass = openPass(root, project, contents, log, emptyIdentities());
         if (!pass) { return 0; }
         let removed = 0;
         for (const id of ids) {
@@ -1066,9 +1085,9 @@ export function removeMissingSwiftEntries(rootPath: string, ids: readonly string
             if (!reference || reference.exists) { continue; }
             if (!inChange(pass, () => removeSwiftFile(pass.edit, id))) { continue; }
             removed++;
-            log(`${LOG_PREFIX} repair: removed ${reference.fileName} from pbxproj`);
+            log(`${LOG_PREFIX} repair: removed ${reference.fileName} from ${path.basename(project.path)}`);
         }
-        await writePass(pass, pbxprojPath, contents);
+        await writePass(pass, contents);
         return pass.unwritten === undefined ? removed : 0;
     });
 }
@@ -1099,23 +1118,25 @@ export async function reconcileSwiftFiles(
     options: SwiftRepairOptions = {}
 ): Promise<SwiftReconcileResult> {
     const none = { added: 0, rehomed: 0, repointed: 0, caseFixed: 0, asked: 0, settled: Promise.resolve() };
-    const pbxprojPath = findPbxprojPath(rootPath);
-    if (!pbxprojPath) { return none; }
+    const bundle = findProjectBundle(rootPath);
+    if (!bundle) { return none; }
     const root = canonicalPath(rootPath);
 
-    // Read pbxproj inside the lock so we pick up any edits the watcher just applied before deciding.
+    // Resolve and read the project file inside the lock so we pick up any edits the watcher just applied before deciding.
     return enqueueWrite(async () => {
-        let contents = await fsp.readFile(pbxprojPath, 'utf8');
+        const project = projectFileForJob(bundle, log, LOG_PREFIX);
+        if (!project) { return none; }
+        let contents = await fsp.readFile(project.path, 'utf8');
         const identities = emptyIdentities();
 
         // A re-pointed folder changes where its children resolve, so it gets a pass of its own.
-        const folderPass = openPass(root, pbxprojPath, contents, log, identities);
+        const folderPass = openPass(root, project, contents, log, identities);
         if (!folderPass) { return none; }
         let repointed = repointMissingFolders(folderPass);
-        contents = await writePass(folderPass, pbxprojPath, contents);
+        contents = await writePass(folderPass, contents);
         if (folderPass.unwritten !== undefined) { repointed = 0; }
 
-        const pass = openPass(root, pbxprojPath, contents, log, identities);
+        const pass = openPass(root, project, contents, log, identities);
         if (!pass) { return { ...none, repointed }; }
 
         let caseFixed = 0;
@@ -1177,7 +1198,7 @@ export async function reconcileSwiftFiles(
                     if (groupId) { id = addSwiftFile(pass.edit, fileName, groupId, owner.sourcesBuildPhaseId); }
                 });
                 if (!groupId) {
-                    if (landed) { log(`${LOG_PREFIX} reconcile: no PBXGroup for ${relativeTo(pass, filePath)}, skipping`); }
+                    if (landed) { log(`${LOG_PREFIX} reconcile: no group for ${relativeTo(pass, filePath)}, skipping`); }
                     continue;
                 }
                 if (!landed || id === undefined) { continue; }
@@ -1186,8 +1207,8 @@ export async function reconcileSwiftFiles(
             }
         }
 
-        await writePass(pass, pbxprojPath, contents);
-        // A JSON session whose text didn't read back wrote none of the pass's changes.
+        await writePass(pass, contents);
+        // A JSON session whose text didn't read back, or a write the project file's switch stopped, made none of the pass's changes.
         if (pass.unwritten !== undefined) {
             return { ...none, repointed, asked: toAsk.length, settled: settleGone(root, toAsk, options, log) };
         }

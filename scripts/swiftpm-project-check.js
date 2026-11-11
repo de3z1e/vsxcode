@@ -10,6 +10,12 @@
  * Each activation runs in its own child process, so module state never carries over; workspace state persists between
  * them in a JSON file. Activation runs real tools (xcodebuild -list, simctl), so a full Xcode is required.
  *
+ * Projects in Xcode's JSON format (project.xcproj) get the same choice, listing and backing up project.xcproj. The
+ * extension's own handling of the project file is checked through the same activation: a setting command writes only a
+ * changed text, which xcprojformatter leaves as it is; a project file appearing in a package checkout, or the workspace
+ * project's own file saved atomically, changes nothing; a second definition file in the bundle is reported once, in
+ * Xcode's words, after a re-check; and the switch to the JSON file refreshes once. These need Xcode 27.2 or later.
+ *
  * Usage: npm run test:swiftpm-project
  */
 'use strict';
@@ -48,6 +54,22 @@ function hashFiles(root) {
     };
     walk(root);
     return hashes;
+}
+
+function fileTimes(root) {
+    const times = {};
+    const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(full);
+            } else if (entry.isFile()) {
+                times[path.relative(root, full)] = fs.statSync(full).mtimeMs;
+            }
+        }
+    };
+    walk(root);
+    return times;
 }
 
 function changedFiles(before, after) {
@@ -109,6 +131,8 @@ function runChild({ root, statePath, steps }) {
     };
 
     let answers = [];
+    // Answers for showInputBox and showQuickPick, kept apart from the modal dialogs' so existing steps answer as before.
+    let inputs = [];
     let stepStart = {};
     const watchers = [];
     const commands = new Map();
@@ -116,12 +140,13 @@ function runChild({ root, statePath, steps }) {
     const readSettings = () => {
         try { return JSON.parse(fs.readFileSync(path.join(root, '.vscode', 'settings.json'), 'utf8')); } catch { return {}; }
     };
-    /** Writes the file an event names, if any, then delivers the event to the live watchers for its glob. */
-    const fire = ({ write, glob, event, relative }) => {
+    /** Writes or removes the file an event names, if any, then delivers the event to the live watchers for its glob. */
+    const fire = ({ write, remove, glob, event, relative }) => {
         if (write) {
             fs.mkdirSync(path.dirname(path.join(root, write.relative)), { recursive: true });
             fs.writeFileSync(path.join(root, write.relative), write.contents);
         }
+        if (remove) { fs.rmSync(path.join(root, remove)); }
         for (const watcher of watchers.filter((candidate) => candidate.label === glob && !candidate.disposed)) {
             for (const listener of watcher.listeners[event]) { listener({ fsPath: path.join(root, relative) }); }
         }
@@ -181,7 +206,16 @@ function runChild({ root, statePath, steps }) {
             },
             showInformationMessage: async (message) => { record('info', { message: String(message) }); return undefined; },
             showErrorMessage: async (message) => { record('error', { message: String(message) }); return undefined; },
-            showQuickPick: async (items, options) => { record('quickPick', { placeHolder: options && options.placeHolder }); return undefined; },
+            showQuickPick: async (items, options) => {
+                record('quickPick', { placeHolder: options && options.placeHolder });
+                const answer = inputs.shift();
+                const labelOf = (item) => (typeof item === 'string' ? item : item && item.label);
+                return answer === undefined ? undefined : (await items).find((item) => labelOf(item) === answer);
+            },
+            showInputBox: async (options) => {
+                record('inputBox', { prompt: options && options.prompt });
+                return inputs.shift();
+            },
             showTextDocument: async () => universal('editor')
         },
         commands: {
@@ -233,6 +267,7 @@ function runChild({ root, statePath, steps }) {
             const firstEvent = events.length;
             stepStart = hashFiles(root);
             answers = [...(step.answers || [])];
+            inputs = [...(step.inputs || [])];
             try {
                 if (step.kind === 'activate') {
                     extension.activate(context);
@@ -252,7 +287,8 @@ function runChild({ root, statePath, steps }) {
                 events: stepEvents.filter((event) => event.type !== 'log'),
                 log: stepEvents.filter((event) => event.type === 'log').map((event) => event.line),
                 changed: changedFiles(stepStart, hashFiles(root)),
-                hashes: hashFiles(root)
+                hashes: hashFiles(root),
+                times: fileTimes(root)
             });
         }
         for (const subscription of context.subscriptions) {
@@ -268,6 +304,25 @@ function runChild({ root, statePath, steps }) {
 
 // ── Parent: fixtures and assertions ──────────────────────────────────────────────────
 
+// SyncApp in the JSON format: Xcode's conversion of pbxproj/synchronized.txt.
+const SYNC_APP_JSON = fs.readFileSync(path.join(FIXTURES, 'xcproj', 'synchronized.xcproj.txt'), 'utf8');
+const SYNC_APP_PBXPROJ = fs.readFileSync(path.join(FIXTURES, 'pbxproj', 'synchronized.txt'), 'utf8');
+
+/** `text` with `from` replaced by `to`, which must occur exactly once. */
+function replaceOnce(text, from, to) {
+    const count = text.split(from).length - 1;
+    if (count !== 1) { throw new Error(`the fixture holds ${count} of ${JSON.stringify(from)}, not one`); }
+    return text.replace(from, () => to);
+}
+
+/** xcprojformatter's canonical form of a bundle's project.xcproj, or undefined when it rejects the file. */
+function xcprojCanonical(bundle) {
+    const result = spawnSync('/usr/bin/xcrun', ['xcprojformatter', bundle], { encoding: 'utf8' });
+    return result.status === 0 ? result.stdout : undefined;
+}
+
+const logLines = (result, text) => (result.log || []).filter((line) => line.includes(text));
+
 function makeWorkspace(kind) {
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vsxcode-swiftpm-project-')));
     const write = (relative, contents) => {
@@ -279,6 +334,18 @@ function makeWorkspace(kind) {
         write('Sources/SampleKit/SampleKit.swift', 'public struct SampleKit {}\n');
         write('Package.swift', '// swift-tools-version:5.9\nimport PackageDescription\n\nlet package = Package(name: "SampleKit", targets: [.target(name: "SampleKit")])\n');
         write('.vscode/settings.json', '{\n    "editor.tabSize": 4\n}\n');
+        write('.vscode/.swift-format', '{\n    "version": 1,\n    "lineLength": 120\n}\n');
+    } else if (kind === 'swiftpm-json') {
+        write('SampleKit.xcodeproj/project.xcproj', fs.readFileSync(path.join(FIXTURES, 'xcproj', 'generated-ids.xcproj.txt'), 'utf8'));
+        write('Sources/SampleKit/SampleKit.swift', 'public struct SampleKit {}\n');
+        write('Package.swift', '// swift-tools-version:5.9\nimport PackageDescription\n\nlet package = Package(name: "SampleKit", targets: [.target(name: "SampleKit")])\n');
+        write('.vscode/settings.json', '{\n    "editor.tabSize": 4\n}\n');
+        write('.vscode/.swift-format', '{\n    "version": 1,\n    "lineLength": 120\n}\n');
+    } else if (kind === 'ordinary-json') {
+        write('SyncApp.xcodeproj/project.xcproj', SYNC_APP_JSON);
+        write('SyncApp/ContentView.swift', 'struct ContentView {}\n');
+        write('Extras/Helper.swift', 'enum Helper {}\n');
+        write('Package.swift', '// swift-tools-version:5.9\nimport PackageDescription\n\nlet package = Package(name: "SyncApp")\n');
         write('.vscode/.swift-format', '{\n    "version": 1,\n    "lineLength": 120\n}\n');
     } else if (kind === 'ordinary') {
         write('SyncApp.xcodeproj/project.pbxproj', fs.readFileSync(path.join(FIXTURES, 'pbxproj', 'synchronized.txt'), 'utf8'));
@@ -524,10 +591,121 @@ const SCENARIOS = [
                 'Package.swift misses the project edit saved while the dialog was open');
             return { workspace, problems: expect.problems, logs: [open, generate] };
         }
+    },
+    {
+        name: 'SwiftPM project in the JSON format, used fully: project.xcproj listed and backed up',
+        run() {
+            const workspace = makeWorkspace('swiftpm-json');
+            const initial = hashFiles(workspace.root);
+            const [open] = runSteps(workspace, [{ kind: 'activate', answers: [FULLY] }]);
+            const expect = expectations('JSON fully');
+            checkNoCrash(open, expect);
+            const dialogs = of(open, 'dialog');
+            expect.that(dialogs.length === 1, `expected one dialog, saw ${dialogs.length}`);
+            if (dialogs[0]) {
+                expect.that(dialogs[0].detail.includes(path.join(workspace.root, 'SampleKit.xcodeproj', 'project.xcproj')), "the dialog doesn't list project.xcproj");
+                expect.that(dialogs[0].detail.includes('project.xcproj_backup'), "the dialog doesn't name project.xcproj_backup");
+                expect.that(!dialogs[0].detail.includes('project.pbxproj'), 'the dialog lists a project.pbxproj the bundle lacks');
+            }
+            expect.that(open.hashes['SampleKit.xcodeproj/project.xcproj_backup'] === initial['SampleKit.xcodeproj/project.xcproj'],
+                "project.xcproj_backup doesn't hold the original project.xcproj");
+            expect.that(open.changed.includes('Package.swift'), 'Package.swift not regenerated');
+            expect.that(SYNC_WATCHERS.every((glob) => syncWatchers(open).includes(glob)), `sync watchers not started (${syncWatchers(open)})`);
+            return { workspace, problems: expect.problems, logs: [open] };
+        }
+    },
+    {
+        name: 'JSON project: a setting command writes only a changed text, which xcprojformatter leaves as it is',
+        run() {
+            const workspace = makeWorkspace('ordinary-json');
+            const projectFile = 'SyncApp.xcodeproj/project.xcproj';
+            // The file gets a bundle id the sidebar hasn't seen, so the command's own early return can't hide a write.
+            const renamed = replaceOnce(SYNC_APP_JSON, '"com.example.SyncApp"', '"com.example.Renamed"');
+            const [open, edited, unchanged, changed] = runSteps(workspace, [
+                { kind: 'activate' },
+                { kind: 'fire', write: { relative: projectFile, contents: renamed } },
+                { kind: 'command', id: 'vsxcode.sidebar.changeBundleId', inputs: ['com.example.Renamed'] },
+                { kind: 'command', id: 'vsxcode.sidebar.changeBundleId', inputs: ['com.example.BrandNew'] }
+            ]);
+            const expect = expectations('setting');
+            for (const result of [open, edited, unchanged, changed]) { checkNoCrash(result, expect); }
+            expect.that(of(unchanged, 'inputBox').length === 1 && of(changed, 'inputBox').length === 1, 'the command asked for no bundle id');
+            expect.that(!unchanged.changed.includes(projectFile), 'the unchanged value rewrote project.xcproj');
+            expect.that(unchanged.times[projectFile] === edited.times[projectFile], 'the unchanged value touched project.xcproj');
+            expect.that(changed.changed.includes(projectFile), 'the new value was not written');
+            const text = fs.readFileSync(path.join(workspace.root, projectFile), 'utf8');
+            expect.that(text.includes('"com.example.BrandNew"') && !text.includes('"com.example.Renamed"'), 'project.xcproj misses the new bundle id');
+            expect.that(xcprojCanonical(path.join(workspace.root, 'SyncApp.xcodeproj')) === text, 'xcprojformatter changes the written project.xcproj');
+            for (const result of [unchanged, changed]) {
+                expect.that(of(result, 'notice').length === 0 && of(result, 'error').length === 0,
+                    `the command warned: ${[...of(result, 'notice'), ...of(result, 'error')].map((event) => event.message)}`);
+            }
+            return { workspace, problems: expect.problems, logs: [open, edited, unchanged, changed] };
+        }
+    },
+    {
+        name: 'project file events: checkouts and atomic saves change nothing, two definition files are reported once, a switch refreshes once',
+        run() {
+            const workspace = makeWorkspace('ordinary');
+            // The JSON file names another deployment version, so the regeneration after the switch shows in Package.swift.
+            const json = replaceOnce(SYNC_APP_JSON, '"IPHONEOS_DEPLOYMENT_TARGET": "18.0"', '"IPHONEOS_DEPLOYMENT_TARGET": "16.0"');
+            const [open, checkout, save, second, again, removed] = runSteps(workspace, [
+                { kind: 'activate' },
+                {
+                    kind: 'fire', glob: '**/*.pbxproj', event: 'create', relative: 'Packages/Kit/Kit.xcodeproj/project.pbxproj',
+                    write: { relative: 'Packages/Kit/Kit.xcodeproj/project.pbxproj', contents: SYNC_APP_PBXPROJ }
+                },
+                {
+                    kind: 'fire', glob: '**/*.pbxproj', event: 'create', relative: 'SyncApp.xcodeproj/project.pbxproj',
+                    write: { relative: 'SyncApp.xcodeproj/project.pbxproj', contents: SYNC_APP_PBXPROJ }
+                },
+                {
+                    kind: 'fire', glob: '**/*.xcproj', event: 'create', relative: 'SyncApp.xcodeproj/project.xcproj',
+                    write: { relative: 'SyncApp.xcodeproj/project.xcproj', contents: json }
+                },
+                { kind: 'fire', glob: '**/*.xcproj', event: 'create', relative: 'SyncApp.xcodeproj/project.xcproj' },
+                {
+                    kind: 'fire', glob: '**/*.pbxproj', event: 'delete', relative: 'SyncApp.xcodeproj/project.pbxproj',
+                    remove: 'SyncApp.xcodeproj/project.pbxproj'
+                }
+            ]);
+            const expect = expectations('events');
+            for (const result of [open, checkout, save, second, again, removed]) { checkNoCrash(result, expect); }
+            expect.that(fs.readFileSync(path.join(workspace.root, 'Package.swift'), 'utf8') !== '' && open.changed.includes('Package.swift'), 'Package.swift not generated on open');
+            for (const [label, result] of [['a package checkout\'s create', checkout], ['an atomic save', save]]) {
+                expect.that(logLines(result, '[file-watcher]').length === 0, `${label} logged ${logLines(result, '[file-watcher]')}`);
+                expect.that(!result.changed.includes('Package.swift'), `${label} regenerated Package.swift`);
+            }
+            const multiple = (result) => of(result, 'error').filter((event) => event.message.includes('has multiple project definition files'));
+            expect.that(multiple(second).length === 1, `expected one "multiple project definition files" message, saw ${multiple(second).length}`);
+            if (multiple(second)[0]) {
+                const message = multiple(second)[0].message;
+                expect.that(message.includes('SyncApp.xcodeproj/project.xcproj') && message.includes('SyncApp.xcodeproj/project.pbxproj'),
+                    `the message names neither file: ${message}`);
+            }
+            expect.that(multiple(again).length === 0 && logLines(again, '[file-watcher]').length === 0, 'a second create reported again');
+            expect.that(logLines(removed, '[file-watcher]').length === 1 && logLines(removed, 'now uses project.xcproj').length === 1,
+                `the switch logged ${JSON.stringify(logLines(removed, '[file-watcher]'))}`);
+            expect.that(removed.changed.includes('Package.swift') && fs.readFileSync(path.join(workspace.root, 'Package.swift'), 'utf8').includes('.iOS(.v16)'),
+                'Package.swift not regenerated from project.xcproj after the switch');
+            expect.that(of(removed, 'error').length === 0, `the switch showed ${of(removed, 'error').map((event) => event.message)}`);
+            return { workspace, problems: expect.problems, logs: [open, checkout, save, second, again, removed] };
+        }
     }
 ];
 
+/** Whether Xcode 27.2 or later is selected: the JSON cases need xcprojformatter. */
+function hasJsonXcode() {
+    const result = spawnSync('/usr/bin/xcrun', ['-f', 'xcprojformatter'], { encoding: 'utf8' });
+    return result.status === 0 && result.stdout.trim() !== '';
+}
+
 function main() {
+    if (!hasJsonXcode()) {
+        console.error('test:swiftpm-project needs Xcode 27.2 or later selected for its JSON cases: `xcrun -f xcprojformatter` found nothing.');
+        process.exitCode = 1;
+        return;
+    }
     let failures = 0;
     for (const scenario of SCENARIOS) {
         let outcome;

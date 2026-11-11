@@ -3,6 +3,7 @@ import { promises as fsp } from 'fs';
 import * as path from 'path';
 
 import { usesSwiftPMObjectIds } from '../parsers/project';
+import { PROJECT_FILE_NAMES } from './projectFile';
 
 // No vscode import: the dialog and the capabilities are passed in.
 
@@ -49,13 +50,13 @@ export interface SwiftPMProjectDecision {
     backups: string[];
 }
 
-/** The files VSXcode may change in a workspace, limited to those that exist. */
+/** The files VSXcode may change in a workspace, limited to those that exist; the project's is whichever definition file it holds. */
 export function filesVSXcodeChanges(projectRoot: string, projectFile: string, workspaceSettingsFile: string): string[] {
     return [
         path.join(projectRoot, 'Package.swift'),
         workspaceSettingsFile,
         path.join(projectRoot, '.vscode', '.swift-format'),
-        path.join(projectRoot, projectFile, 'project.pbxproj')
+        ...Object.values(PROJECT_FILE_NAMES).map((name) => path.join(projectRoot, projectFile, name))
     ].filter((file) => fs.existsSync(file));
 }
 
@@ -95,13 +96,17 @@ export function createSwiftPMProjects(options: SwiftPMProjectsOptions): SwiftPMP
 
     return {
         async decide(projectFile, askEvenIfChosen) {
-            let contents: string;
-            try {
-                contents = await fsp.readFile(path.join(projectRoot, projectFile, 'project.pbxproj'), 'utf8');
-            } catch {
-                return { outcome: 'not-swiftpm', backups: [] };
+            // Whichever definition file the bundle holds; mid format switch, when it holds both, either one's ids decide.
+            let generated = false;
+            for (const name of Object.values(PROJECT_FILE_NAMES)) {
+                try {
+                    generated = usesSwiftPMObjectIds(await fsp.readFile(path.join(projectRoot, projectFile, name), 'utf8'));
+                } catch {
+                    continue; // Absent or unreadable.
+                }
+                if (generated) { break; }
             }
-            if (!usesSwiftPMObjectIds(contents)) {
+            if (!generated) {
                 return { outcome: 'not-swiftpm', backups: [] };
             }
 

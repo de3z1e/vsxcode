@@ -36,6 +36,14 @@ export interface XcodeToolchain {
     simulatorUI: SimulatorUI | null;
 }
 
+/**
+ * Whether a JSON project file (`project.xcproj`, Xcode 27.2's format) needs a newer Xcode than the selected one: Xcode 27
+ * opens it, earlier ones can't. False for an unknown version, which gives no grounds to warn.
+ */
+export function needsNewerXcodeForJSON(toolchain: Pick<XcodeToolchain, 'version'>): boolean {
+    return toolchain.version !== null && toolchain.version.major < 27;
+}
+
 const DEVELOPER_SUFFIX = `${path.sep}Contents${path.sep}Developer`;
 /** Xcode 27 replaced Simulator.app with Device Hub. */
 const DEVICE_HUB_MIN_MAJOR = 27;

@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import type { BuildTaskConfig } from '../types/interfaces';
 import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { determineTargetPath } from '../utils/path';
+import { resolveProjectFile } from '../utils/projectFile';
 import { devBundleIdOverrideArgs } from '../utils/bundleId';
 import { derivedDataBasePath, derivedDataShellPathForScheme, getDestinationType, xcodebuildDestinationFlags } from '../utils/destination';
 import { listSimulatorAppProcesses, waitForNewSimulatorAppProcess } from '../utils/simulator';
@@ -710,8 +711,9 @@ export class XCTestController implements vscode.Disposable {
 
     private loadTestTargets(config: BuildTaskConfig): TestTargetInfo[] {
         try {
-            const pbxprojPath = path.join(this.rootPath, config.projectFile, 'project.pbxproj');
-            const pbxContents = fs.readFileSync(pbxprojPath, 'utf8');
+            const resolution = resolveProjectFile(path.join(this.rootPath, config.projectFile));
+            if ('error' in resolution) { return []; }
+            const pbxContents = fs.readFileSync(resolution.path, 'utf8');
             const nativeTargets = parseNativeTargets(pbxContents);
             return nativeTargets
                 .filter(t => isTestTarget(t.productType))

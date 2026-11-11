@@ -19,11 +19,11 @@ import {
     createOperationScheduler,
     enqueueWrite,
     findMappingForFile,
-    findPbxprojPath,
     isUnderSynchronizedRoot,
     walkTargetDirectory
 } from './pbxprojSync';
 import type { TargetDirectoryMapping } from './pbxprojSync';
+import { findProjectBundle, projectFileForJob, writeProjectFile } from '../utils/projectFile';
 
 const LOG_PREFIX = '[datamodel-sync]';
 
@@ -205,6 +205,8 @@ function plainReferenceAt(pbxContents: string, rootPath: string, bundlePath: str
 interface RegisterOutcome {
     pbxContents: string;
     result: 'added' | 'updated' | 'unchanged';
+    /** What the new text registers, for the caller to log once the write has landed. */
+    notes: string[];
 }
 
 /** Add the bundle when missing, or re-register it when its versions drifted — a `currentVersion` pointing at a missing version is the same momc failure as no entry at all. */
@@ -215,7 +217,7 @@ async function registerBundle(
     mapping: TargetDirectoryMapping,
     log: (message: string) => void
 ): Promise<RegisterOutcome> {
-    const unchanged: RegisterOutcome = { pbxContents, result: 'unchanged' };
+    const unchanged: RegisterOutcome = { pbxContents, result: 'unchanged', notes: [] };
     const bundleName = path.basename(bundlePath);
 
     const bundle = await readDataModelBundle(bundlePath, log);
@@ -243,7 +245,7 @@ async function registerBundle(
             return unchanged;
         }
 
-        let changed = false;
+        const notes: string[] = [];
 
         // Corrected in place so other targets' PBXBuildFile and Sources entries survive.
         if (!registrationMatchesDisk(contents, versionGroup, bundle)) {
@@ -252,8 +254,7 @@ async function registerBundle(
             );
             if (!updated) { return unchanged; }
             contents = updated;
-            changed = true;
-            log(`${LOG_PREFIX} ${bundleName} versions changed on disk, refreshing (current version ${bundle.currentVersionName})`);
+            notes.push(`${LOG_PREFIX} ${bundleName} versions changed on disk, refreshing (current version ${bundle.currentVersionName})`);
         }
 
         // The group child determines the bundle's on-disk directory, so a moved bundle is re-homed in place.
@@ -262,17 +263,16 @@ async function registerBundle(
             const moved = groupId ? moveVersionGroupToGroup(contents, versionGroup.id, groupId, bundle.name, log) : undefined;
             if (moved) {
                 contents = moved;
-                changed = true;
-                log(`${LOG_PREFIX} ${bundleName} moved on disk, re-homing its group entry`);
+                notes.push(`${LOG_PREFIX} ${bundleName} moved on disk, re-homing its group entry`);
             } else if (moved === null) {
                 // A JSON edit declined, and said why; a version refresh above still stands.
                 log(`${LOG_PREFIX} ${bundleName} moved on disk; its group entry stays where it was`);
             } else {
-                log(`${LOG_PREFIX} No matching PBXGroup for ${path.relative(rootPath, bundlePath)}, keeping previous group entry`);
+                log(`${LOG_PREFIX} No matching group for ${path.relative(rootPath, bundlePath)}, keeping previous group entry`);
             }
         }
 
-        return changed ? { pbxContents: contents, result: 'updated' } : unchanged;
+        return notes.length > 0 ? { pbxContents: contents, result: 'updated', notes } : unchanged;
     }
 
     if (index.versionGroups.some((group) => versionGroupBaseName(group) === bundleName)) {
@@ -287,7 +287,7 @@ async function registerBundle(
 
     const groupId = groupForBundle(contents, rootPath, bundlePath);
     if (!groupId) {
-        log(`${LOG_PREFIX} No matching PBXGroup for ${path.relative(rootPath, bundlePath)}, skipping`);
+        log(`${LOG_PREFIX} No matching group for ${path.relative(rootPath, bundlePath)}, skipping`);
         return unchanged;
     }
 
@@ -305,8 +305,11 @@ async function registerBundle(
         log(`${LOG_PREFIX} ${bundle.name} left unregistered`);
         return unchanged;
     }
-    log(`${LOG_PREFIX} Registered ${bundle.name} in ${mapping.targetName} (current version ${bundle.currentVersionName})`);
-    return { pbxContents: added, result: 'added' };
+    return {
+        pbxContents: added,
+        result: 'added',
+        notes: [`${LOG_PREFIX} Registered ${bundle.name} in ${mapping.targetName} (current version ${bundle.currentVersionName})`]
+    };
 }
 
 // ── Watcher ──────────────────────────────────────────────
@@ -316,8 +319,9 @@ export function createDataModelWatcher(
     log: (message: string) => void,
     onSynced?: () => void
 ): vscode.Disposable[] {
-    const pbxprojPath = findPbxprojPath(rootPath);
-    if (!pbxprojPath) {
+    // Each job resolves the definition file when it runs, so a format switch needs no restart.
+    const projectBundle = findProjectBundle(rootPath);
+    if (!projectBundle) {
         log(`${LOG_PREFIX} No xcodeproj found, skipping Core Data model watcher`);
         return [];
     }
@@ -325,8 +329,10 @@ export function createDataModelWatcher(
     /** Sync one bundle from disk state rather than the event kind, since a rename or atomic replace may have landed either way by the time the debounce fires. Returns whether the project tracks the bundle. */
     const syncBundle = async (bundlePath: string): Promise<boolean> => {
         const bundleName = path.basename(bundlePath);
-        const pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-        const mappings = buildTargetMappings(rootPath, pbxContents, pbxprojPath);
+        const project = projectFileForJob(projectBundle, log, LOG_PREFIX);
+        if (!project) { return false; }
+        const pbxContents = await fsp.readFile(project.path, 'utf8');
+        const mappings = buildTargetMappings(rootPath, pbxContents, project.path);
         const mapping = findMappingForFile(bundlePath, mappings);
 
         if (!await pathExists(bundlePath)) {
@@ -344,8 +350,9 @@ export function createDataModelWatcher(
 
             const result = removeDataModelFromPbxproj(pbxContents, versionGroup.id, log);
             if (!result) { return true; }
-            await fsp.writeFile(pbxprojPath, result, 'utf8');
-            log(`${LOG_PREFIX} Removed ${bundleName} from pbxproj`);
+            if (await writeProjectFile(project.bundle, project.format, result, log)) {
+                log(`${LOG_PREFIX} Removed ${bundleName} from ${path.basename(project.path)}`);
+            }
             return true;
         }
 
@@ -360,8 +367,8 @@ export function createDataModelWatcher(
         }
 
         const outcome = await registerBundle(rootPath, pbxContents, bundlePath, mapping, log);
-        if (outcome.result !== 'unchanged') {
-            await fsp.writeFile(pbxprojPath, outcome.pbxContents, 'utf8');
+        if (outcome.result !== 'unchanged' && await writeProjectFile(project.bundle, project.format, outcome.pbxContents, log)) {
+            for (const note of outcome.notes) { log(note); }
         }
         return true;
     };
@@ -410,14 +417,17 @@ export async function reconcileDataModels(
     rootPath: string,
     log: (message: string) => void
 ): Promise<DataModelReconcileResult> {
-    const pbxprojPath = findPbxprojPath(rootPath);
-    if (!pbxprojPath) { return { added: 0, updated: 0, removed: 0 }; }
+    const none: DataModelReconcileResult = { added: 0, updated: 0, removed: 0 };
+    const projectBundle = findProjectBundle(rootPath);
+    if (!projectBundle) { return none; }
 
-    // Read pbxproj inside the lock so watcher edits land before we diff against disk.
+    // Resolve and read the project file inside the lock so watcher edits land before we diff against disk.
     return enqueueWrite(async () => {
-        let pbxContents = await fsp.readFile(pbxprojPath, 'utf8');
-        const mappings = buildTargetMappings(rootPath, pbxContents, pbxprojPath);
-        if (mappings.length === 0) { return { added: 0, updated: 0, removed: 0 }; }
+        const project = projectFileForJob(projectBundle, log, LOG_PREFIX);
+        if (!project) { return none; }
+        let pbxContents = await fsp.readFile(project.path, 'utf8');
+        const mappings = buildTargetMappings(rootPath, pbxContents, project.path);
+        if (mappings.length === 0) { return none; }
 
         const bundlesOnDisk = await findBundlesOnDisk(mappings);
         const pathsOnDisk = new Set(bundlesOnDisk);
@@ -425,6 +435,8 @@ export async function reconcileDataModels(
 
         // ── Remove XCVersionGroups whose bundle is gone ──
         // The name check keeps an unresolvable group tree from being read as a deletion.
+        // Each model's line waits for the write, so a write that doesn't land claims nothing.
+        const notes: string[] = [];
         let removed = 0;
         const index = indexVersionGroups(rootPath, pbxContents);
         for (const versionGroup of index.versionGroups) {
@@ -438,7 +450,7 @@ export async function reconcileDataModels(
             if (!result) { continue; }
             pbxContents = result;
             removed++;
-            log(`${LOG_PREFIX} reconcile: removed ${bundleName} (no longer on disk)`);
+            notes.push(`${LOG_PREFIX} reconcile: removed ${bundleName} (no longer on disk)`);
         }
 
         // ── Add bundles on disk the project doesn't know about, and refresh any whose versions drifted ──
@@ -452,11 +464,13 @@ export async function reconcileDataModels(
             const outcome = await registerBundle(rootPath, pbxContents, bundlePath, mapping, log);
             if (outcome.result === 'unchanged') { continue; }
             pbxContents = outcome.pbxContents;
+            notes.push(...outcome.notes);
             if (outcome.result === 'added') { added++; } else { updated++; }
         }
 
         if (added > 0 || updated > 0 || removed > 0) {
-            await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
+            if (!await writeProjectFile(project.bundle, project.format, pbxContents, log)) { return none; }
+            for (const note of notes) { log(note); }
             log(`${LOG_PREFIX} reconcile: added ${added}, updated ${updated}, removed ${removed} Core Data model(s)`);
         }
         return { added, updated, removed };

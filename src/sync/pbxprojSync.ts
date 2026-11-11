@@ -13,7 +13,8 @@ export interface TargetDirectoryMapping {
     absolutePath: string;
     targetName: string;
     sourcesBuildPhaseId: string;
-    pbxprojPath: string;
+    /** The definition file the mapping was read from: project.pbxproj or project.xcproj. */
+    projectFilePath: string;
     /** Relative path from workspace root to target directory (e.g., "MyApp" or "Sources/MyApp") */
     relativePath: string;
     /** Absolute dirs of the target's Xcode 16+ synchronized root groups; sync skips files under these (Xcode auto-discovers them) but not the rest of the target. */
@@ -23,7 +24,7 @@ export interface TargetDirectoryMapping {
 export function buildTargetMappings(
     rootPath: string,
     pbxContents: string,
-    pbxprojPath: string
+    projectFilePath: string
 ): TargetDirectoryMapping[] {
     const mappings: TargetDirectoryMapping[] = [];
     const targets = parseNativeTargets(pbxContents);
@@ -61,7 +62,7 @@ export function buildTargetMappings(
             absolutePath,
             targetName: target.name,
             sourcesBuildPhaseId: buildPhases.sourcesBuildPhaseId,
-            pbxprojPath,
+            projectFilePath,
             relativePath,
             synchronizedRoots
         });
@@ -108,20 +109,7 @@ export function canonicalPath(target: string): string {
     }
 }
 
-export function findPbxprojPath(rootPath: string): string | null {
-    try {
-        const entries = fs.readdirSync(rootPath, { withFileTypes: true });
-        const xcodeProject = entries.find(
-            (e) => e.isDirectory() && e.name.endsWith('.xcodeproj')
-        );
-        if (xcodeProject) {
-            return path.join(rootPath, xcodeProject.name, 'project.pbxproj');
-        }
-    } catch { /* ignore */ }
-    return null;
-}
-
-// Serialize every pbxproj read-modify-write (watcher ops + reconcile) so they can't clobber each other; a failing op is isolated and never stalls the chain.
+// Serialize every project-file read-modify-write (sync jobs, reconciles, setting commands) so they can't clobber each other; a failing op is isolated and never stalls the chain.
 let writeChain: Promise<void> = Promise.resolve();
 
 export function enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
