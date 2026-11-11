@@ -10,27 +10,27 @@ You are working in a workspace where the **VSXcode** VS Code extension is instal
 
 ## What the extension already does — do NOT duplicate
 
-The extension activates on `workspaceContains:**/*.pbxproj` or `onDebug`. Once active in a workspace that contains an Xcode project, the following happen automatically. **If you find yourself about to do any of these manually, stop — the extension already handles it.**
+The extension activates on `workspaceContains:**/*.pbxproj`, `workspaceContains:**/project.xcproj` or `onDebug`. An Xcode project keeps its structure in one definition file inside the `.xcodeproj` bundle: `project.pbxproj`, or `project.xcproj` for a project in Xcode 27.2's JSON format (Xcode 27 or later opens it). Everything below applies to either; "the project file" means whichever one the bundle holds. Once active in a workspace that contains an Xcode project, the following happen automatically. **If you find yourself about to do any of these manually, stop — the extension already handles it.**
 
-> **Exception — SwiftPM-generated projects.** If the project was made by `swift package generate-xcodeproj` (object ids like `OBJ_12`), none of the automatic writes below start until the user answers VSXcode's prompt. If they chose **Keep it a SwiftPM package**, nothing below happens in that workspace (no Package.swift generation, settings or pbxproj sync), and `Package.swift` is the package's own manifest: edit it as normal. If they chose **Use VSXcode fully**, VSXcode first backed up the files it changes beside the originals (`Package.swift_backup`, `.vscode/settings.json_backup`, `.vscode/.swift-format_backup`, `project.pbxproj_backup`, with `-2`, `-3`… for later backups), and everything below applies. In such a workspace, a `Package.swift` without the "Managed by VSXcode" header is the package's own manifest.
+> **Exception — SwiftPM-generated projects.** If the project was made by `swift package generate-xcodeproj` (object ids like `OBJ_12`), none of the automatic writes below start until the user answers VSXcode's prompt. If they chose **Keep it a SwiftPM package**, nothing below happens in that workspace (no Package.swift generation, settings or project-file sync), and `Package.swift` is the package's own manifest: edit it as normal. If they chose **Use VSXcode fully**, VSXcode first backed up the files it changes beside the originals (`Package.swift_backup`, `.vscode/settings.json_backup`, `.vscode/.swift-format_backup`, `project.pbxproj_backup` or `project.xcproj_backup`, with `-2`, `-3`… for later backups), and everything below applies. In such a workspace, a `Package.swift` without the "Managed by VSXcode" header is the package's own manifest.
 
 ### Package.swift generation
-- **What**: A `Package.swift` file in the workspace root, generated from `<project>.xcodeproj/project.pbxproj`. The generated file contains a "Managed by VSXcode — changes will be overwritten" header.
-- **Trigger**: First-time generation on activation, then re-generation whenever `project.pbxproj` changes (a `FileSystemWatcher` fires).
-- **Don't manually edit `Package.swift`.** Edits will be silently overwritten on the next pbxproj change. If you need to change something Package.swift exposes (platform deployment targets, swift settings, dependencies), modify the `.xcodeproj` source via Xcode or by editing pbxproj directly — the extension will regenerate Package.swift to match.
+- **What**: A `Package.swift` file in the workspace root, generated from the project file (`<project>.xcodeproj/project.pbxproj` or `project.xcproj`). The generated file contains a "Managed by VSXcode — changes will be overwritten" header.
+- **Trigger**: First-time generation on activation, then re-generation whenever the project file changes (a `FileSystemWatcher` fires).
+- **Don't manually edit `Package.swift`.** Edits will be silently overwritten on the next project-file change. If you need to change something Package.swift exposes (platform deployment targets, swift settings, dependencies), modify the `.xcodeproj` source via Xcode or by editing the project file directly (see [Editing the project file](#editing-the-project-file)) — the extension will regenerate Package.swift to match.
 - **Why Package.swift exists at all**: it is a *shadow project* used solely to populate SourceKit-LSP's index store for cross-file intellisense. Actual app builds go through `xcodebuild`. Resources, swift settings, etc. in Package.swift do not affect what ships.
 
-### Pbxproj sync on Swift file and Core Data model create/delete
-- **What**: When the user creates or deletes a `.swift` file inside a target's directory, the extension automatically updates `project.pbxproj` (adds/removes the four required entries: `PBXBuildFile`, `PBXFileReference`, `PBXGroup` child entry, `PBXSourcesBuildPhase` entry). Files are matched by their path, never their name: renaming or moving a file or a folder, in the editor or with `git mv` or `mv`, keeps the entries involved (ids, every target membership, per-file settings; a folder's group and everything under it follow), a folder without a group gets one, and deleting one target's file leaves another target's same-named file alone.
-- **Core Data models too**: `.xcdatamodeld` bundles are synced as one unit — create/delete updates all five structures (`PBXBuildFile`, a `wrapper.xcdatamodel` `PBXFileReference` per version, `PBXGroup` child, `PBXSourcesBuildPhase` entry, and the `XCVersionGroup`, with section markers where the file uses them); a move re-homes the group entry in place. `children`/`currentVersion` follow the bundle's `.xccurrentversion`; version drift on disk is re-registered automatically.
-- **Don't manually edit pbxproj to register or remove a Swift file or a Core Data model.** Just create or delete it in the right directory; the extension's `FileSystemWatcher` (batched, write-serialized) handles the pbxproj update. The `vsxcode.syncProjectFiles` command and activation repair what a closed window missed: a renamed folder is re-pointed, letter-case drift is fixed, a moved file's entry follows it when exactly one unregistered file has its name, new Swift files are added (by path, creating missing groups), and models are added, refreshed and removed.
+### Project-file sync on Swift file and Core Data model create/delete
+- **What**: When the user creates or deletes a `.swift` file inside a target's directory, the extension automatically updates the project file: in `project.pbxproj` it adds/removes the four required entries (`PBXBuildFile`, `PBXFileReference`, `PBXGroup` child entry, `PBXSourcesBuildPhase` entry); in `project.xcproj`, the file's element in its group, with its `target-membership`. Files are matched by their path, never their name: renaming or moving a file or a folder, in the editor or with `git mv` or `mv`, keeps the entries involved (ids, every target membership, per-file settings; a folder's group and everything under it follow), a folder without a group gets one, and deleting one target's file leaves another target's same-named file alone.
+- **Core Data models too**: `.xcdatamodeld` bundles are synced as one unit — create/delete updates all five structures (`PBXBuildFile`, a `wrapper.xcdatamodel` `PBXFileReference` per version, `PBXGroup` child, `PBXSourcesBuildPhase` entry, and the `XCVersionGroup`, with section markers where the file uses them), or in `project.xcproj` the model's `version-group` element with its versions, `current-version` and target membership; a move re-homes the group entry in place. `children`/`currentVersion` follow the bundle's `.xccurrentversion`; version drift on disk is re-registered automatically.
+- **Don't edit the project file by hand to register or remove a Swift file or a Core Data model.** Just create or delete it in the right directory; the extension's `FileSystemWatcher` (batched, write-serialized) handles the project-file update. In `project.xcproj`, a change VSXcode can't make safely (for example inside an object that repeats a key) is left out whole and logged in the VSXcode output channel, and the others land. The `vsxcode.syncProjectFiles` command and activation repair what a closed window missed: a renamed folder is re-pointed, letter-case drift is fixed, a moved file's entry follows it when exactly one unregistered file has its name, new Swift files are added (by path, creating missing groups), and models are added, refreshed and removed.
 - **Deletions while closed are asked about, never removed silently**: a `.swift` file deleted while VS Code was closed (or by `git checkout`) leaves an entry that fails the build; VSXcode shows a notification listing such entries with **Remove** and **Keep**. Keep is remembered per entry, so activation doesn't ask again; the Sync Files command always asks.
-- **Exception**: targets using Xcode 16+ file system synchronized groups (`PBXFileSystemSynchronizedRootGroup`) need no pbxproj entry at all — Xcode auto-discovers files in the directory. The extension correctly skips pbxproj sync for these targets.
+- **Exception**: targets using Xcode 16+ file system synchronized groups (`PBXFileSystemSynchronizedRootGroup`, a `folder` element in `project.xcproj`) need no project-file entry at all — Xcode auto-discovers files in the directory. The extension correctly skips project-file sync for these targets.
 
 ### Core Data codegen for IntelliSense
-- **What**: For models using class/category codegen, the extension runs Xcode's own generator (`momc`) into `~/Library/Developer/VSCode/DerivedSources/<workspaceKey>/<Target>/` and wires the files into `Package.swift`, so generated `NSManagedObject` subclasses resolve in SourceKit-LSP. Regenerates on activation, pbxproj changes, model edits, and Clean DerivedData.
-- **Don't "fix" `Cannot find 'SomeEntity' in scope` on codegen types** by generating subclass files into the target, checking generated classes into the repo, or flipping the model's codegen to Manual/None — the model file, the repository, and pbxproj are deliberately untouched by this feature, and duplicating the classes breaks the Xcode build.
-- If those errors appear anyway, trigger a regen — run **Clean DerivedData** (wipes and regenerates the codegen), save `project.pbxproj`, or reload the window — and check the output channel's `[codegen]` lines for momc failures.
+- **What**: For models using class/category codegen, the extension runs Xcode's own generator (`momc`) into `~/Library/Developer/VSCode/DerivedSources/<workspaceKey>/<Target>/` and wires the files into `Package.swift`, so generated `NSManagedObject` subclasses resolve in SourceKit-LSP. Regenerates on activation, project-file changes, model edits, and Clean DerivedData.
+- **Don't "fix" `Cannot find 'SomeEntity' in scope` on codegen types** by generating subclass files into the target, checking generated classes into the repo, or flipping the model's codegen to Manual/None — the model file, the repository, and the project file are deliberately untouched by this feature, and duplicating the classes breaks the Xcode build.
+- If those errors appear anyway, trigger a regen — run **Clean DerivedData** (wipes and regenerates the codegen), save the project file, or reload the window — and check the output channel's `[codegen]` lines for momc failures.
 
 ### SourceKit-LSP arguments
 - **What**: The extension keeps a block of SourceKit-LSP arguments for the selected device at the front of the workspace's `swift.buildArguments` (`.vscode/settings.json`), whose `-Xswiftc` pairs the Swift extension passes to SourceKit-LSP: SDK path, target triple, framework search paths and XCTest overlay paths from the iOS simulator SDK for a simulator, or from the iOS device SDK for a physical device. For My Mac it removes the block. Other entries in `swift.buildArguments` are kept. When the block changes, the extension restarts SourceKit-LSP itself.
@@ -47,7 +47,7 @@ The extension activates on `workspaceContains:**/*.pbxproj` or `onDebug`. Once a
 
 ### Workspace-state persistence
 - **What**: Selected project, target, scheme, simulator/device, Swift version, and strict-concurrency setting are persisted in VS Code workspace state (not in any file the user can edit). Auto-detected on first activation.
-- **Bundle id is NOT cached.** It's read live from `project.pbxproj` on every read, and from the freshly-built `.app/Info.plist` on every install/launch/terminate. Edits to `PRODUCT_BUNDLE_IDENTIFIER` take effect immediately with no resync step.
+- **Bundle id is NOT cached.** It's read live from the project file on every read, and from the freshly-built `.app/Info.plist` on every install/launch/terminate. Edits to `PRODUCT_BUNDLE_IDENTIFIER` take effect immediately with no resync step.
 - **Don't try to write these to `.vscode/settings.json` or any other file.** They live in the extension's `BuildTaskConfig` workspace state.
 
 ### Xcode 26 Icon Composer (`.icon`) and synchronized-target loose resources
@@ -100,7 +100,7 @@ User-facing commands (palette and programmatic):
 | `vsxcode.sidebar.changeProject` | Select a different `.xcodeproj` |
 | `vsxcode.sidebar.changeTarget` | Select a different target within current project |
 | `vsxcode.sidebar.changeScheme` | Select a different scheme |
-| `vsxcode.sidebar.changeBundleId` | Edit `PRODUCT_BUNDLE_IDENTIFIER` in `project.pbxproj` |
+| `vsxcode.sidebar.changeBundleId` | Edit `PRODUCT_BUNDLE_IDENTIFIER` in the project file |
 | `vsxcode.sidebar.toggleDevBundleId` | Toggle the `-dev` bundle id suffix used for builds (optional boolean arg sets it explicitly; `enableDevBundleId`/`disableDevBundleId` are the sidebar's inline-button wrappers) |
 | `vsxcode.sidebar.uninstallStaleAppsOnSimulator` | Uninstall orphan apps left on the selected simulator after a bundle id rename |
 | `vsxcode.sidebar.selectSimulator` | Pick simulator or physical device |
@@ -120,14 +120,14 @@ Or suggest the user run them from the Command Palette (`Cmd+Shift+P`).
 ### Sidebar UI
 
 There's a "VSXcode" activity-bar item with two views when an Xcode project is detected:
-- **Xcode Build** — Tree view showing current project, target, scheme, bundle ID, swift version, strict concurrency, device. Each row is clickable to change the corresponding setting. The Bundle ID row reads from `project.pbxproj` and shows a warning when an app with the same product name but different bundle id is installed on the selected simulator (typically an orphan from a previous rename); an inline trash action on that row offers to uninstall it. That row also carries the Dev Bundle ID toggle as an inline button (`○`/`✓`) plus a `Dev: On/Off` marker in its description: when on, every `xcodebuild` invocation gets `PRODUCT_BUNDLE_IDENTIFIER=$(inherited)-dev`, so development builds install beside the shipping app. It never edits `project.pbxproj`.
+- **Xcode Build** — Tree view showing current project, target, scheme, bundle ID, swift version, strict concurrency, device. Each row is clickable to change the corresponding setting. The Bundle ID row reads from the project file and shows a warning when an app with the same product name but different bundle id is installed on the selected simulator (typically an orphan from a previous rename); an inline trash action on that row offers to uninstall it. That row also carries the Dev Bundle ID toggle as an inline button (`○`/`✓`) plus a `Dev: On/Off` marker in its description: when on, every `xcodebuild` invocation gets `PRODUCT_BUNDLE_IDENTIFIER=$(inherited)-dev`, so development builds install beside the shipping app. It never edits the project file.
 - **Code Format** — Webview for swift-format rule configuration and the Homebrew install button.
 
 When the user asks to change build configuration, suggest the sidebar instead of editing config files.
 
 ### Test integration
 
-- The extension contributes a `vscode.TestController` that discovers XCTest targets from pbxproj.
+- The extension contributes a `vscode.TestController` that discovers XCTest targets from the project file.
 - Tests appear in the **Testing** sidebar (`testing` view). The user can run, debug, and view code coverage from there.
 - Coverage uses `xccov` and surfaces inline in the editor.
 - For test-related tasks, **prefer the Testing sidebar** over manually invoking `xcodebuild test`.
@@ -156,6 +156,19 @@ When the user asks to change build configuration, suggest the sidebar instead of
 
 ---
 
+## Editing the project file
+
+A project in Xcode 27.2's JSON format keeps its structure in `<project>.xcodeproj/project.xcproj`, a JSON5 text you can edit directly, for example to change a build setting or a target membership. After an edit:
+
+1. Run `xcrun xcprojformatter --update <project>.xcodeproj` to put the file back in Xcode's canonical layout. The formatter checks only the file's shape: it succeeds on a file Xcode refuses to open, such as one with a reference that names nothing.
+2. Run `xcodebuild -list -project <project>.xcodeproj` and read its message, not just its exit code. `Unable to read project` means the edit broke the file — fix it before going on. `Could not resolve package dependencies` is about the project's packages, not the edit.
+
+Don't check an edit with `xcodebuild -convert-project`: it converts the project to the other format in place. VSXcode picks up a saved edit like any other project-file change — `Package.swift` is regenerated and the sidebar refreshes.
+
+Never leave both `project.pbxproj` and `project.xcproj` in the bundle: Xcode refuses to open it ("has multiple project definition files"). Switch formats in Xcode, which replaces one file with the other, rather than writing the other file by hand.
+
+---
+
 ## Quick decision guide
 
 Before doing one of these manually, check the table:
@@ -168,9 +181,10 @@ Before doing one of these manually, check the table:
 | Run tests | Use the Testing sidebar (or task `xcode-build` / `test`) |
 | Switch simulator/device | Run command `vsxcode.sidebar.selectSimulator` |
 | Switch scheme | Run command `vsxcode.sidebar.changeScheme` |
-| Update Package.swift to reflect a pbxproj change | Do nothing — the watcher regenerates automatically |
-| Add a Swift file to a target | Just create the file in the right directory — pbxproj is updated automatically |
-| Add or remove a Core Data model | Just create or delete the `.xcdatamodeld` bundle — pbxproj (all five structures) is updated automatically |
+| Update Package.swift to reflect a project-file change | Do nothing — the watcher regenerates automatically |
+| Add a Swift file to a target | Just create the file in the right directory — the project file is updated automatically |
+| Add or remove a Core Data model | Just create or delete the `.xcdatamodeld` bundle — the project file (all five pbxproj structures, or the JSON `version-group`) is updated automatically |
+| Check an edit to `project.xcproj` | `xcrun xcprojformatter --update <project>.xcodeproj`, then `xcodebuild -list -project <project>.xcodeproj` (see [Editing the project file](#editing-the-project-file)) |
 | Format Swift code | Save the file (format-on-save) or invoke "Format Document" |
 | Configure swift-format rules | Open the **Code Format** sidebar panel |
 | Refresh SourceKit-LSP after Xcode version switch | Run command `vsxcode.createFromXcodeproj` to regenerate Package.swift and the SourceKit-LSP arguments |
@@ -196,10 +210,10 @@ Before doing one of these manually, check the table:
 | `.vscode/settings.json` | Holds the extension's SourceKit-LSP block at the front of `swift.buildArguments`. Leave that block alone; other entries are yours. |
 | `.vscode/.swift-format` | swift-format rule config (JSON). Edit via Code Format sidebar; raw edits also fine. |
 | `.vscode/tasks.json` | Optional. Add `xcode-build` task entries here if you want explicit task definitions. |
-| `<project>.xcodeproj/project.pbxproj` | Source of truth for project structure. The extension reads it and (for Swift file and Core Data model create/delete on non-synchronized targets) writes to it. |
+| `<project>.xcodeproj/project.pbxproj` or `project.xcproj` | Source of truth for project structure: one or the other, never both. The extension reads it and (for Swift file and Core Data model create/delete on non-synchronized targets, and the sidebar's settings) writes to it. |
 
 ---
 
 ## Version
 
-This document describes VSXcode v3.12.1. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.
+This document describes VSXcode v3.13.0. Behavior is stable across patch versions; if a fundamental capability changes, this file will be updated.

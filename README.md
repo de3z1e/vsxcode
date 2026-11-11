@@ -2,26 +2,26 @@
 
 Lightweight Xcode project integration for VS Code — IntelliSense, build tasks, full debugging with breakpoints and console output on simulators, physical devices, and your Mac, and native swift-format code formatting. Single dependency: the [Swift extension](https://marketplace.visualstudio.com/items?itemName=swiftlang.swift-vscode). Automatically generates `Package.swift` for full SourceKit-LSP support and configures build tasks that let you build, run, and debug iOS and macOS apps directly from VS Code.
 
-### What's new in 3.12.1
+### What's new in 3.13.0
 
-**IntelliSense follows a physical device.** With a physical device selected, SourceKit-LSP now checks your code against the iOS device SDK instead of the simulator's, so code in the device-only branch of `#if targetEnvironment(simulator)` shows the errors and warnings Xcode reports for a device build. Switching between a simulator, a physical device and My Mac restarts the language server, so the change takes effect right away, without a prompt.
+**Xcode's JSON project format.** Xcode 27.2 saves new projects as `project.xcproj`, a JSON file, in place of `project.pbxproj`. VSXcode now works with these projects as it does with any other: it generates `Package.swift` from them, keeps them in sync as you add, rename, move and delete Swift files and Core Data models, and writes the sidebar's bundle id, Swift version and strict concurrency into them. Its edits follow Xcode's own formatting, so the file stays the way Xcode writes it. A change VSXcode can't make safely — inside an entry someone edited by hand to repeat a key, say — is left out and explained in the VSXcode output panel, and everything else still goes through. Switching a project between the two formats in Xcode while VS Code is open is picked up automatically. If the project ever holds both files, VSXcode shows Xcode's own message about it, and if the selected Xcode is older than 27, which can't open the JSON format, it tells you once per session.
 
-**Ready for the next Swift extension.** VSXcode now hands SourceKit-LSP its arguments through the workspace's `swift.buildArguments` instead of `swift.sourcekit-lsp.serverArguments`, which the Swift extension's next release limits to user settings. Any build arguments of your own are kept. When a project VSXcode already set up opens with this version, the Swift extension may ask once to restart the language server; VSXcode has already restarted it, so you can close that notification.
+**Safer project file writes.** For every project, a write never brings back a project file that has just been removed, so a format switch can't leave Xcode with two of them. Changing the bundle id, Swift version or strict concurrency in the sidebar now waits for any file sync in progress and leaves the project file untouched when nothing changed. When the files of two missing folders end up in one folder, **Sync Project Files** now picks which group to re-point by path, so the same repair gives the same result in either format.
 
 ### How It Works
 
-Open a folder containing an `.xcodeproj` and the extension handles the rest:
+Open a folder containing an `.xcodeproj` — whether its project file is `project.pbxproj` or Xcode 27.2's JSON `project.xcproj` — and the extension handles the rest:
 
 1. **Auto-generates `Package.swift`** from the Xcode project on activation, with correct target paths, resources, dependencies, and Swift settings.
-2. **Auto-configures build tasks** with sensible defaults (target, scheme, device/simulator). Bundle id is sourced live from `project.pbxproj` on every operation, so renames take effect immediately.
+2. **Auto-configures build tasks** with sensible defaults (target, scheme, device/simulator). Bundle id is sourced live from the project file on every operation, so renames take effect immediately.
 3. **Configures SourceKit-LSP** for the active run destination so IntelliSense resolves the right SDK — the iOS simulator SDK for a simulator, the iOS device SDK for a physical device, or the macOS SDK when targeting My Mac — and restarts the language server when you switch.
-4. **Silently regenerates** `Package.swift` whenever the `.pbxproj` file changes.
+4. **Silently regenerates** `Package.swift` whenever the project file changes.
 5. **Syncs project files to the Xcode project** — when `.swift` files or `.xcdatamodeld` model bundles are added or removed in a target directory, the `.xcodeproj` is updated automatically (build file, file reference, group, and Sources-phase entries — plus the XCVersionGroup for model bundles). Swift files are matched by path, so a renamed or moved file or folder keeps its project entries and target memberships, and a new folder gets its group.
 6. **Resolves Core Data codegen in IntelliSense** — models using class/category codegen get their `NSManagedObject` subclasses generated with the same tool Xcode's build uses and fed to SourceKit-LSP, so generated types resolve without touching your model, project file, or repository — and regenerate automatically when you edit entities.
 
 **SwiftPM-generated projects** — an `.xcodeproj` made by `swift package generate-xcodeproj` (its object ids look like `OBJ_12`) sits beside the package's own `Package.swift`, so VSXcode asks when the folder opens, before changing anything. The dialog lists the exact files involved:
 
-- **Use VSXcode fully** first copies each of those files that exists — `Package.swift`, `.vscode/settings.json` (or your `.code-workspace` file), `.vscode/.swift-format` and `project.pbxproj` — to a backup beside it (`Package.swift_backup`, then `_backup-2`, `_backup-3`… so no earlier backup is overwritten), then turns everything above on.
+- **Use VSXcode fully** first copies each of those files that exists — `Package.swift`, `.vscode/settings.json` (or your `.code-workspace` file), `.vscode/.swift-format` and the project file (`project.pbxproj` or `project.xcproj`) — to a backup beside it (`Package.swift_backup`, then `_backup-2`, `_backup-3`… so no earlier backup is overwritten), then turns everything above on.
 - **Keep it a SwiftPM package** leaves the workspace untouched and remembers the choice. The commands still work when you run them, and **Generate Package.swift** offers both options again, so you can switch later.
 - Closing the dialog changes nothing; it asks again the next time the folder opens.
 
@@ -32,10 +32,10 @@ The extension adds a panel to the Activity Bar with configurable build settings:
 - **Project** — select which `.xcodeproj` to use (when multiple exist)
 - **Target** — select the build target
 - **Scheme** — select the build scheme
-- **Bundle ID** — read directly from `project.pbxproj`; click to edit (writes `PRODUCT_BUNDLE_IDENTIFIER` back to pbxproj). The row shows the id a build actually produces, followed by the **Dev: On/Off** state, and carries an inline toggle button on the right (hover the row) — `○` turns dev mode on, `✓` turns it off. Also shows a ⚠ warning when an app with the same product name but a different bundle id is installed on the selected simulator — usually a leftover from a previous rename. Use the row's trash action to uninstall the orphan.
+- **Bundle ID** — read directly from the project file; click to edit (writes `PRODUCT_BUNDLE_IDENTIFIER` back to it). The row shows the id a build actually produces, followed by the **Dev: On/Off** state, and carries an inline toggle button on the right (hover the row) — `○` turns dev mode on, `✓` turns it off. Also shows a ⚠ warning when an app with the same product name but a different bundle id is installed on the selected simulator — usually a leftover from a previous rename. Use the row's trash action to uninstall the orphan.
 - **Device** — select **My Mac**, a connected physical device (USB or Wi-Fi), or an available iOS simulator (My Mac appears only for macOS-capable targets)
 
-**Dev Bundle ID** appends `-dev` to the bundle id at build time (`com.example.MyApp` → `com.example.MyApp-dev`), so development builds install alongside the App Store build instead of replacing it. It's an `xcodebuild` setting override (`PRODUCT_BUNDLE_IDENTIFIER=$(inherited)-dev`) — `project.pbxproj` is never modified, so the shipping bundle id stays exactly as committed, and the suffix follows any later rename automatically. The dev and production apps are treated as an expected pair, never flagged as orphans of each other.
+**Dev Bundle ID** appends `-dev` to the bundle id at build time (`com.example.MyApp` → `com.example.MyApp-dev`), so development builds install alongside the App Store build instead of replacing it. It's an `xcodebuild` setting override (`PRODUCT_BUNDLE_IDENTIFIER=$(inherited)-dev`) — the project file is never modified, so the shipping bundle id stays exactly as committed, and the suffix follows any later rename automatically. The dev and production apps are treated as an expected pair, never flagged as orphans of each other.
 
 > **Note:** the suffix applies to every target the scheme builds. Projects with embedded app extensions (whose bundle ids must stay prefixed by the host app's) will be warned once, as those targets may fail to build or install. On physical devices the new id needs provisioning — automatic signing handles it via `-allowProvisioningUpdates`; manual profiles must cover the `-dev` id.
 
@@ -47,12 +47,12 @@ Title bar actions: **Build**, **Build & Run**, **Refresh**, **Sync Project Files
 |---------|-------------|
 | **Swift: Generate Package.swift from Xcode Project** | Generates `Package.swift` using the Debug configuration with a diff view. |
 | **Swift: Generate Package.swift from Xcode Project (with Options)** | Same as above but lets you choose Debug or Release configuration. |
-| **Swift: Configure Build Tasks** | Manually configure build target, scheme, and device/simulator (bundle id is read from pbxproj). |
+| **Swift: Configure Build Tasks** | Manually configure build target, scheme, and device/simulator (bundle id is read from the project file). |
 | **Swift: Sync Project Files to Xcode Project** | Catches the `.xcodeproj` up with Swift files and Core Data models added, removed, renamed or moved while the watchers weren't running, asking before it removes entries whose files are gone. |
 
 ### Package.swift Generation
 
-- Detects the first `.xcodeproj` in the workspace (or lets you pick when multiple exist).
+- Detects the first `.xcodeproj` in the workspace (or lets you pick when multiple exist) and reads its project file, `project.pbxproj` or `project.xcproj`.
 - Extracts Swift tools version, platform deployment targets, targets, and product metadata.
 - Resolves target source paths on disk, including `productName` directory lookup.
 - Resolves resource file paths on disk relative to the target directory.
@@ -114,7 +114,7 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Click 
 ### Installation
 
 - Install from the VS Code Marketplace (search for `VSXcode`).
-- Install the bundled package directly: `code --install-extension vsxcode-3.12.1.vsix`.
+- Install the bundled package directly: `code --install-extension vsxcode-3.13.0.vsix`.
 - VS Code UI alternative: **Extensions → … → Install from VSIX…** and pick the packaged file.
 
 #### Build from source
@@ -122,5 +122,5 @@ Working with an AI coding assistant in a Swift project that uses VSXcode? Click 
 ```bash
 npm install              # install dev dependencies
 npm run package          # runs tsc build and produces vsxcode-<version>.vsix
-code --install-extension vsxcode-3.12.1.vsix
+code --install-extension vsxcode-3.13.0.vsix
 ```
