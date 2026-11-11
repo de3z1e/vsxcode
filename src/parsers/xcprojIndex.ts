@@ -99,7 +99,7 @@ function nameSet(value: unknown, what: string): string[] {
 }
 
 /** Code-point order, which Xcode uses for build setting keys and, after NFD, for build phase members. */
-function compareCodePoints(a: string, b: string): number {
+export function compareCodePoints(a: string, b: string): number {
     const left = Array.from(a);
     const right = Array.from(b);
     const length = Math.min(left.length, right.length);

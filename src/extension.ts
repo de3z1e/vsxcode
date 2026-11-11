@@ -47,7 +47,7 @@ import { XcodeBuildTaskProvider, TASK_TYPE } from './providers/taskProvider';
 import { XcodeDebugConfigProvider } from './providers/debugConfigProvider';
 import { SidebarProvider, autoConfigureBuildTasks, promptXcodeFirstLaunch } from './providers/sidebarProvider';
 import { XCTestController } from './providers/testController';
-import { updateBuildSetting } from './writers/pbxproj';
+import { updateBuildSetting } from './writers/projectEdit';
 import { createSwiftFileWatcher, reconcileSwiftFiles } from './sync/swiftFileSync';
 import { createDataModelWatcher, reconcileDataModels } from './sync/dataModelSync';
 import { SwiftFormatProvider } from './providers/swiftFormatProvider';
@@ -1535,10 +1535,15 @@ export function activate(context: vscode.ExtensionContext): void {
                 const target = data?.targets.find(t => t.name === config.targetName);
                 if (!target?.buildConfigurationListId) { return; }
                 const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
+                let declined: string | undefined;
                 for (const configId of configIds) {
-                    pbxContents = updateBuildSetting(pbxContents, configId, 'PRODUCT_BUNDLE_IDENTIFIER', input);
+                    pbxContents = updateBuildSetting(pbxContents, configId, 'PRODUCT_BUNDLE_IDENTIFIER', input, (reason) => { declined ??= reason; });
                 }
                 await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
+                if (declined !== undefined) {
+                    log(`[settings] PRODUCT_BUNDLE_IDENTIFIER not changed in every configuration: ${declined}`);
+                    vscode.window.showWarningMessage(`VSXcode couldn't change PRODUCT_BUNDLE_IDENTIFIER in the project file: ${declined}`);
+                }
             } catch (e) {
                 vscode.window.showErrorMessage(`Failed to update PRODUCT_BUNDLE_IDENTIFIER: ${(e as Error).message}`);
             }
@@ -1762,11 +1767,16 @@ export function activate(context: vscode.ExtensionContext): void {
                 const target = data?.targets.find(t => t.name === config.targetName);
                 if (!target?.buildConfigurationListId) { return; }
                 const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
+                let declined: string | undefined;
                 for (const configId of configIds) {
                     const pbxValue = pick.version.includes('.') ? pick.version : `${pick.version}.0`;
-                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_VERSION', pbxValue);
+                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_VERSION', pbxValue, (reason) => { declined ??= reason; });
                 }
                 await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
+                if (declined !== undefined) {
+                    log(`[settings] SWIFT_VERSION not changed in every configuration: ${declined}`);
+                    vscode.window.showWarningMessage(`VSXcode couldn't change SWIFT_VERSION in the project file: ${declined}`);
+                }
             } catch (e) {
                 vscode.window.showErrorMessage(`Failed to update SWIFT_VERSION: ${(e as Error).message}`);
             }
@@ -1806,10 +1816,15 @@ export function activate(context: vscode.ExtensionContext): void {
                 const target = data?.targets.find(t => t.name === config.targetName);
                 if (!target?.buildConfigurationListId) { return; }
                 const configIds = resolveConfigurationListId(pbxContents, target.buildConfigurationListId);
+                let declined: string | undefined;
                 for (const configId of configIds) {
-                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_STRICT_CONCURRENCY', pick.value);
+                    pbxContents = updateBuildSetting(pbxContents, configId, 'SWIFT_STRICT_CONCURRENCY', pick.value, (reason) => { declined ??= reason; });
                 }
                 await fsp.writeFile(pbxprojPath, pbxContents, 'utf8');
+                if (declined !== undefined) {
+                    log(`[settings] SWIFT_STRICT_CONCURRENCY not changed in every configuration: ${declined}`);
+                    vscode.window.showWarningMessage(`VSXcode couldn't change SWIFT_STRICT_CONCURRENCY in the project file: ${declined}`);
+                }
             } catch (e) {
                 vscode.window.showErrorMessage(`Failed to update SWIFT_STRICT_CONCURRENCY: ${(e as Error).message}`);
             }

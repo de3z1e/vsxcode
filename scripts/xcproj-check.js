@@ -1106,6 +1106,257 @@ console.log('writer: cost');
     }
 }
 
+// ── Core Data models and build settings ──────────────────
+
+/** The text with the nodes at `pointers` cut out, so two texts can be compared outside their edited spans. */
+function cutSpans(text, pointers) {
+    const root = parseJson5Text(text);
+    const nodes = pointers.map((pointer) => (root ? nodeAt(root, pointer) : undefined)).filter(Boolean).sort((a, b) => b.start - a.start);
+    return nodes.reduce((out, node) => out.slice(0, node.start) + out.slice(node.end), text);
+}
+
+/**
+ * One text-in, text-out writer case: the output must read back with the expected change, differ from the input only inside
+ * the named spans (pointers located in each text), be left unchanged by xcprojformatter and convert with Xcode's loader.
+ */
+function textWriterCase(label, input, { run, expect, spans }) {
+    const index = projectIndex.readProject(input);
+    if (typeof index === 'string') {
+        report(false, label, 'the input doesn\'t read');
+        return undefined;
+    }
+    const logs = [];
+    const output = run(input, finder(index), index, (message) => logs.push(message));
+    const problems = [];
+    if (typeof output !== 'string') {
+        problems.push(`the writer returned ${output}`);
+    } else {
+        const after = projectIndex.readProject(output);
+        if (typeof after === 'string') {
+            problems.push(`the output reads ${after}`);
+        } else {
+            const expectation = expect(after, finder(after), output, logs, index);
+            if (expectation !== true) { problems.push(expectation || 'the expected change is missing'); }
+        }
+        if (spans && cutSpans(input, spans(index)) !== cutSpans(output, spans(index))) { problems.push('bytes changed outside the edited spans'); }
+        const formatted = xcodeCanonical(output);
+        if (formatted !== output) {
+            const ours = output.split('\n');
+            const line = ours.findIndex((text, position) => text !== (formatted ?? '').split('\n')[position]);
+            problems.push(formatted === undefined ? 'xcprojformatter rejects it' : `xcprojformatter changes line ${line + 1}: ${JSON.stringify(ours[line])}`);
+        }
+        const conversion = xcodeConversion(output);
+        if (conversion.text === undefined) { problems.push(`Xcode ${conversion.refused ? 'refuses it' : `fails: ${conversion.error}`}`); }
+    }
+    report(problems.length === 0, label, problems.join('; ') || undefined);
+    return output;
+}
+
+/** A target's configurations in a text Xcode converted: name → build settings, read through plutil. */
+function convertedSettings(text, targetName) {
+    const conversion = xcodeConversion(text);
+    const index = conversion.text === undefined ? 'unconverted' : projectIndex.readProject(conversion.text);
+    if (typeof index === 'string') { return undefined; }
+    const owner = targetName === undefined
+        ? index.project
+        : ['PBXNativeTarget', 'PBXAggregateTarget', 'PBXLegacyTarget'].flatMap((isa) => index.objectsOfIsa(isa)).find(({ object }) => object.name === targetName)?.object;
+    const list = owner ? index.objects[owner.buildConfigurationList] : undefined;
+    return Object.fromEntries((list?.buildConfigurations ?? []).map((id) => [index.objects[id].name, index.objects[id].buildSettings ?? {}]));
+}
+
+console.log('writer: Core Data models');
+{
+    const features = texts.get('features.xcproj.txt');
+    const index = projectIndex.readProject(features);
+    const f = finder(index);
+    const app = f.byPath('App');
+    const kit = f.byPath('Kit');
+    const sources = f.sources('App')[0];
+    const at = (id) => index.sources.get(id);
+    const modelNamed = (after, bundle) => after.objectsOfIsa('XCVersionGroup').find(({ object }) => object.path === bundle);
+    const versionsOf = (after, model) => model.object.children.map((child) => after.objects[child].path);
+    textWriterCase('add a model with one version', features, {
+        run: (text, _f, _i, log) => edits.addDataModelToPbxproj(text, 'New.xcdatamodeld', ['New.xcdatamodel'], 'New.xcdatamodel', app, sources, log),
+        expect: (after) => {
+            const model = modelNamed(after, 'New.xcdatamodeld');
+            return model !== undefined && versionsOf(after, model).join() === 'New.xcdatamodel' &&
+                after.objects[model.object.currentVersion]?.path === 'New.xcdatamodel' && phaseFiles(after, finder(after).sources('App')[0]).includes(model.id);
+        },
+        spans: () => [at(app)]
+    });
+    textWriterCase('add a model with two versions, the second current', features, {
+        run: (text, _f, _i, log) => edits.addDataModelToPbxproj(text, 'Two.xcdatamodeld', ['A.xcdatamodel', 'B.xcdatamodel'], 'B.xcdatamodel', app, sources, log),
+        expect: (after) => {
+            const model = modelNamed(after, 'Two.xcdatamodeld');
+            return model !== undefined && versionsOf(after, model).join() === 'A.xcdatamodel,B.xcdatamodel' && after.objects[model.object.currentVersion]?.path === 'B.xcdatamodel';
+        },
+        spans: () => [at(app)]
+    });
+    const model = f.byPath('Model.xcdatamodeld');
+    textWriterCase('change a model\'s versions and current version, keeping its id and membership', features, {
+        run: (text, _f, _i, log) => edits.updateVersionGroupVersions(text, model, ['Model.xcdatamodel', 'Model 2.xcdatamodel', 'Model 3.xcdatamodel'], 'Model 3.xcdatamodel', log),
+        expect: (after) => {
+            const updated = after.objects[model];
+            return updated?.isa === 'XCVersionGroup' && updated.children.length === 3 && after.objects[updated.currentVersion]?.path === 'Model 3.xcdatamodel' &&
+                phaseFiles(after, finder(after).sources('App')[0]).includes(model);
+        },
+        spans: () => [at(model)]
+    });
+    textWriterCase('move a model into another group', features, {
+        run: (text, found, _i, log) => edits.moveVersionGroupToGroup(text, found.byPath('Notes.xcdatamodeld'), kit, 'Notes.xcdatamodeld', log),
+        expect: (after) => pathOf(after, ['Kit', 'Notes.xcdatamodeld']) !== undefined && pathOf(after, ['App', 'Notes.xcdatamodeld']) === undefined,
+        spans: () => [at(app), at(kit)]
+    });
+    textWriterCase('remove a model with its versions and memberships', features, {
+        run: (text, _f, _i, log) => edits.removeDataModelFromPbxproj(text, model, log),
+        expect: (after) => after.objects[model] === undefined && !after.objectsOfIsa('PBXBuildFile').some(({ object }) => object.fileRef === model) &&
+            !Object.values(after.objects).some((object) => object.path === 'Model 2.xcdatamodel'),
+        spans: () => [at(app)]
+    });
+
+    // A repeated key: in the model, update and move decline and removal goes ahead; in its group, removal declines.
+    const repeatedModel = features.replace('"kind": "version-group",\n          "path": "Model.xcdatamodeld",', '"kind": "version-group",\n          "index": true,\n          "index": true,\n          "path": "Model.xcdatamodeld",');
+    const repeatedGroup = features.replace('"kind": "group",\n      "path": "App",', '"kind": "group",\n      "index": true,\n      "index": true,\n      "path": "App",');
+    const declines = [
+        ['update a model that repeats a key', repeatedModel, (text, log) => edits.updateVersionGroupVersions(text, model, ['Model.xcdatamodel'], undefined, log), null],
+        ['move a model that repeats a key', repeatedModel, (text, log) => edits.moveVersionGroupToGroup(text, model, kit, 'Model.xcdatamodeld', log), null],
+        ['remove a model that repeats a key: still removed', repeatedModel, (text, log) => edits.removeDataModelFromPbxproj(text, model, log), 'removed'],
+        ['remove a model whose group repeats a key', repeatedGroup, (text, log) => edits.removeDataModelFromPbxproj(text, model, log), null]
+    ];
+    for (const [label, input, run, expected] of declines) {
+        if (input === features || typeof projectIndex.readProject(input) === 'string') {
+            report(false, `${label}: the variant reads`);
+            continue;
+        }
+        const logs = [];
+        const result = run(input, (message) => logs.push(message));
+        const ok = expected === null
+            ? result === null && logs.some((line) => line.startsWith('[datamodel-sync] project.xcproj') && line.includes('repeats'))
+            : typeof result === 'string' && !result.includes('"Model.xcdatamodeld"') && typeof projectIndex.readProject(result) !== 'string';
+        report(ok, label, logs[0]);
+    }
+    const twoPhases = xcodeCanonical(`${JSON.stringify({
+        'default-configuration': 'Release', configurations: ['Debug', 'Release'], localizations: { development: 'en' },
+        files: [ { kind: 'group', path: 'Sources', children: [ { path: 'A.swift' } ] },
+            { kind: 'group', name: 'Products', children: [ { path: '<PRODUCTS>/App.app', id: 'A0A0A0A0A0A0A0A0A0A0A0A0', type: 'wrapper.application', index: false } ] } ],
+        targets: [ { name: 'Two', id: 'B0B0B0B0B0B0B0B0B0B0B0B0', product: 'Products/App.app', 'product-type': 'application', 'build-phases': ['compile-sources', 'compile-sources'] } ]
+    }, null, 2)}\n`);
+    const twoIndex = projectIndex.readProject(twoPhases ?? '');
+    if (twoPhases && typeof twoIndex !== 'string') {
+        const logs = [];
+        const result = edits.addDataModelToPbxproj(twoPhases, 'M.xcdatamodeld', ['M.xcdatamodel'], undefined, finder(twoIndex).byPath('Sources'),
+            finder(twoIndex).sources('Two')[0], (message) => logs.push(message));
+        report(result === null && logs.some((line) => line.includes('several Sources phases')), 'add a model to a target with two unnamed Sources phases: null, and why', logs[0]);
+    } else {
+        report(false, 'the two-phase variant reads');
+    }
+}
+
+console.log('writer: build settings, read back through Xcode\'s own conversion');
+{
+    const features = texts.get('features.xcproj.txt');
+    const index = projectIndex.readProject(features);
+    const targetIndex = (name) => index.sources.get(index.objectsOfIsa('PBXNativeTarget').concat(index.objectsOfIsa('PBXAggregateTarget'))
+        .find(({ object }) => object.name === name).id)[1];
+    const configurations = (name) => {
+        const owner = name === undefined ? index.project : ['PBXNativeTarget', 'PBXAggregateTarget', 'PBXLegacyTarget']
+            .flatMap((isa) => index.objectsOfIsa(isa)).find(({ object }) => object.name === name).object;
+        return index.objects[owner.buildConfigurationList].buildConfigurations;
+    };
+    const setAll = (text, name, key, value, only) => {
+        let out = text;
+        for (const id of configurations(name)) {
+            if (!only || index.objects[id].name === only) { out = edits.updateBuildSetting(out, id, key, value); }
+        }
+        return out;
+    };
+    const valuesOf = (output, name, key) => {
+        const settings = convertedSettings(output, name);
+        return settings === undefined ? undefined : Object.fromEntries(Object.entries(settings).map(([config, values]) => [config, values[key]]));
+    };
+    const app = targetIndex('App');
+    textWriterCase('SWIFT_VERSION on every configuration in turn: one plain key', features, {
+        run: (text) => setAll(text, 'App', 'SWIFT_VERSION', '6.2'),
+        expect: (_after, _found, output) => {
+            const values = valuesOf(output, 'App', 'SWIFT_VERSION');
+            return Object.values(values ?? {}).every((value) => value === '6.2') && output.includes('"SWIFT_VERSION": "6.2"') &&
+                !/"SWIFT_VERSION\[config=/.test(output) || JSON.stringify(values);
+        },
+        spans: () => [['targets', app, 'build-settings']]
+    });
+    textWriterCase('one configuration only: a conditional key', features, {
+        run: (text) => setAll(text, 'Kit', 'SWIFT_STRICT_CONCURRENCY', 'complete', 'Debug'),
+        expect: (_after, _found, output) => {
+            const values = valuesOf(output, 'Kit', 'SWIFT_STRICT_CONCURRENCY');
+            return values?.Debug === 'complete' && values?.Release === undefined && output.includes('"SWIFT_STRICT_CONCURRENCY[config=Debug]": "complete"') ||
+                JSON.stringify(values);
+        },
+        spans: () => [['targets', targetIndex('Kit'), 'build-settings']]
+    });
+    const tools = index.objectsOfIsa('PBXAggregateTarget')[0].object.name;
+    textWriterCase('a target with no build-settings: created as its last key', features, {
+        run: (text) => setAll(text, tools, 'PRODUCT_NAME', 'Tools'),
+        expect: (_after, _found, output) => {
+            const values = valuesOf(output, tools, 'PRODUCT_NAME');
+            return Object.values(values ?? {}).every((value) => value === 'Tools') && Object.keys(values ?? {}).length > 0 || JSON.stringify(values);
+        },
+        spans: () => [['targets', targetIndex(tools)]]
+    });
+    textWriterCase('a key with an [sdk=…] variant: the variant stays', features, {
+        run: (text) => setAll(text, 'App', 'INFOPLIST_KEY_UIStatusBarStyle', 'UIStatusBarStyleLightContent'),
+        expect: (_after, _found, output) => {
+            const settings = convertedSettings(output, 'App');
+            return Object.values(settings ?? {}).every((values) => values.INFOPLIST_KEY_UIStatusBarStyle === 'UIStatusBarStyleLightContent' &&
+                values['INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]'] === 'UIStatusBarStyleDefault') || 'the plain key or its variant is wrong';
+        },
+        spans: () => [['targets', app, 'build-settings']]
+    });
+    textWriterCase('a list-valued key split by configuration: the others keep their lists', features, {
+        run: (text) => setAll(text, 'App', 'HEADER_SEARCH_PATHS', 'one', 'Debug'),
+        expect: (_after, _found, output) => {
+            const values = valuesOf(output, 'App', 'HEADER_SEARCH_PATHS');
+            return values?.Debug === 'one' && Array.isArray(values?.Release) && /"HEADER_SEARCH_PATHS\[config=Release\]": \[/.test(output) || JSON.stringify(values);
+        },
+        spans: () => [['targets', app, 'build-settings']]
+    });
+    // A hand-written empty build-settings object gets its first key laid out as Xcode prints it.
+    const toolsNode = nodeAt(parseJson5Text(features), ['targets', targetIndex(tools)]);
+    const emptySettings = toolsNode ? `${features.slice(0, toolsNode.end - 1)}  "build-settings": {},\n    ${features.slice(toolsNode.end - 1)}` : features;
+    if (emptySettings !== features && typeof projectIndex.readProject(emptySettings) !== 'string') {
+        textWriterCase('an empty build-settings object: its first key on a line of its own', emptySettings, {
+            run: (text) => setAll(text, tools, 'PRODUCT_NAME', 'Tools'),
+            expect: (_after, _found, output) => /"build-settings": \{\n\s+"PRODUCT_NAME": "Tools",\n/.test(output) || 'not laid out as Xcode prints it',
+            spans: () => [['targets', targetIndex(tools)]]
+        });
+    } else {
+        report(false, 'the empty build-settings variant reads');
+    }
+    // A project configuration's settings, created where Xcode's encoder puts them when the project has none.
+    const value = valueOf(parseJson5Text(features));
+    delete value['build-settings'];
+    const bare = xcodeCanonical(`${JSON.stringify(value, null, 2)}\n`);
+    const bareIndex = projectIndex.readProject(bare ?? '');
+    if (bare && typeof bareIndex !== 'string') {
+        const debug = bareIndex.objects[bareIndex.project.buildConfigurationList].buildConfigurations.find((id) => bareIndex.objects[id].name === 'Debug');
+        textWriterCase('a project configuration without project build-settings: created after "targets"', bare, {
+            run: (text) => edits.updateBuildSetting(text, debug, 'SDKROOT', 'iphoneos'),
+            expect: (_after, _found, output) => valuesOf(output, undefined, 'SDKROOT')?.Debug === 'iphoneos' || 'the project Debug configuration lacks SDKROOT'
+        });
+    } else {
+        report(false, 'the project without build-settings reads');
+    }
+    // A decline: the target's build-settings repeats a key.
+    const settingsNode = nodeAt(parseJson5Text(features), ['targets', app, 'build-settings']);
+    const repeated = settingsNode ? `${features.slice(0, settingsNode.start + 1)}\n        "ARCHS": "arm64",${features.slice(settingsNode.start + 1)}` : features;
+    const reasons = [];
+    const repeatedIndex = projectIndex.readProject(repeated);
+    const debugId = typeof repeatedIndex === 'string' ? undefined : repeatedIndex.objects[repeatedIndex.objectsOfIsa('PBXNativeTarget')
+        .find(({ object }) => object.name === 'App').object.buildConfigurationList].buildConfigurations[0];
+    const out = debugId === undefined ? undefined : edits.updateBuildSetting(repeated, debugId, 'SWIFT_VERSION', '6.2', (reason) => reasons.push(reason));
+    report(repeated !== features && out === repeated && reasons.some((reason) => reason.includes('repeats')),
+        'a build-settings object that repeats a key: the input back, and why', reasons[0]);
+}
+
 // ── Goldens ───────────────────────────────────────────────
 
 const normalize = (value) => (value === undefined ? null : JSON.parse(JSON.stringify(value)));

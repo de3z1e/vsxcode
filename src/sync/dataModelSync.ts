@@ -12,7 +12,7 @@ import {
     moveVersionGroupToGroup,
     removeDataModelFromPbxproj,
     updateVersionGroupVersions
-} from '../writers/pbxproj';
+} from '../writers/projectEdit';
 import {
     buildTargetMappings,
     canonicalPath,
@@ -248,7 +248,7 @@ async function registerBundle(
         // Corrected in place so other targets' PBXBuildFile and Sources entries survive.
         if (!registrationMatchesDisk(contents, versionGroup, bundle)) {
             const updated = updateVersionGroupVersions(
-                contents, versionGroup.id, bundle.versionNames, bundle.currentVersionName
+                contents, versionGroup.id, bundle.versionNames, bundle.currentVersionName, log
             );
             if (!updated) { return unchanged; }
             contents = updated;
@@ -259,10 +259,14 @@ async function registerBundle(
         // The group child determines the bundle's on-disk directory, so a moved bundle is re-homed in place.
         if (isRelocation) {
             const groupId = groupForBundle(contents, rootPath, bundlePath);
-            if (groupId) {
-                contents = moveVersionGroupToGroup(contents, versionGroup.id, groupId, bundle.name);
+            const moved = groupId ? moveVersionGroupToGroup(contents, versionGroup.id, groupId, bundle.name, log) : undefined;
+            if (moved) {
+                contents = moved;
                 changed = true;
                 log(`${LOG_PREFIX} ${bundleName} moved on disk, re-homing its group entry`);
+            } else if (moved === null) {
+                // A JSON edit declined, and said why; a version refresh above still stands.
+                log(`${LOG_PREFIX} ${bundleName} moved on disk; its group entry stays where it was`);
             } else {
                 log(`${LOG_PREFIX} No matching PBXGroup for ${path.relative(rootPath, bundlePath)}, keeping previous group entry`);
             }
@@ -287,16 +291,22 @@ async function registerBundle(
         return unchanged;
     }
 
-    contents = addDataModelToPbxproj(
+    const added = addDataModelToPbxproj(
         contents,
         bundle.name,
         bundle.versionNames,
         bundle.currentVersionName,
         groupId,
-        mapping.sourcesBuildPhaseId
+        mapping.sourcesBuildPhaseId,
+        log
     );
+    if (added === null) {
+        // A JSON edit declined, and said why.
+        log(`${LOG_PREFIX} ${bundle.name} left unregistered`);
+        return unchanged;
+    }
     log(`${LOG_PREFIX} Registered ${bundle.name} in ${mapping.targetName} (current version ${bundle.currentVersionName})`);
-    return { pbxContents: contents, result: 'added' };
+    return { pbxContents: added, result: 'added' };
 }
 
 // ── Watcher ──────────────────────────────────────────────
@@ -332,7 +342,7 @@ export function createDataModelWatcher(
                 return true;
             }
 
-            const result = removeDataModelFromPbxproj(pbxContents, versionGroup.id);
+            const result = removeDataModelFromPbxproj(pbxContents, versionGroup.id, log);
             if (!result) { return true; }
             await fsp.writeFile(pbxprojPath, result, 'utf8');
             log(`${LOG_PREFIX} Removed ${bundleName} from pbxproj`);
@@ -424,7 +434,7 @@ export async function reconcileDataModels(
             if ((resolvedPath && pathsOnDisk.has(resolvedPath)) || namesOnDisk.has(bundleName)) {
                 continue;
             }
-            const result = removeDataModelFromPbxproj(pbxContents, versionGroup.id);
+            const result = removeDataModelFromPbxproj(pbxContents, versionGroup.id, log);
             if (!result) { continue; }
             pbxContents = result;
             removed++;

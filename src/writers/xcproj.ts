@@ -15,7 +15,7 @@
 import { duplicateKeys, nodeAt, parseJson5Text, valueOf } from '../parsers/xcprojText';
 import type { Json5Node } from '../parsers/xcprojText';
 import {
-    childKey, elementNaming, encodeReference, formatPath, isElementKind, lastPathComponent, readPath,
+    childKey, compareCodePoints, elementNaming, encodeReference, formatPath, isElementKind, lastPathComponent, readPath,
     readReference, resolveReference, syntheticId
 } from '../parsers/xcprojIndex';
 import type { ElementKind, JsonPointer, ParsedPath } from '../parsers/xcprojIndex';
@@ -70,6 +70,8 @@ interface Change {
 
 interface Session {
     log: (message: string) => void;
+    /** The log prefix a decline is reported under, the caller's. */
+    prefix: string;
     input: string;
     mainGroupId: string;
     model: Model;
@@ -106,7 +108,7 @@ function isObject(value: unknown): value is Json {
 }
 
 /** Starts a session on a JSON project file's text; null when the text doesn't read as one. */
-export function beginXcprojEdit(contents: string, log: (message: string) => void): XcprojEdit | null {
+export function beginXcprojEdit(contents: string, log: (message: string) => void, prefix = '[project-sync]'): XcprojEdit | null {
     const index = readProject(contents);
     if (typeof index === 'string' || index.format !== 'xcproj' || !index.sources || !index.mainGroupId) { return null; }
     const root = parseJson5Text(contents);
@@ -141,7 +143,7 @@ export function beginXcprojEdit(contents: string, log: (message: string) => void
         contents,
         index,
         session: {
-            log, input: contents, mainGroupId: index.mainGroupId, model, createdGroups: new Map(), references: [],
+            log, prefix, input: contents, mainGroupId: index.mainGroupId, model, createdGroups: new Map(), references: [],
             crlf: contents.includes('\r\n')
         }
     };
@@ -281,17 +283,21 @@ function printValue(value: unknown, depth: number, compact: boolean): string {
         const keys = Object.keys(value);
         if (keys.length === 0) { return '{}'; }
         if (compact) { return `{ ${keys.map((key) => `${JSON.stringify(key)}: ${printValue(value[key], depth + 1, true)}`).join(', ')} }`; }
-        const lines = keys.map((key) => `${indent(depth + 1)}${JSON.stringify(key)}: ${printChild(key, value[key], depth + 1)},\n`);
+        const lines = keys.map((key) => `${indent(depth + 1)}${JSON.stringify(key)}: ${printChild(key, value[key], depth + 1, value.kind)},\n`);
         return `{\n${lines.join('')}${indent(depth)}}`;
     }
     return JSON.stringify(value);
 }
 
-/** A field of a multi-line object: a `children` list holds elements, each printed by its own density. */
-function printChild(key: string, value: unknown, depth: number): string {
+/**
+ * A field of a multi-line object: a `children` list holds elements, each printed by its own density, except a model's
+ * versions, which Xcode prints across lines even with nothing but a path.
+ */
+function printChild(key: string, value: unknown, depth: number, ownerKind: unknown): string {
     if (key === 'children' && Array.isArray(value)) {
         if (value.length === 0) { return '[]'; }
-        return printList(value.map((item) => printElement(item, depth + 1)), depth);
+        const print = (item: unknown): string => (ownerKind === 'version-group' ? printValue(item, depth + 1, false) : printElement(item, depth + 1));
+        return printList(value.map(print), depth);
     }
     return printValue(value, depth, false);
 }
@@ -575,7 +581,7 @@ function operate<T>(edit: XcprojEdit, name: string, body: () => T): T | undefine
         session.createdGroups = new Map(change.createdGroups);
         session.references = change.references.map((reference) => ({ ...reference }));
         session.parsed = undefined;
-        session.log(`[project-sync] project.xcproj: ${name} left undone, with the rest of its change: ${error.message}`);
+        session.log(`${session.prefix} project.xcproj: ${name} left undone, with the rest of its change: ${error.message}`);
         return undefined;
     } finally {
         if (change.implicit) { session.change = undefined; }
@@ -692,6 +698,8 @@ function recordReferences(edit: XcprojEdit, root: Json5Node): RecordedReference[
 /** Re-encodes every reference that no longer names its element; declines when one can't be made to. */
 function followReferences(edit: XcprojEdit): void {
     const model = edit.session.model;
+    // A model's current version lives inside it: removing the model takes the reference along, not a dangling one.
+    edit.session.references = edit.session.references.filter((reference) => reference.origin === undefined || model.nodes.has(reference.origin));
     for (const reference of edit.session.references) {
         if (!model.nodes.has(reference.target)) { return decline('a reference into the file tree names an element the change removes'); }
         if (resolveHandle(edit, reference.value, reference.origin) === reference.target) { continue; }
@@ -981,6 +989,283 @@ export function addGroupPath(edit: XcprojEdit, parentGroupId: string, folderName
     });
 }
 
+// ── Core Data models ─────────────────────────────────────
+
+/** A model's keys in the order Xcode's encoder writes them (`VersionGroup.swift`); keys it doesn't know follow. */
+const MODEL_KEY_ORDER = ['kind', 'id', 'path', 'name', 'current-version', 'type', 'index', 'target-membership', 'children'];
+
+function inModelOrder(value: Json): Json {
+    const ordered: Json = {};
+    for (const key of MODEL_KEY_ORDER) {
+        if (value[key] !== undefined) { ordered[key] = value[key]; }
+    }
+    for (const key of Object.keys(value)) {
+        if (!(key in ordered)) { ordered[key] = value[key]; }
+    }
+    return ordered;
+}
+
+/** The version a model points at: the named one when it is among them, else the first; undefined without versions. */
+function currentOf(versionNames: string[], currentVersionName: string | undefined): string | undefined {
+    return currentVersionName !== undefined && versionNames.includes(currentVersionName) ? currentVersionName : versionNames[0];
+}
+
+/** Records a model's versions as its children, in order; their handles. */
+function recordVersions(edit: XcprojEdit, model: string, versionNames: string[]): string[] {
+    const node = record(edit, model);
+    node.children = [];
+    return versionNames.map((name) => {
+        const placeholder = `pending:${model}/${name}`;
+        edit.session.model.nodes.set(placeholder, { kind: 'file-reference', parent: model, children: [], path: formatPath('<group>', name), insertedName: name });
+        node.children.push(placeholder);
+        return rename(edit, placeholder, newHandle(edit, placeholder));
+    });
+}
+
+function modelRecord(edit: XcprojEdit, id: string): NodeRecord {
+    const node = record(edit, id);
+    return node.kind === 'version-group' ? node : decline(`${id} isn't a model`);
+}
+
+/** Registers a `.xcdatamodeld` bundle in a group and a Sources phase, with its versions; the model's handle. */
+function addModel(
+    edit: XcprojEdit, bundleName: string, versionNames: string[], currentVersionName: string | undefined, groupId: string, phaseId: string
+): string | undefined {
+    return operate(edit, `registering ${bundleName}`, () => {
+        const parent = parentOf(edit, groupId);
+        const path = formatPath('<group>', bundleName);
+        if (readPath(path) === undefined) { return decline(`"${path}" isn't a path Xcode reads`); }
+        const current = currentOf(versionNames, currentVersionName);
+        const value = inModelOrder({
+            kind: 'version-group',
+            path,
+            'current-version': current === undefined ? undefined : encodeReference([current]),
+            type: 'wrapper.xcdatamodel',
+            'target-membership': [sourcesMembership(edit, phaseId)],
+            children: versionNames.length > 0 ? versionNames.map((name) => ({ path: formatPath('<group>', name) })) : undefined
+        });
+        const siblings = siblingsOf(edit.session.model, parent);
+        const placeholder = `pending:${bundleName}`;
+        insertElement(edit, parent, sortedPosition(edit, siblings, bundleName, () => true), placeholder,
+            { kind: 'version-group', parent, children: [], insertedName: bundleName, path }, value);
+        const handle = rename(edit, placeholder, newHandle(edit, placeholder));
+        recordVersions(edit, handle, versionNames);
+        return handle;
+    });
+}
+
+/** Replaces a model's versions and current version, keeping its memberships and every other key. */
+function refreshModel(edit: XcprojEdit, id: string, versionNames: string[], currentVersionName: string | undefined): true | undefined {
+    return operate(edit, 'refreshing a model\'s versions', () => {
+        const node = modelRecord(edit, id);
+        editableObject(edit, pointerOf(edit, id));
+        const current = currentOf(versionNames, currentVersionName) as string;
+        const value = inModelOrder({
+            ...elementValue(edit, id),
+            'current-version': encodeReference([current]),
+            children: versionNames.map((name) => ({ path: formatPath('<group>', name) }))
+        });
+        for (const child of node.children) { edit.session.model.nodes.delete(child); }
+        node.children = [];
+        reprintElement(edit, id, value);
+        const handles = recordVersions(edit, id, versionNames);
+        // The current version is rewritten here, so its recorded reference follows the new version.
+        const target = handles[versionNames.indexOf(current)];
+        const recorded = edit.session.references.filter((reference) => reference.origin === id);
+        for (const reference of recorded) {
+            reference.target = target;
+            reference.value = encodeReference([current]);
+        }
+        if (recorded.length === 0) {
+            edit.session.references.push({
+                location: () => (edit.session.model.nodes.has(id) ? [...pointerOf(edit, id), 'current-version'] : undefined),
+                origin: id, target, value: encodeReference([current])
+            });
+        }
+        return true;
+    });
+}
+
+/** Moves a model into a group, its relative path collapsed to the bundle name when it differs; its base stays. */
+function moveModel(edit: XcprojEdit, id: string, groupId: string, bundleName: string): true | undefined {
+    return operate(edit, `moving ${bundleName}`, () => {
+        modelRecord(edit, id);
+        editableObject(edit, pointerOf(edit, id));
+        const parent = parentOf(edit, groupId);
+        if (parent !== undefined && isWithin(edit, parent, id)) { return decline(`${bundleName} can't move into itself`); }
+        const { text, depth } = detachElement(edit, id);
+        attachElement(edit, id, text, depth, parent, sortedPosition(edit, siblingsOf(edit.session.model, parent), bundleName, () => true));
+        const parsed = parsedPathOf(record(edit, id));
+        if (parsed.path !== bundleName) { writePath(edit, id, parsed.sourceTree, bundleName); }
+        return true;
+    });
+}
+
+/** Unregisters a model: its object goes whole, with its versions and memberships. */
+function removeModel(edit: XcprojEdit, id: string): true | undefined {
+    return operate(edit, 'removing a model', () => {
+        const node = modelRecord(edit, id);
+        detachElement(edit, id);
+        for (const child of node.children) { edit.session.model.nodes.delete(child); }
+        edit.session.model.nodes.delete(id);
+        return true;
+    });
+}
+
+/** Runs one Core Data change on a text: the text to write, or null when it declined or didn't read back (why is logged). */
+function onText(text: string, log: (message: string) => void, change: (edit: XcprojEdit) => unknown): string | null {
+    const edit = beginXcprojEdit(text, log, '[datamodel-sync]');
+    if (!edit || change(edit) === undefined) { return null; }
+    const output = xcprojEditText(edit);
+    return edit.session.gateProblem === undefined ? output : null;
+}
+
+function isModelId(text: string, id: string): boolean {
+    const index = readProject(text);
+    return typeof index !== 'string' && index.object(id)?.isa === 'XCVersionGroup';
+}
+
+/** Registers a `.xcdatamodeld` bundle; null when declined. */
+export function addXcprojDataModel(
+    text: string, bundleName: string, versionNames: string[], currentVersionName: string | undefined, groupId: string,
+    sourcesBuildPhaseId: string, log: (message: string) => void
+): string | null {
+    return onText(text, log, (edit) => addModel(edit, bundleName, versionNames, currentVersionName, groupId, sourcesBuildPhaseId));
+}
+
+/** Rewrites a model's versions; null for no versions, an id that isn't a model, or a decline. */
+export function updateXcprojVersionGroupVersions(
+    text: string, versionGroupId: string, versionNames: string[], currentVersionName: string | undefined, log: (message: string) => void
+): string | null {
+    if (versionNames.length === 0 || !isModelId(text, versionGroupId)) { return null; }
+    return onText(text, log, (edit) => refreshModel(edit, versionGroupId, versionNames, currentVersionName));
+}
+
+/** Moves a model into another group; null when declined. */
+export function moveXcprojVersionGroupToGroup(
+    text: string, versionGroupId: string, newGroupId: string, bundleName: string, log: (message: string) => void
+): string | null {
+    return onText(text, log, (edit) => moveModel(edit, versionGroupId, newGroupId, bundleName));
+}
+
+/** Unregisters a model; null when the id isn't a model, or when declined. */
+export function removeXcprojDataModel(text: string, versionGroupId: string, log: (message: string) => void): string | null {
+    if (!isModelId(text, versionGroupId)) { return null; }
+    return onText(text, log, (edit) => removeModel(edit, versionGroupId));
+}
+
+// ── Build settings ───────────────────────────────────────
+
+/** Keys a project's `build-settings` precedes, in Xcode's encoder order (`Project.swift`). */
+const PROJECT_KEYS_AFTER_SETTINGS = ['products-group', 'last-upgrade', 'last-swift-update', 'last-swift-migration'];
+
+function sameValue(a: string, b: string): boolean {
+    const read = (text: string): string => {
+        const node = parseJson5Text(text);
+        return node ? JSON.stringify(valueOf(node)) : text;
+    };
+    return read(a) === read(b);
+}
+
+/** Sets a key of a settings object, inserted in code-point order among the keys it holds. */
+function setSortedKey(edit: XcprojEdit, pointer: JsonPointer, key: string, valueText: string): void {
+    const object = editableObject(edit, pointer);
+    const next = object.members.find((candidate) => compareCodePoints(candidate.key, key) > 0);
+    setField(edit, pointer, key, valueText, next ? [next.key] : []);
+}
+
+/**
+ * Sets `key` to `value` in one configuration of an owner (the project or a target) as Xcode writes settings: one plain
+ * key when every configuration of its list has the same value, else one `key[config=<name>]` per configuration that has
+ * one. A configuration whose value doesn't change keeps its value as written; keys with other conditions stay as they are.
+ */
+function setSetting(edit: XcprojEdit, ownerPointer: JsonPointer, names: string[], configuration: string, key: string, value: string): void {
+    const owner = editableObject(edit, ownerPointer);
+    const conditioned = (name: string): string => `${key}[config=${name}]`;
+    const settingsPointer = [...ownerPointer, 'build-settings'];
+    const existing = member(owner, 'build-settings');
+    const current = new Map<string, string>();
+    if (existing) {
+        if (existing.value.kind !== 'object') { return decline('"build-settings" isn\'t an object'); }
+        const settings = editableObject(edit, settingsPointer);
+        const plain = member(settings, key);
+        for (const name of names) {
+            const own = plain ?? member(settings, conditioned(name));
+            if (own) { current.set(name, edit.contents.slice(own.value.start, own.value.end)); }
+        }
+    }
+    current.set(configuration, JSON.stringify(value));
+    const values = names.map((name) => current.get(name));
+    const first = values[0];
+    const agree = first !== undefined && values.every((text) => text !== undefined && sameValue(text, first));
+
+    // An empty object is written afresh too, so its first key goes on a line of its own, as Xcode prints it.
+    if (!existing || (existing.value.kind === 'object' && existing.value.members.length === 0)) {
+        const entries = agree
+            ? [[key, first as string]]
+            : names.filter((name) => current.has(name)).map((name) => [conditioned(name), current.get(name) as string]);
+        entries.sort(([a], [b]) => compareCodePoints(a, b));
+        const depth = depthOf(settingsPointer);
+        const text = `{\n${entries.map(([entryKey, entryValue]) => `${indent(depth + 1)}${JSON.stringify(entryKey)}: ${entryValue},\n`).join('')}${indent(depth)}}`;
+        setField(edit, ownerPointer, 'build-settings', text, ownerPointer.length === 0 ? PROJECT_KEYS_AFTER_SETTINGS : []);
+        return;
+    }
+    if (agree) {
+        for (const name of names) { removeField(edit, settingsPointer, conditioned(name)); }
+        setSortedKey(edit, settingsPointer, key, first as string);
+    } else {
+        removeField(edit, settingsPointer, key);
+        for (const name of names) {
+            const text = current.get(name);
+            if (text !== undefined) { setSortedKey(edit, settingsPointer, conditioned(name), text); }
+        }
+    }
+}
+
+/**
+ * Sets a build setting in one configuration of a JSON project file; the input unchanged when the configuration isn't
+ * found, or when the change declines, whose reason goes to `onDecline`.
+ */
+export function updateXcprojBuildSetting(
+    text: string, configId: string, key: string, value: string, onDecline: (reason: string) => void
+): string {
+    const edit = beginXcprojEdit(text, () => undefined);
+    if (!edit) { return text; }
+    const { index } = edit;
+    const configuration = index.object(configId);
+    if (configuration?.isa !== 'XCBuildConfiguration' || typeof configuration.name !== 'string') { return text; }
+    const listId = Object.keys(index.objects).find((id) => index.objects[id].isa === 'XCConfigurationList' &&
+        Array.isArray(index.objects[id].buildConfigurations) && (index.objects[id].buildConfigurations as unknown[]).includes(configId));
+    if (!listId) { return text; }
+    let ownerPointer: JsonPointer | undefined;
+    if (index.project?.buildConfigurationList === listId) {
+        ownerPointer = [];
+    } else {
+        const owner = ['PBXNativeTarget', 'PBXAggregateTarget', 'PBXLegacyTarget'].flatMap((isa) => index.objectsOfIsa(isa))
+            .find(({ object }) => object.buildConfigurationList === listId);
+        ownerPointer = owner ? index.sources?.get(owner.id) : undefined;
+    }
+    if (!ownerPointer) { return text; }
+    const names = (index.objects[listId].buildConfigurations as unknown[])
+        .map((id) => index.object(id)?.name)
+        .filter((name): name is string => typeof name === 'string');
+
+    beginChange(edit);
+    operate(edit, `setting ${key}`, () => setSetting(edit, ownerPointer as JsonPointer, names, configuration.name as string, key, value));
+    const reason = edit.session.change?.declined;
+    endChange(edit);
+    if (reason !== undefined) {
+        onDecline(reason);
+        return text;
+    }
+    const output = xcprojEditText(edit);
+    if (edit.session.gateProblem !== undefined) {
+        onDecline(edit.session.gateProblem);
+        return text;
+    }
+    return output;
+}
+
 // ── Writing ──────────────────────────────────────────────
 
 /**
@@ -994,7 +1279,7 @@ export function xcprojEditText(edit: XcprojEdit): string {
     if (typeof read !== 'string' && read.format === 'xcproj') { return edit.contents; }
     if (session.gateProblem === undefined) {
         session.gateProblem = 'the edited project file no longer reads as a project Xcode opens';
-        session.log(`[project-sync] project.xcproj left unchanged: ${session.gateProblem}`);
+        session.log(`${session.prefix} project.xcproj left unchanged: ${session.gateProblem}`);
     }
     return session.input;
 }
