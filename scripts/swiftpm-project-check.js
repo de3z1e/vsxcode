@@ -213,7 +213,7 @@ function runChild({ root, statePath, steps }) {
                 return answer === undefined ? undefined : (await items).find((item) => labelOf(item) === answer);
             },
             showInputBox: async (options) => {
-                record('inputBox', { prompt: options && options.prompt });
+                record('inputBox', { prompt: options && options.prompt, value: options && options.value });
                 return inputs.shift();
             },
             showTextDocument: async () => universal('editor')
@@ -641,6 +641,35 @@ const SCENARIOS = [
                     `the command warned: ${[...of(result, 'notice'), ...of(result, 'error')].map((event) => event.message)}`);
             }
             return { workspace, problems: expect.problems, logs: [open, edited, unchanged, changed] };
+        }
+    },
+    {
+        name: "a bundle id formula, as in Xcode 27.2's new projects: the box edits the formula and notes the resolved id",
+        run() {
+            const workspace = makeWorkspace('ordinary-json');
+            const projectFile = 'SyncApp.xcodeproj/project.xcproj';
+            const formula = 'devplaceholder.$(PROJECT_UNIQUE_VALUE:identifier).$(PRODUCT_NAME:rfc1034identifier)';
+            // Recorded from xcodebuild -showBuildSettings on Xcode 27.2: :identifier turns a leading digit and punctuation into `_`.
+            const resolved = 'devplaceholder._F3c_41e2_Sample.SyncApp';
+            const text = replaceOnce(replaceOnce(SYNC_APP_JSON, '"com.example.SyncApp"', JSON.stringify(formula)),
+                '    "IPHONEOS_DEPLOYMENT_TARGET": "18.0",\n', '    "IPHONEOS_DEPLOYMENT_TARGET": "18.0",\n    "PROJECT_UNIQUE_VALUE": "9F3c-41e2.Sample",\n');
+            fs.writeFileSync(path.join(workspace.root, projectFile), text);
+            const [open, ask] = runSteps(workspace, [
+                { kind: 'activate' },
+                // Escape: the box's contents are the check, and nothing may be written.
+                { kind: 'command', id: 'vsxcode.sidebar.changeBundleId', inputs: [] }
+            ]);
+            const expect = expectations('formula');
+            for (const result of [open, ask]) { checkNoCrash(result, expect); }
+            const box = of(ask, 'inputBox')[0];
+            expect.that(box !== undefined, 'the command showed no input box');
+            if (box) {
+                expect.that(box.value === formula, `the box opened with ${JSON.stringify(box.value)}, not the formula`);
+                expect.that(box.prompt === `Bundle Identifier · Resolved: ${resolved}`, `the box's prompt was ${JSON.stringify(box.prompt)}`);
+            }
+            expect.that(logLines(open, `bundle id resolved: ${resolved}`).length === 1, 'the sidebar logged no resolved bundle id');
+            expect.that(!ask.changed.includes(projectFile), 'escaping the box changed project.xcproj');
+            return { workspace, problems: expect.problems, logs: [open, ask] };
         }
     },
     {

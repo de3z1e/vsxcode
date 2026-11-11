@@ -73,7 +73,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   command offers the same choice, and an ordinary project behaves as before, including one created deeper in
   the tree after the folder opens; a SwiftPM-generated project in the JSON format lists and backs up
   `project.xcproj`. The same harness checks the extension's handling of the project file: a setting command
-  writes only a changed text, which `xcprojformatter` leaves as it is; a project file appearing in a package
+  writes only a changed text, which `xcprojformatter` leaves as it is; a bundle id formula (Xcode 27.2's new-project
+  default) opens in the edit box as written, with the resolved id noted in its prompt; a project file appearing in a package
   checkout, or the workspace project's own file saved atomically, changes nothing; a second definition file in
   the bundle is reported once, in Xcode's words, after a 1 s re-check; and the switch to the JSON file refreshes
   once. Requires a full Xcode, since activation runs `xcodebuild -list` and lists simulators, and Xcode 27.2 or
@@ -271,7 +272,8 @@ src/
     │                              dir + version.plist mtime; whether xcodebuild has -prepareDeviceSupport,
     │                              probed lazily from `xcodebuild -help` (stderr) on the same key (no vscode import)
     ├── bundleId.ts              — Bundle id resolution (Info.plist, the project file), Dev Bundle ID suffix, installed
-    │                              simulator apps via simctl
+    │                              simulator apps via simctl; the ids builds produce for a PRODUCT_BUNDLE_IDENTIFIER
+    │                              holding build-setting references, from xcodebuild -showBuildSettings -json
     ├── destination.ts           — Destination type, DerivedData paths, xcodebuild -sdk/-destination flags
     ├── debugStops.ts            — lldb-dap `stopped` classification for the attach tracker: launch artifacts
     │                              (SIGSTOP, negative-id breakpoints, no reason) are resumed; breakpoint, step,

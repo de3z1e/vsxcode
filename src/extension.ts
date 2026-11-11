@@ -1648,8 +1648,9 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!config) { return; }
             const data = sidebarProvider.getProjectData();
             const currentValue = data?.bundleIdByTarget[config.targetName] || '';
+            const resolved = data?.builtBundleIdByTarget[config.targetName];
             const input = await vscode.window.showInputBox({
-                prompt: 'Bundle Identifier',
+                prompt: resolved ? `Bundle Identifier · Resolved: ${resolved}` : 'Bundle Identifier',
                 value: currentValue,
                 placeHolder: 'com.example.MyApp',
             });
@@ -1694,7 +1695,8 @@ export function activate(context: vscode.ExtensionContext): void {
             await context.workspaceState.update('buildTaskConfig', { ...config, devBundleId: next });
             // Redraw, not reload — no cached project data is keyed on this flag.
             sidebarProvider.notifyConfigChanged();
-            const base = sidebarProvider.getProjectData()?.bundleIdByTarget[config.targetName];
+            const projectData = sidebarProvider.getProjectData();
+            const base = projectData?.builtBundleIdByTarget[config.targetName] ?? projectData?.bundleIdByTarget[config.targetName];
             const built = base ? effectiveBundleId(base, next) : `(from the project file)${next ? DEV_BUNDLE_ID_SUFFIX : ''}`;
             log(`[dev-bundle-id] ${next ? 'enabled' : 'disabled'} — builds install as ${built}`);
             if (next) { await warnIfProjectHasExtensions(); }

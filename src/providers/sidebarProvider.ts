@@ -9,7 +9,7 @@ import { parseNativeTargets, isTestTarget } from '../parsers/targets';
 import { getBuildSettingsForTarget, getProjectBuildSettings, platformsSupported } from '../parsers/buildSettings';
 import { getDestinationType } from '../utils/destination';
 import { detectSupportedSwiftVersions, isXcodeFirstLaunchComplete } from '../utils/version';
-import { listInstalledSimulatorApps, effectiveBundleId, DEV_BUNDLE_ID_SUFFIX, type InstalledAppSummary } from '../utils/bundleId';
+import { listInstalledSimulatorApps, effectiveBundleId, hasBuildSettingReference, resolveBuiltBundleIds, DEV_BUNDLE_ID_SUFFIX, type InstalledAppSummary } from '../utils/bundleId';
 import { describeResolution, resolveProjectFile } from '../utils/projectFile';
 import { describeXcprojProblem } from '../parsers/xcprojIndex';
 
@@ -113,6 +113,8 @@ export interface ProjectData {
     swiftVersionByTarget: Record<string, string>;
     strictConcurrencyByTarget: Record<string, string>;
     bundleIdByTarget: Record<string, string>;
+    /** The id a build produces, for targets whose PRODUCT_BUNDLE_IDENTIFIER holds build-setting references; Xcode's evaluation. */
+    builtBundleIdByTarget: Record<string, string>;
     productNameByTarget: Record<string, string>;
     macSupportByTarget: Record<string, boolean>;
     // False when Xcode's first-launch setup is incomplete — simulators/devices unavailable.
@@ -209,22 +211,24 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         return items;
     }
 
-    // The row shows what a build produces, not what pbxproj stores — those differ
-    // while Dev Bundle ID is on, which is an override and never edits pbxproj.
+    // The row shows what a build produces, not what the project file stores — those differ when the
+    // setting holds references, or while Dev Bundle ID is on, an override that never edits the file.
     // The warning state is for *external* drift: an old app installed on the
     // simulator with the same product name but a different bundle id — usually
     // an orphan from a previous rename.
     private createBundleIdItem(config: BuildTaskConfig): SidebarItem {
         const fromPbx = this.projectData?.bundleIdByTarget[config.targetName] || '';
+        const evaluated = this.projectData?.builtBundleIdByTarget[config.targetName];
+        const base = evaluated ?? fromPbx;
         const definitionFile = this.projectData?.definitionFileName ?? 'The project file';
         const stale = this.projectData?.staleSimulatorInstalls || [];
         const hasStaleInstall = stale.length > 0;
         const devEnabled = config.devBundleId === true;
-        const builtId = effectiveBundleId(fromPbx, devEnabled);
+        const builtId = effectiveBundleId(base, devEnabled);
         const devLabel = devEnabled ? 'Dev: On' : 'Dev: Off';
         const devTooltip = devEnabled
             ? `\n\nDev Bundle ID is on: builds append "${DEV_BUNDLE_ID_SUFFIX}"${fromPbx ? ` and install as ${builtId}` : ''}, so the development app sits alongside the shipping one. ${definitionFile} keeps ${fromPbx || 'its own value'}. Use the ✓ button on this row to turn it off.`
-            : `\n\nDev Bundle ID is off: builds use the bundle id exactly as committed. Use the ○ button on this row to build as ${fromPbx ? effectiveBundleId(fromPbx, true) : `…${DEV_BUNDLE_ID_SUFFIX}`} instead, so a development build installs alongside the shipping app.`;
+            : `\n\nDev Bundle ID is off: builds use the bundle id exactly as committed. Use the ○ button on this row to build as ${base ? effectiveBundleId(base, true) : `…${DEV_BUNDLE_ID_SUFFIX}`} instead, so a development build installs alongside the shipping app.`;
         // Encoded into contextValue so package.json can pick which half of the toggle pair to render.
         const devContext = devEnabled ? 'devOn' : 'devOff';
 
@@ -239,7 +243,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             item.contextValue = `config-bundleId-stale-${devContext}`;
         } else {
             item.iconPath = new vscode.ThemeIcon('tag');
-            item.tooltip = `Bundle id from ${this.projectData?.definitionFileName ?? 'the project file'} (the source of truth). Click to edit PRODUCT_BUNDLE_IDENTIFIER.${devTooltip}`;
+            const resolvedNote = evaluated ? `\n\nSetting: ${fromPbx}\nResolved: ${evaluated}` : '';
+            item.tooltip = `Bundle id from ${this.projectData?.definitionFileName ?? 'the project file'} (the source of truth). Click to edit PRODUCT_BUNDLE_IDENTIFIER.${resolvedNote}${devTooltip}`;
             item.contextValue = `config-bundleId-${devContext}`;
         }
         return item;
@@ -407,17 +412,39 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
         // These probes self-gate on Xcode readiness, resolving empty instead of
         // hanging on a wedged simctl/devicectl when setup is incomplete.
-        const [simulators, physicalDevices, supportedSwiftVersions, staleSimulatorInstalls] = await Promise.all([
+        const [simulators, physicalDevices, supportedSwiftVersions, staleSimulatorInstalls, builtBundleIdByTarget] = await Promise.all([
             listAvailableSimulators(),
             listPhysicalDevices(),
             detectSupportedSwiftVersions(),
             this.findStaleSimulatorInstalls(config, bundleIdByTarget, productNameByTarget),
+            this.evaluateBundleIds(xcodeReady && projectFile ? path.join(rootPath, projectFile) : undefined, bundleIdByTarget),
         ]);
 
-        this.projectData = { xcodeProjects, definitionFileName, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, productNameByTarget, macSupportByTarget, xcodeReady, supportedSwiftVersions, staleSimulatorInstalls };
+        this.projectData = { xcodeProjects, definitionFileName, targets, schemes, simulators, physicalDevices, swiftVersionByTarget, strictConcurrencyByTarget, bundleIdByTarget, builtBundleIdByTarget, productNameByTarget, macSupportByTarget, xcodeReady, supportedSwiftVersions, staleSimulatorInstalls };
         this.log(`[sidebar] project data loaded — ${targets.length} target(s), ${schemes.length} scheme(s), ${simulators.length} simulator(s), ${physicalDevices.length} device(s)`);
         // Force a fresh render now data is in; otherwise the spinner can persist until the view is re-entered.
         this._onDidChangeTreeData.fire();
+    }
+
+    /** Empty when no id holds a reference, Xcode isn't ready (no projectPath), or xcodebuild fails (logged). */
+    private async evaluateBundleIds(projectPath: string | undefined, bundleIdByTarget: Record<string, string>): Promise<Record<string, string>> {
+        const templated = Object.keys(bundleIdByTarget).filter((target) => hasBuildSettingReference(bundleIdByTarget[target]));
+        if (!projectPath || templated.length === 0) { return {}; }
+        try {
+            const built = await resolveBuiltBundleIds(projectPath, 'Debug');
+            const evaluated: Record<string, string> = {};
+            for (const target of templated) {
+                if (built[target]) {
+                    evaluated[target] = built[target];
+                    this.log(`[sidebar] ${target} bundle id resolved: ${built[target]} (from ${bundleIdByTarget[target]})`);
+                }
+            }
+            return evaluated;
+        } catch (error) {
+            const message = (error as { message?: string }).message || String(error);
+            this.log(`[sidebar] couldn't evaluate the bundle id with xcodebuild -showBuildSettings: ${message.split('\n')[0]}`);
+            return {};
+        }
     }
 
     private async findStaleSimulatorInstalls(

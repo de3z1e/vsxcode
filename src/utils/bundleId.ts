@@ -40,6 +40,40 @@ export function counterpartBundleId(bundleId: string): string {
         : `${bundleId}${DEV_BUNDLE_ID_SUFFIX}`;
 }
 
+/** Whether a bundle id still holds a build-setting reference (`$(…)` or `${…}`), which only Xcode can evaluate. */
+export function hasBuildSettingReference(value: string): boolean {
+    return /\$[({]/.test(value);
+}
+
+/** A target listed once per platform keeps its first value; empty values and ones still holding a reference are dropped. */
+export function parseBuiltBundleIds(json: string): Record<string, string> {
+    const ids: Record<string, string> = {};
+    let entries: unknown;
+    try {
+        entries = JSON.parse(json);
+    } catch {
+        return ids;
+    }
+    if (!Array.isArray(entries)) { return ids; }
+    for (const entry of entries) {
+        const target: unknown = entry?.target;
+        const bundleId: unknown = entry?.buildSettings?.PRODUCT_BUNDLE_IDENTIFIER;
+        if (typeof target !== 'string' || typeof bundleId !== 'string' || bundleId === '' || target in ids) { continue; }
+        if (!hasBuildSettingReference(bundleId)) { ids[target] = bundleId; }
+    }
+    return ids;
+}
+
+/** Xcode's own evaluation, since macro modifiers like `:identifier` aren't worth imitating; rejects when xcodebuild fails. */
+export async function resolveBuiltBundleIds(projectPath: string, configuration: string): Promise<Record<string, string>> {
+    const { stdout } = await execFile(
+        'xcodebuild',
+        ['-showBuildSettings', '-json', '-project', projectPath, '-alltargets', '-configuration', configuration],
+        { encoding: 'utf8', timeout: 20000, maxBuffer: 64 * 1024 * 1024 }
+    );
+    return parseBuiltBundleIds(stdout);
+}
+
 export interface ResolvedBundleId {
     bundleId: string;
     source: BundleIdSource;
