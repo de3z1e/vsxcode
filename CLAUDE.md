@@ -28,6 +28,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   paths>` and `VSXCODE_PBXPROJ_CORPUS_GOLDENS=<directory outside the repo>` also runs the parsers
   and four writer edits over local projects, printing counts and list indexes only; those goldens
   hold private project data, so the script refuses a directory inside the repository.
+- `npm run test:xcproj` — Check that VSXcode's JSON5 reader (`src/parsers/xcprojText.ts`) reads Xcode 27.2's JSON
+  project file (`project.xcproj`) the way Xcode's own reader does. It runs over the fixtures in
+  `scripts/fixtures/xcproj/` (each pbxproj fixture converted by `xcodebuild -convert-project xcproj` and
+  stored as Xcode wrote it, plus `json5-syntax`, a hand-written project in the JSON5 syntax Xcode accepts)
+  and over a table of syntax cases embedded in a valid project. Every case must get the verdict
+  `xcprojformatter` (Xcode's own reader) gives, live, and every accepted value must match plutil's, except
+  where plutil differs from Xcode: a duplicated key, where Xcode keeps the first and plutil the last, and
+  `Infinity`/`NaN`, which only Xcode accepts. Every node's offsets must re-read to its value. Requires
+  Xcode 27.2 or later; **re-run after every Xcode upgrade**.
 - `npm run test:file-sync` — Run the compiled Swift and Core Data sync watchers in plain Node, with
   `vscode` stubbed, against the Xcode-format project in `scripts/fixtures/file-sync/`. Each scenario
   lays the project and `sources.json` out in a temp directory, applies real file operations, fires
@@ -148,8 +157,11 @@ src/
 │   │                              targets sync
 │   ├── project.ts               — project-level fields from the index: default localization, highest Swift
 │   │                              version, deployment targets; synchronized-folder exclusions by target
-│   └── versionGroups.ts         — XCVersionGroups (.xcdatamodeld bundles) from the project index: children,
-│                                  currentVersion, entry offsets; the section marker text the writers keep
+│   ├── versionGroups.ts         — XCVersionGroups (.xcdatamodeld bundles) from the project index: children,
+│   │                              currentVersion, entry offsets; the section marker text the writers keep
+│   └── xcprojText.ts            — position-aware reader for the JSON project file (project.xcproj): Xcode's JSON5
+│                                  dialect as xcprojformatter accepts and rejects it, first-wins duplicate keys,
+│                                  offsets for every value and key; nodeAt, valueOf, duplicateKeys (no vscode import)
 ├── generators/
 │   ├── packageSwift.ts          — Main Package.swift builder (platforms, products, deps, targets)
 │   ├── swiftSettings.ts         — swiftSettings entries from build settings: language mode, .define(),

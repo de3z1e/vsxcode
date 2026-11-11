@@ -1,0 +1,135 @@
+{
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "files": [
+    {
+      "kind": "group",
+      "path": "MyApp",
+      "children": [
+        { "path": "Helpers.swift", "target-membership": [ "MyApp/compile-sources" ] },
+        {
+          "kind": "group",
+          "path": "Models",
+          "children": [
+            { "path": "Model.swift", "target-membership": [ "MyApp/compile-sources" ] },
+            {
+              "kind": "version-group",
+              "path": "Store.xcdatamodeld",
+              "current-version": "Store.xcdatamodel",
+              "type": "wrapper.xcdatamodel",
+              "target-membership": [
+                "MyApp/compile-sources",
+              ],
+              "children": [
+                {
+                  "path": "Store.xcdatamodel",
+                },
+              ],
+            },
+          ],
+        }, {
+          "kind": "group",
+          "path": "Services",
+          "children": [
+            { "path": "Service.swift", "target-membership": [ "MyApp/compile-sources" ] },
+          ],
+        }, {
+          "kind": "group",
+          "path": "Views",
+          "children": [
+            { "path": "Bar.swift", "target-membership": [ "MyApp/compile-sources" ] },
+            { "path": "ContentView.swift", "target-membership": [ "MyApp/compile-sources" ] },
+            { "path": "Rename.swift", "target-membership": [ "MyApp/compile-sources" ] },
+          ],
+        },
+      ],
+    }, {
+      "kind": "group",
+      "path": "MyKit",
+      "children": [
+        { "path": "Constants.swift", "target-membership": [ "MyKit/compile-sources" ] },
+        { "path": "Helpers.swift", "target-membership": [ "MyKit/compile-sources" ] },
+      ],
+    }, {
+      "kind": "group",
+      "path": "Shared",
+      "children": [
+        {
+          "path": "SharedUtil.swift",
+          "target-membership": [
+            "MyApp/compile-sources",
+            { "build-phase": "MyKit/compile-sources", "arguments": "-DSHARED_UTIL" },
+          ],
+        },
+      ],
+    },
+    { "kind": "folder", "path": "SyncKit", "target-membership": [ "SyncKit" ] },
+    {
+      "kind": "group",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/libMyApp.a", "id": "AA0000000000000000000190", "type": "archive.ar", "index": false },
+        { "path": "<PRODUCTS>/libMyKit.a", "id": "AA0000000000000000000290", "type": "archive.ar", "index": false },
+        { "path": "<PRODUCTS>/libSyncKit.a", "id": "AA0000000000000000000490", "type": "archive.ar", "index": false },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "MyApp",
+      "id": "AA0000000000000000000180",
+      "product": "Products/libMyApp.a",
+      "product-type": "library.static",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+      ],
+      "build-settings": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+      },
+    }, {
+      "name": "MyKit",
+      "id": "AA0000000000000000000280",
+      "product": "Products/libMyKit.a",
+      "product-type": "library.static",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+      ],
+      "build-settings": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+      },
+    }, {
+      "name": "SyncKit",
+      "id": "AA0000000000000000000480",
+      "product": "Products/libSyncKit.a",
+      "product-type": "library.static",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+      ],
+      "build-settings": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+      },
+    },
+  ],
+  "build-settings": {
+    "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+    "ONLY_ACTIVE_ARCH[config=Debug]": "YES",
+    "SDKROOT": "iphoneos",
+    "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+    "SWIFT_OPTIMIZATION_LEVEL[config=Debug]": "-Onone",
+    "SWIFT_VERSION": "5.0",
+  },
+  "last-upgrade": "26.0",
+  "last-swift-update": "26.0",
+}

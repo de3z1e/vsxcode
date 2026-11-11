@@ -1,0 +1,64 @@
+{
+  "build-independent-targets-in-parallel": false,
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+  },
+  "files": [
+    { "path": "Package.swift", "type": "sourcecode.swift" },
+    {
+      "kind": "group",
+      "name": "Sources",
+      "children": [
+        {
+          "kind": "group",
+          "path": "<PROJECT>/Sources/SampleKit",
+          "children": [
+            { "path": "SampleKit.swift", "target-membership": [ "SampleKit/compile-sources" ] },
+          ],
+        },
+      ],
+    }, {
+      "kind": "group",
+      "path": "<PRODUCTS>/",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/SampleKit.framework", "id": "SampleKit::SampleKit::Product" },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "SampleKit",
+      "id": "SampleKit::SampleKit",
+      "product": "Products/SampleKit.framework",
+      "product-type": "framework",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+      ],
+      "build-settings": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "SampleKit",
+        "PRODUCT_NAME": "$(TARGET_NAME:c99extidentifier)",
+        "SWIFT_VERSION": "5.0",
+        "TARGET_NAME": "SampleKit",
+      },
+    },
+  ],
+  "build-settings": {
+    "COMBINE_HIDPI_IMAGES": "YES",
+    "DEBUG_INFORMATION_FORMAT[config=Debug]": "dwarf",
+    "DEBUG_INFORMATION_FORMAT[config=Release]": "dwarf-with-dsym",
+    "MACOSX_DEPLOYMENT_TARGET": "10.13",
+    "SDKROOT": "macosx",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS[config=Debug]": "$(inherited) SWIFT_PACKAGE DEBUG",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS[config=Release]": "$(inherited) SWIFT_PACKAGE",
+    "SWIFT_VERSION": "5.0",
+  },
+  "last-upgrade": "99.9.9",
+  "last-swift-migration": "99.9.9",
+}

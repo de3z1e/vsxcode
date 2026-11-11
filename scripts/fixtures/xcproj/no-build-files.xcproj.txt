@@ -1,0 +1,50 @@
+{
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "files": [
+    {
+      "kind": "group",
+      "path": "EmptyKit",
+      "children": [
+        { "path": "README.md" },
+      ],
+    }, {
+      "kind": "group",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/libEmptyKit.a", "id": "7F0000000000000000000501", "type": "archive.ar", "index": false },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "EmptyKit",
+      "id": "B20000000000000000000601",
+      "product": "Products/libEmptyKit.a",
+      "product-type": "library.static",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+      ],
+      "build-settings": {
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SKIP_INSTALL": "YES",
+      },
+    },
+  ],
+  "build-settings": {
+    "IPHONEOS_DEPLOYMENT_TARGET": "16.0",
+    "SDKROOT": "iphoneos",
+    "SWIFT_VERSION": "5.0",
+  },
+  "last-upgrade": "15.0",
+}

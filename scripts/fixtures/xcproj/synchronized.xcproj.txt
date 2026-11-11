@@ -1,0 +1,68 @@
+{
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "files": [
+    {
+      "kind": "folder",
+      "path": "SyncApp",
+      "target-membership": [
+        "SyncApp",
+      ],
+      "membership-exceptions": [
+        {
+          "target": "SyncApp",
+          "exclusions": [
+            "Info.plist",
+            "Supporting Files/Notes.txt",
+          ],
+        },
+      ],
+    }, {
+      "kind": "group",
+      "path": "Extras",
+      "children": [
+        { "path": "Helper.swift", "target-membership": [ "SyncApp/compile-sources" ] },
+      ],
+    }, {
+      "kind": "group",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/SyncApp.app", "id": "E70000000000000000000501", "type": "wrapper.application", "index": false },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "SyncApp",
+      "id": "A10000000000000000000601",
+      "product": "Products/SyncApp.app",
+      "product-type": "application",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+        "resources",
+      ],
+      "build-settings": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SyncApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+      },
+    },
+  ],
+  "build-settings": {
+    "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
+    "SDKROOT": "iphoneos",
+    "SWIFT_VERSION": "6.0",
+  },
+  "last-upgrade": "16.0",
+  "last-swift-update": "16.0",
+}

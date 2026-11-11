@@ -1,0 +1,255 @@
+{
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/apple/swift-collections.git",
+      "version": {
+        "up-to-next-major-version": "1.1.0",
+      },
+    }, {
+      "kind": "local",
+      "path": "../LocalKit",
+    },
+  ],
+  "files": [
+    {
+      "kind": "group",
+      "path": "SampleApp",
+      "children": [
+        { "path": "AppDelegate.swift", "target-membership": [ "SampleApp/compile-sources" ] },
+        { "path": "ContentView.swift", "target-membership": [ "SampleApp/compile-sources" ] },
+        {
+          "kind": "group",
+          "path": "Views",
+          "children": [
+            { "path": "ListView.swift", "target-membership": [ "SampleApp/compile-sources" ] },
+            { "path": "DetailView.swift", "target-membership": [ "SampleApp/compile-sources" ] },
+            { "path": "Components/Badge.swift", "target-membership": [ "SampleApp/compile-sources" ] },
+            {
+              "kind": "group",
+              "path": "Rows",
+              "children": [
+                { "path": "RowView.swift", "target-membership": [ "SampleApp/compile-sources" ] },
+              ],
+            },
+          ],
+        }, {
+          "kind": "group",
+          "name": "Support",
+          "children": [
+            { "path": "../Legacy/Legacy.swift", "target-membership": [ "SampleApp/compile-sources" ] },
+            {
+              "kind": "version-group",
+              "path": "Archive.xcdatamodeld",
+              "current-version": "Archive 2.xcdatamodel",
+              "type": "wrapper.xcdatamodel",
+              "target-membership": [
+                "SampleApp/compile-sources",
+              ],
+              "children": [
+                {
+                  "path": "Archive.xcdatamodel",
+                }, {
+                  "path": "Archive 2.xcdatamodel",
+                },
+              ],
+            },
+          ],
+        }, {
+          "kind": "group",
+          "path": "<PROJECT>/Shared",
+          "children": [
+            {
+              "path": "SharedModels.swift",
+              "target-membership": [
+                { "build-phase": "SampleApp/compile-sources", "arguments": "-DSHARED_MODELS" },
+                "SampleAppTests/compile-sources",
+              ],
+            },
+          ],
+        },
+        { "path": "Assets.xcassets", "target-membership": [ "SampleApp/resources" ] },
+        {
+          "kind": "variant-group",
+          "name": "Main.storyboard",
+          "target-membership": [
+            "SampleApp/resources",
+          ],
+          "children": [
+            {
+              "path": "Base.lproj/Main.storyboard",
+            },
+          ],
+        }, {
+          "kind": "variant-group",
+          "name": "Localizable.strings",
+          "target-membership": [
+            "SampleApp/resources",
+          ],
+          "children": [
+            {
+              "path": "en.lproj/Localizable.strings",
+            },
+          ],
+        }, {
+          "kind": "version-group",
+          "path": "Model.xcdatamodeld",
+          "current-version": "Model.xcdatamodel",
+          "type": "wrapper.xcdatamodel",
+          "target-membership": [
+            "SampleApp/compile-sources",
+          ],
+          "children": [
+            {
+              "path": "Model.xcdatamodel",
+            },
+          ],
+        },
+        { "path": "Info.plist" },
+        { "path": "SampleApp.entitlements" },
+        { "path": "SampleApp.xcconfig" },
+      ],
+    }, {
+      "kind": "group",
+      "path": "SampleAppTests",
+      "children": [
+        { "path": "SampleAppTests.swift", "target-membership": [ "SampleAppTests/compile-sources" ] },
+      ],
+    }, {
+      "kind": "group",
+      "path": "SampleAppUITests",
+      "children": [
+        { "path": "SampleAppUITests.swift", "target-membership": [ "SampleAppUITests/compile-sources" ] },
+      ],
+    }, {
+      "kind": "group",
+      "name": "Frameworks",
+      "children": [
+        { "path": "<SDK>/System/Library/Frameworks/UIKit.framework", "target-membership": [ "SampleApp/frameworks" ] },
+        { "path": "<SDK>/usr/lib/libz.tbd", "target-membership": [ "SampleApp/frameworks" ] },
+      ],
+    }, {
+      "kind": "group",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/SampleApp.app", "id": "5A0000000000000000000501", "type": "wrapper.application", "index": false },
+        { "path": "<PRODUCTS>/SampleAppTests.xctest", "id": "C30000000000000000000502", "type": "wrapper.cfbundle", "index": false },
+        { "path": "<PRODUCTS>/SampleAppUITests.xctest", "id": "5A0000000000000000000503", "type": "wrapper.cfbundle", "index": false },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "SampleApp",
+      "id": "5A0000000000000000000601",
+      "product": "Products/SampleApp.app",
+      "product-type": "application",
+      "specialized-configurations": [
+        { "name": "Debug", "file": "SampleApp/SampleApp.xcconfig" },
+        { "name": "Release", "file": "SampleApp/SampleApp.xcconfig" },
+      ],
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+        "resources",
+      ],
+      "package-product-members": [
+        {
+          "package": "LocalKit",
+          "product-name": "LocalKit",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": "swift-collections",
+          "product-name": "Collections",
+          "build-phase": { "build-phase": "frameworks" },
+        },
+      ],
+      "build-settings": {
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+        "CODE_SIGN_ENTITLEMENTS": "SampleApp/SampleApp.entitlements",
+        "HEADER_SEARCH_PATHS": [
+          "$(inherited)",
+          "$(SRCROOT)/Vendor/include",
+        ],
+        "INFOPLIST_FILE": "SampleApp/Info.plist",
+        "OTHER_SWIFT_FLAGS": "$(inherited) \"-D\" \"SAMPLE_FLAG\"",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleApp",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
+        "SWIFT_STRICT_CONCURRENCY[config=Debug]": "targeted",
+      },
+    }, {
+      "name": "SampleAppTests",
+      "id": "C30000000000000000000602",
+      "product": "Products/SampleAppTests.xctest",
+      "product-type": "bundle.unit-test",
+      "test-host-target": "SampleApp",
+      "dependencies": [
+        "SampleApp",
+      ],
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+        "resources",
+      ],
+      "build-settings": {
+        "BUNDLE_LOADER": "$(TEST_HOST)",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppTests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_VERSION": "6.0",
+        "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/SampleApp.app/SampleApp",
+      },
+    }, {
+      "name": "SampleAppUITests",
+      "id": "5A0000000000000000000603",
+      "product": "Products/SampleAppUITests.xctest",
+      "product-type": "bundle.ui-testing",
+      "test-host-target": "SampleApp",
+      "dependencies": [
+        "SampleApp",
+      ],
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+        "resources",
+      ],
+      "build-settings": {
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.SampleAppUITests",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "TEST_TARGET_NAME": "SampleApp",
+      },
+    },
+  ],
+  "build-settings": {
+    "ALWAYS_SEARCH_USER_PATHS": "NO",
+    "CODE_SIGN_IDENTITY[config=Debug][sdk=iphoneos*]": "iPhone Developer",
+    "DEBUG_INFORMATION_FORMAT[config=Debug]": "dwarf",
+    "DEBUG_INFORMATION_FORMAT[config=Release]": "dwarf-with-dsym",
+    "GCC_PREPROCESSOR_DEFINITIONS[config=Debug]": [
+      "DEBUG=1",
+      "$(inherited)",
+    ],
+    "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
+    "MACOSX_DEPLOYMENT_TARGET": "14.0",
+    "ONLY_ACTIVE_ARCH[config=Debug]": "YES",
+    "SDKROOT": "iphoneos",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS[config=Debug]": "DEBUG $(inherited)",
+    "SWIFT_COMPILATION_MODE[config=Release]": "wholemodule",
+    "SWIFT_OPTIMIZATION_LEVEL[config=Debug]": "-Onone",
+    "SWIFT_VERSION": "5.0",
+    "VALIDATE_PRODUCT[config=Release]": "YES",
+  },
+  "last-upgrade": "15.0",
+  "last-swift-update": "15.0",
+}

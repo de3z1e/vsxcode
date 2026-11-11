@@ -288,6 +288,7 @@
         "release": "node scripts/release.js",
         "test:flag-parity": "npm run compile && node scripts/flag-parity.js",
         "test:pbxproj": "npm run compile && node scripts/pbxproj-check.js",
+        "test:xcproj": "npm run compile && node scripts/xcproj-check.js",
         "test:file-sync": "npm run compile && node scripts/file-sync-check.js",
         "test:swiftpm-project": "npm run compile && node scripts/swiftpm-project-check.js",
         "test:toolchain": "npm run compile && node scripts/toolchain-check.js",

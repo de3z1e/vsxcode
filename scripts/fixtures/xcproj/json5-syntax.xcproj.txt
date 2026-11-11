@@ -1,0 +1,26 @@
+﻿// Fixture for `npm run test:xcproj`: a valid project written with the JSON5 syntax Xcode accepts. It has comments,
+// unquoted, hyphenated and single-quoted keys, trailing commas, CRLF line endings and a byte-order mark. Two keys are
+// given twice, default-configuration and SWIFT_VERSION; Xcode reads the first of each (Debug, 5.0), plutil the last.
+{
+  /* The configuration Xcode uses when none is named. */
+  default-configuration: 'Debug',
+  configurations: [ 'Debug', 'Release', ],
+  localizations: { development: "en", },
+  files: [
+    { kind: "group", path: 'App', children: [
+        { path: "A.swift", target-membership: [ "App/compile-sources", ], },
+        { path: 'B.swift', 'target-membership': [ 'App/compile-sources' ] },
+    ], },
+    { kind: 'group', name: "Products", children: [
+        { path: "<PRODUCTS>/App.app", id: "AAAAAAAAAAAAAAAAAAAAAAAA", type: 'wrapper.application', index: false, },
+    ], },
+  ],
+  targets: [
+    {
+      name: 'App', id: "BBBBBBBBBBBBBBBBBBBBBBBB", product: "Products/App.app", 'product-type': "application",
+      build-phases: [ "compile-sources", ],
+      build-settings: { SWIFT_VERSION: "5.0", PRODUCT_NAME: "$(TARGET_NAME)", SWIFT_VERSION: '6.0', SDKROOT: "iphoneos", },
+    },
+  ],
+  "default-configuration": "Release", // given again: Xcode keeps the first
+}
