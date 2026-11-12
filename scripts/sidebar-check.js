@@ -3,12 +3,17 @@
  * Sidebar data check.
  *
  * Runs the compiled SidebarProvider (out/providers/sidebarProvider.js) in plain Node against a stubbed `vscode`, on a temp
- * copy of the JSON SyncApp fixture. Each case changes the target's Swift version twice with VSXcode's own writers, calls
- * `refresh()` after each change as the project-file watcher does, and lets the tree ask for its children after every change
- * event as VS Code does. Chosen `xcodebuild -list` calls are delayed so that the order in which two overlapping loads finish
- * is fixed rather than left to timing. Whatever the order, the Swift Language Version row must end on the value the project
- * file holds: a load overtaken by a refresh or a newer load may have read the file before the last change, so it must not
- * publish what it read.
+ * copy of the JSON SyncApp fixture, changing the target's Swift version with VSXcode's own writers. The tree asks for its
+ * children after every change event, as VS Code does, and chosen `xcodebuild -list` calls are delayed so that the order in
+ * which overlapping loads finish is fixed rather than left to timing.
+ *
+ * The refresh cases change the version twice and call `refresh()` after each change, as the project-file watcher does.
+ * Whatever order the loads finish in, the Swift Language Version row must end on the value the project file holds: a load
+ * overtaken by a refresh or a newer load may have read the file before the last change, so it must not publish what it read.
+ * The other cases change it once: a written value must show at once without a load (`applyWrittenSetting`), a command during
+ * a reload must wait for that load rather than start another (`ensureProjectData`), and a load that read the file before a
+ * write must not paint the older value back. In every case the row must never go blank and no load may run more than one
+ * first-launch check. Last, with no Xcode identity a first-launch pass must not be shared.
  *
  * Requires a full Xcode: the loads run the real xcodebuild, simctl and devicectl probes.
  *
@@ -28,14 +33,21 @@ const OUT = path.join(REPO, 'out');
 const FIXTURE = fs.readFileSync(path.join(__dirname, 'fixtures', 'xcproj', 'synchronized.xcproj.txt'), 'utf8');
 
 // ── Delayed xcodebuild -list ─────────────────────────────────────────────────────────
-// The sidebar runs `xcodebuild -list` before its other probes, so delaying it delays that load as a whole.
+// A load publishes only after its probes, which start once `xcodebuild -list` is done (only a bundle id formula's
+// `-showBuildSettings` starts before it), so delaying `-list` delays the load's publish.
 
 let listDelays = [];
 let firstLaunchChecks = 0;
+let failXcodeSelect = false;
 const realExecFile = cp.execFile;
 // Arguments pass through as given (exec, for one, calls execFile without an argument list).
 function execFileWithDelays(...args) {
     const [file, list] = args;
+    if (failXcodeSelect && file === 'xcode-select') {
+        const callback = args.find((arg) => typeof arg === 'function');
+        setImmediate(() => callback(Object.assign(new Error('xcode-select: no developer directory'), { code: 2 }), '', ''));
+        return undefined;
+    }
     const xcodebuild = file === 'xcodebuild' && Array.isArray(list);
     if (xcodebuild && list[0] === '-checkFirstLaunchStatus') { firstLaunchChecks++; }
     if (xcodebuild && list[0] === '-list') {
@@ -211,8 +223,8 @@ async function runCase(testCase) {
         if (shown.includes('')) { problems.push(`the row went blank: ${JSON.stringify(shown)}`); }
         // One first-launch check serves a whole load, or none when a recent pass is still trusted.
         if (firstLaunchChecks > loads.length) { problems.push(`${firstLaunchChecks} first-launch checks for ${loads.length} load(s)`); }
-        // One load to start and one per refresh: the fixture already holds 6.0, so without them every case would pass on the
-        // first load alone. Then the order of the refreshes' two loads, so a timing change can't let the first case pass
+        // One load to start and one per refresh: the fixture already holds 6.0, so without them the refresh cases would pass
+        // on the first load alone. Then the order of the refreshes' two loads, so a timing change can't let the first case pass
         // without the older finishing last.
         if (!testCase.flow && loads.length < 3) { problems.push(`expected a load to start and one per refresh, saw ${loads.length}`); }
         const [older, newer] = loads.slice(-2);
@@ -248,6 +260,23 @@ async function runCase(testCase) {
         for (const problem of outcome.problems) { console.log(`        ${problem}`); }
         console.log(`        rows shown: ${JSON.stringify(outcome.shown)}`);
         for (const message of outcome.logs.slice(-8)) { console.log(`        log: ${message}`); }
+    }
+    // With no Xcode identity (xcode-select failing) a first-launch pass isn't shared: nothing ties it to one Xcode.
+    const { isXcodeFirstLaunchComplete } = require(path.join(OUT, 'utils', 'version.js'));
+    failXcodeSelect = true;
+    firstLaunchChecks = 0;
+    try {
+        await isXcodeFirstLaunchComplete();
+        await isXcodeFirstLaunchComplete();
+    } finally {
+        failXcodeSelect = false;
+    }
+    if (firstLaunchChecks === 2) {
+        console.log('  PASS  with no Xcode identity, a first-launch pass is not shared');
+    } else {
+        failures++;
+        console.log('  FAIL  with no Xcode identity, a first-launch pass is not shared');
+        console.log(`        ${firstLaunchChecks} first-launch check(s) for two calls, not 2`);
     }
     console.log(failures === 0 ? '\nSidebar check OK.' : `\n${failures} case(s) failed.`);
     process.exit(failures === 0 ? 0 : 1);

@@ -104,14 +104,16 @@ let firstLaunchCheck: { key: string; at: number; result: Promise<boolean> } | un
  * block indefinitely and simulator builds fail, so the device subsystems gate
  * on this fast check. Any failure/timeout fails safe to "not ready".
  * A pass is shared for a minute per selected Xcode (one sidebar load asks four times); a failure isn't kept, since setup can finish any moment.
+ * With no Xcode identity (`xcode-select -p` failed) nothing is shared, since nothing ties the answer to one Xcode.
  */
 export async function isXcodeFirstLaunchComplete(): Promise<boolean> {
     const key = await selectedXcodeKey();
     const now = Date.now();
-    if (firstLaunchCheck && firstLaunchCheck.key === key && now - firstLaunchCheck.at < FIRST_LAUNCH_TRUST_MS) {
+    if (key && firstLaunchCheck && firstLaunchCheck.key === key && now - firstLaunchCheck.at < FIRST_LAUNCH_TRUST_MS) {
         return firstLaunchCheck.result;
     }
     const result = execFile('xcodebuild', ['-checkFirstLaunchStatus'], { encoding: 'utf8', timeout: 10000 }).then(() => true, () => false);
+    if (!key) { return result; }
     const check = { key, at: now, result };
     firstLaunchCheck = check;
     void result.then((complete) => {

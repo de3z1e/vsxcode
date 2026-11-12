@@ -84,7 +84,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   chosen `xcodebuild -list` calls delayed so two loads overlap and the older finishes last (and the controls: the newer
   last, no overlap). The Swift Language Version row must end on the value the file holds and never go blank, a written
   value must show at once without a load, a command during a reload must wait for that load rather than start one, and no
-  load may run more than one first-launch check. Requires a full Xcode.
+  load may run more than one first-launch check; with no Xcode identity, a first-launch pass must not be shared. Requires a
+  full Xcode.
 - `npm run test:toolchain` — Run the compiled toolchain helpers in plain Node under every Xcode found among
   `/Applications/Xcode.app` and `/Applications/Xcode_26.app` (override with a colon-separated
   `VSXCODE_XCODE_APPS`), selecting each through `DEVELOPER_DIR`: the detected version, the simulator UI it
