@@ -310,6 +310,15 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
         return done;
     }
 
+    /** The project data after the newest running load lands: after a pick, the selection-derived parts in place (the leftover-install list) are the previous selection's until then. */
+    async settledProjectData(config?: BuildTaskConfig | null): Promise<ProjectData | null> {
+        const latest = this.latestLoad;
+        if (latest && latest.generation === this.loadGeneration) {
+            await latest.done.catch((error) => this.log(`[sidebar] loading project data failed: ${error}`));
+        }
+        return this.ensureProjectData(config);
+    }
+
     /** The project data; when a refresh dropped it, waits for the newest running load (or starts one) rather than adding a second. */
     async ensureProjectData(config?: BuildTaskConfig | null): Promise<ProjectData | null> {
         // An overtaken load publishes nothing, so a few rounds may be needed; three is plenty in practice.

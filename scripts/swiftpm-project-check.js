@@ -351,6 +351,16 @@ function xcprojCanonical(bundle) {
 
 const logLines = (result, text) => (result.log || []).filter((line) => line.includes(text));
 
+/** An available iOS simulator's name, to pick in the device picker. Never printed: simulators can carry custom names. */
+function availableSimulatorName() {
+    const result = spawnSync('/usr/bin/xcrun', ['simctl', 'list', 'devices', 'available', '-j'], { encoding: 'utf8' });
+    if (result.status !== 0) { return undefined; }
+    for (const [runtime, devices] of Object.entries(JSON.parse(result.stdout).devices)) {
+        if (/iOS/.test(runtime) && devices.length > 0) { return devices[0].name; }
+    }
+    return undefined;
+}
+
 function makeWorkspace(kind) {
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'vsxcode-swiftpm-project-')));
     const write = (relative, contents) => {
@@ -726,6 +736,30 @@ const SCENARIOS = [
                 expect.that(pickers[0].labels.includes('My Mac'), `the picker lists no My Mac among its ${pickers[0].labels.length} entries`);
             }
             return { workspace, problems: expect.problems, logs: [open, changed, picker] };
+        }
+    },
+    {
+        name: 'picking a device redraws the sidebar with its data in place',
+        run() {
+            const workspace = makeWorkspace('ordinary-json');
+            const simulator = availableSimulatorName();
+            const expect = expectations('device pick');
+            if (!simulator) {
+                expect.that(false, 'no available iOS simulator to pick');
+                return { workspace, problems: expect.problems, logs: [] };
+            }
+            const [open, picked, toggled] = runSteps(workspace, [
+                { kind: 'activate' },
+                { kind: 'command', id: 'vsxcode.sidebar.selectSimulator', inputs: [simulator] },
+                // The dev toggle's log line reads the sidebar's data directly: had the pick dropped it, it would name no bundle id.
+                { kind: 'command', id: 'vsxcode.sidebar.toggleDevBundleId' }
+            ]);
+            for (const result of [open, picked, toggled]) { checkNoCrash(result, expect); }
+            const stored = JSON.parse(fs.readFileSync(workspace.statePath, 'utf8')).buildTaskConfig || {};
+            expect.that(stored.simulatorDevice === simulator, 'the picked simulator was not stored');
+            expect.that(logLines(toggled, 'builds install as com.example.SyncApp-dev').length === 1,
+                `the sidebar's data was gone after the pick: ${JSON.stringify(logLines(toggled, '[dev-bundle-id]'))}`);
+            return { workspace, problems: expect.problems, logs: [open, picked, toggled] };
         }
     },
     {

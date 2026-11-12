@@ -116,7 +116,9 @@ const CASES = [
     { name: 'a command during a reload waits for it', listDelays: [0, 1500], flow: 'ensure', expected: '5.0' },
     // A load that read the file before a write (one no refresh started, as after a setting already in the file) must not
     // paint the older value over the written one when it finishes.
-    { name: 'a load that read the file before a write keeps the written value', listDelays: [0, 1500], flow: 'stale-load', expected: '5.0' }
+    { name: 'a load that read the file before a write keeps the written value', listDelays: [0, 1500], flow: 'stale-load', expected: '5.0' },
+    // A command acting on what a load works out from the selection waits for the running load, unlike one that only needs data.
+    { name: 'a command that needs the settled data waits for the running load', listDelays: [0, 1500], flow: 'settled', expected: '5.0' }
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -191,6 +193,18 @@ async function runCase(testCase) {
             await sleep(200);
             await setSwiftVersion('5.0');
             provider.applyWrittenSetting('SyncApp', 'SWIFT_VERSION', '5.0');
+            await running;
+            await settled();
+        } else if (testCase.flow === 'settled') {
+            await setSwiftVersion('5.0');
+            const running = provider.loadProjectData(config);
+            await sleep(200);
+            const before = loads.length;
+            const current = await provider.ensureProjectData(config);
+            if (current?.swiftVersionByTarget.SyncApp !== '6.0') { problems.push(`ensureProjectData returned ${current?.swiftVersionByTarget.SyncApp}, not the data in place (6.0)`); }
+            const afterLoad = await provider.settledProjectData(config);
+            if (afterLoad?.swiftVersionByTarget.SyncApp !== '5.0') { problems.push(`settledProjectData returned ${afterLoad?.swiftVersionByTarget.SyncApp}, not the running load's 5.0`); }
+            if (loads.length !== before) { problems.push(`waiting started ${loads.length - before} load(s)`); }
             await running;
             await settled();
         } else if (testCase.flow === 'ensure') {

@@ -1428,15 +1428,27 @@ export function activate(context: vscode.ExtensionContext): void {
         if (seed && lastKnownPbxBundleId === undefined) { lastKnownPbxBundleId = seed; }
     })();
 
-    // Helper to patch config and refresh sidebar
+    /** Selection fields the loaded sidebar data depends on: the leftover-install warning checks the selected simulator for the selected target's app. */
+    const SELECTION_FIELDS_IN_DATA: ReadonlyArray<keyof BuildTaskConfig> = [
+        'targetName', 'productName', 'simulatorDevice', 'simulatorUdid', 'isPhysicalDevice', 'deviceIdentifier', 'destinationType'
+    ];
+
+    /** Stores a selection and shows it at once; only a change of project drops the sidebar's data. */
     async function updateConfig(patch: Partial<BuildTaskConfig>): Promise<void> {
         const current = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
         if (!current) { return; }
-        await context.workspaceState.update('buildTaskConfig', { ...current, ...patch });
-        // Changing project/target/scheme/device invalidates target-keyed
-        // data (bundleIdByTarget) and simulator-keyed data
-        // (staleSimulatorInstalls), so reload rather than just redraw.
-        sidebarProvider.refresh();
+        const next = { ...current, ...patch };
+        await context.workspaceState.update('buildTaskConfig', next);
+        if (next.projectFile !== current.projectFile) {
+            // Every row's data belongs to the old project: drop it and let the tree load the new one.
+            sidebarProvider.refresh();
+            return;
+        }
+        // The data covers every target, so redraw now; only the leftover-install warning needs a reload, done in place.
+        sidebarProvider.notifyConfigChanged();
+        if (SELECTION_FIELDS_IN_DATA.some((field) => next[field] !== current[field])) {
+            sidebarProvider.loadProjectData(next).catch((error) => log(`[sidebar] reload failed: ${error}`));
+        }
     }
 
     // ── Package.swift commands ────────────────────────────────
@@ -1732,7 +1744,8 @@ export function activate(context: vscode.ExtensionContext): void {
         'vsxcode.sidebar.uninstallStaleAppsOnSimulator',
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-            const data = await sidebarProvider.ensureProjectData(config);
+            // The leftover list belongs to the selected target and simulator: after a pick, wait for the reload that redoes it.
+            const data = await sidebarProvider.settledProjectData(config);
             if (!config || !data) { return; }
             const stale = data.staleSimulatorInstalls;
             if (stale.length === 0) {
