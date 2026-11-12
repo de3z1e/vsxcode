@@ -212,6 +212,34 @@ function runChild({ root, statePath, steps }) {
                 const labelOf = (item) => (typeof item === 'string' ? item : item && item.label);
                 return answer === undefined ? undefined : (await items).find((item) => labelOf(item) === answer);
             },
+            // Records only item labels (My Mac's description holds this Mac's name); answered from `inputs` by label, else closed.
+            createQuickPick: () => {
+                const handlers = { accept: [], hide: [] };
+                const quickPick = {
+                    items: [], activeItems: [], selectedItems: [], placeholder: '',
+                    onDidAccept: (listener) => { handlers.accept.push(listener); return disposable; },
+                    onDidHide: (listener) => { handlers.hide.push(listener); return disposable; },
+                    onDidChangeSelection: () => disposable,
+                    onDidChangeActive: () => disposable,
+                    onDidChangeValue: () => disposable,
+                    show() {
+                        record('createQuickPick', { placeholder: quickPick.placeholder, labels: quickPick.items.map((item) => item.label) });
+                        const answer = inputs.shift();
+                        const item = answer === undefined ? undefined : quickPick.items.find((candidate) => candidate.label === answer);
+                        setImmediate(() => {
+                            if (item) {
+                                quickPick.selectedItems = [item];
+                                for (const listener of handlers.accept) { listener(); }
+                            } else {
+                                for (const listener of handlers.hide) { listener(); }
+                            }
+                        });
+                    },
+                    hide() { for (const listener of handlers.hide) { listener(); } },
+                    dispose() {}
+                };
+                return quickPick;
+            },
             showInputBox: async (options) => {
                 record('inputBox', { prompt: options && options.prompt, value: options && options.value });
                 return inputs.shift();
@@ -673,6 +701,31 @@ const SCENARIOS = [
             expect.that(logLines(open, `bundle id resolved: ${resolved}`).length === 1, 'the sidebar logged no resolved bundle id');
             expect.that(!ask.changed.includes(projectFile), 'escaping the box changed project.xcproj');
             return { workspace, problems: expect.problems, logs: [open, ask] };
+        }
+    },
+    {
+        name: 'the device picker opened while the sidebar reloads still lists My Mac',
+        run() {
+            const workspace = makeWorkspace('ordinary-json');
+            const projectFile = 'SyncApp.xcodeproj/project.xcproj';
+            // A project that builds for macOS too, so the picker owes it a My Mac entry.
+            fs.writeFileSync(path.join(workspace.root, projectFile), replaceOnce(SYNC_APP_JSON, '    "SDKROOT": "iphoneos",\n',
+                '    "SDKROOT": "iphoneos",\n    "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator macosx",\n'));
+            const [open, changed, picker] = runSteps(workspace, [
+                { kind: 'activate' },
+                // Drops the sidebar's data, and with no tree drawn nothing reloads it, as with the view hidden.
+                { kind: 'fire', glob: '**/*.xcproj', event: 'change', relative: projectFile },
+                { kind: 'command', id: 'vsxcode.sidebar.selectSimulator', inputs: [] }
+            ]);
+            const expect = expectations('device picker');
+            for (const result of [open, changed, picker]) { checkNoCrash(result, expect); }
+            const pickers = of(picker, 'createQuickPick');
+            expect.that(pickers.length === 1, `expected one picker, saw ${pickers.length}`);
+            if (pickers[0]) {
+                // A count, not labels: the other entries are this Mac's paired devices, whose names are private.
+                expect.that(pickers[0].labels.includes('My Mac'), `the picker lists no My Mac among its ${pickers[0].labels.length} entries`);
+            }
+            return { workspace, problems: expect.problems, logs: [open, changed, picker] };
         }
     },
     {

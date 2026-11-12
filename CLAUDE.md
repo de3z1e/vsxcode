@@ -74,7 +74,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   the tree after the folder opens; a SwiftPM-generated project in the JSON format lists and backs up
   `project.xcproj`. The same harness checks the extension's handling of the project file: a setting command
   writes only a changed text, which `xcprojformatter` leaves as it is; a bundle id formula (Xcode 27.2's new-project
-  default) opens in the edit box as written, with the resolved id noted in its prompt; a project file appearing in a package
+  default) opens in the edit box as written, with the resolved id noted in its prompt; the device picker opened while the
+  sidebar's data is dropped (a project-file change with the view not drawn) still lists My Mac; a project file appearing in a package
   checkout, or the workspace project's own file saved atomically, changes nothing; a second definition file in
   the bundle is reported once, in Xcode's words, after a 1 s re-check; and the switch to the JSON file refreshes
   once. Requires a full Xcode, since activation runs `xcodebuild -list` and lists simulators, and Xcode 27.2 or
@@ -331,8 +332,10 @@ src/
 - **Sidebar data**: `refresh()` drops the data and the tree's next `getChildren` loads it again, so a refresh during a load
   runs two loads at once. Every refresh, every load and every written setting bumps a generation, and a load publishes only
   while it is still the latest: one that read the project file before the last change, finishing last, would otherwise paint the older values over
-  the newer ones. The tree and the setting commands get the data through `ensureProjectData`, which waits for the newest
-  load (or starts one) instead of starting another or finding nothing, so a click during a reload waits for it. A setting
+  the newer ones. The tree and every command that acts on the data (the setting commands, Change Project, Target and Scheme,
+  the leftover-app uninstall, Select Device, Build and Build & Run) get it through `ensureProjectData`, which waits for the
+  newest load (or starts one) instead of starting another or finding nothing, so a click during a reload, or with the view
+  hidden, waits for it rather than doing nothing or acting on missing data (no My Mac, a test target built as an app). A setting
   command that wrote the file shows the value at once (`applyWrittenSetting`, about 20 ms from the pick); the reload the
   file change starts then confirms it. One that wrote nothing (the file already holds the value) reloads the data itself,
   since no watcher event will, in place, so the current values stay until the new ones arrive. A load costs about 0.7 s,

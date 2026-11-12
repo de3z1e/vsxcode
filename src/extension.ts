@@ -1526,7 +1526,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const changeProjectCmd = vscode.commands.registerCommand(
         'vsxcode.sidebar.changeProject',
         async () => {
-            const data = sidebarProvider.getProjectData();
+            const data = await sidebarProvider.ensureProjectData(context.workspaceState.get<BuildTaskConfig>('buildTaskConfig'));
             if (!data || data.xcodeProjects.length <= 1) { return; }
             const pick = await vscode.window.showQuickPick(data.xcodeProjects, {
                 placeHolder: 'Select Xcode project'
@@ -1541,8 +1541,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const changeTargetCmd = vscode.commands.registerCommand(
         'vsxcode.sidebar.changeTarget',
         async () => {
-            const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            const data = await sidebarProvider.ensureProjectData(config);
             if (!data || !config) { return; }
             type TargetPick = vscode.QuickPickItem & { targetName: string };
             const picks: TargetPick[] = data.targets.map((t) => ({
@@ -1583,8 +1583,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const changeSchemeCmd = vscode.commands.registerCommand(
         'vsxcode.sidebar.changeScheme',
         async () => {
-            const data = sidebarProvider.getProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
+            const data = await sidebarProvider.ensureProjectData(config);
             if (!data || !config || data.schemes.length === 0) { return; }
             const active = data.schemes.find(s => s === config.schemeName);
             const pick = await new Promise<string | undefined>((resolve) => {
@@ -1732,7 +1732,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'vsxcode.sidebar.uninstallStaleAppsOnSimulator',
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-            const data = sidebarProvider.getProjectData();
+            const data = await sidebarProvider.ensureProjectData(config);
             if (!config || !data) { return; }
             const stale = data.staleSimulatorInstalls;
             if (stale.length === 0) {
@@ -1762,11 +1762,13 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
-            const [simulators, physicalDevices] = await Promise.all([
+            // The project data alongside the listings: during a reload it would be missing, and My Mac with it.
+            const [simulators, physicalDevices, projectData] = await Promise.all([
                 listAvailableSimulators(),
                 listPhysicalDevices(),
+                sidebarProvider.ensureProjectData(config),
             ]);
-            const macSupported = !!sidebarProvider.getProjectData()?.macSupportByTarget?.[config.targetName];
+            const macSupported = !!projectData?.macSupportByTarget?.[config.targetName];
             const macDest = macSupported ? await getMyMacDestination() : null;
             if (simulators.length === 0 && physicalDevices.length === 0 && !macDest) {
                 // An empty list may mean Xcode setup is pending, not truly no devices — offer the fix.
@@ -1929,7 +1931,8 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             await cancelActiveRun();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-            const data = sidebarProvider.getProjectData();
+            // Without the data a test target would be built as an app; during a reload this waits for it.
+            const data = await sidebarProvider.ensureProjectData(config);
             const target = data?.targets.find(t => t.name === config?.targetName);
             // Test target: build-for-testing (compiles test target without running)
             if (target && isTestTarget(target.productType)) {
@@ -2523,8 +2526,8 @@ export function activate(context: vscode.ExtensionContext): void {
                 });
                 return;
             }
-            // Test target: run tests instead of build-install-run
-            const data = sidebarProvider.getProjectData();
+            // Test target: run tests instead of build-install-run; waits for the data during a reload.
+            const data = await sidebarProvider.ensureProjectData(config);
             const target = data?.targets.find(t => t.name === config.targetName);
             if (target && isTestTarget(target.productType)) {
                 await cancelActiveRun();
