@@ -118,7 +118,9 @@ const CASES = [
     // paint the older value over the written one when it finishes.
     { name: 'a load that read the file before a write keeps the written value', listDelays: [0, 1500], flow: 'stale-load', expected: '5.0' },
     // A command acting on what a load works out from the selection waits for the running load, unlike one that only needs data.
-    { name: 'a command that needs the settled data waits for the running load', listDelays: [0, 1500], flow: 'settled', expected: '5.0' }
+    { name: 'a command that needs the settled data waits for the running load', listDelays: [0, 1500], flow: 'settled', expected: '5.0' },
+    // A load started during that wait overtakes the awaited one and finishes last: the wait must follow it.
+    { name: 'the settled data follows a load that overtakes the awaited one', listDelays: [0, 1000, 2000], flow: 'settled-overtaken', expected: '4.0' }
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -195,6 +197,18 @@ async function runCase(testCase) {
             provider.applyWrittenSetting('SyncApp', 'SWIFT_VERSION', '5.0');
             await running;
             await settled();
+        } else if (testCase.flow === 'settled-overtaken') {
+            await setSwiftVersion('5.0');
+            const first = provider.loadProjectData(config);
+            await sleep(200);
+            const waiting = provider.settledProjectData();
+            await sleep(200);
+            await setSwiftVersion('4.0');
+            const second = provider.loadProjectData(config);
+            const afterLoads = await waiting;
+            if (afterLoads?.swiftVersionByTarget.SyncApp !== '4.0') { problems.push(`settledProjectData returned ${afterLoads?.swiftVersionByTarget.SyncApp}, not the overtaking load's 4.0`); }
+            await Promise.all([first, second]);
+            await settled();
         } else if (testCase.flow === 'settled') {
             await setSwiftVersion('5.0');
             const running = provider.loadProjectData(config);
@@ -202,7 +216,7 @@ async function runCase(testCase) {
             const before = loads.length;
             const current = await provider.ensureProjectData(config);
             if (current?.swiftVersionByTarget.SyncApp !== '6.0') { problems.push(`ensureProjectData returned ${current?.swiftVersionByTarget.SyncApp}, not the data in place (6.0)`); }
-            const afterLoad = await provider.settledProjectData(config);
+            const afterLoad = await provider.settledProjectData();
             if (afterLoad?.swiftVersionByTarget.SyncApp !== '5.0') { problems.push(`settledProjectData returned ${afterLoad?.swiftVersionByTarget.SyncApp}, not the running load's 5.0`); }
             if (loads.length !== before) { problems.push(`waiting started ${loads.length - before} load(s)`); }
             await running;

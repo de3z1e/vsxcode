@@ -86,8 +86,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   chosen `xcodebuild -list` calls delayed so two loads overlap and the older finishes last (and the controls: the newer
   last, no overlap). The Swift Language Version row must end on the value the file holds and never go blank, a written
   value must show at once without a load, a command during a reload must wait for that load rather than start one, one
-  acting on the selection must wait for the running load, and no load may run more than one first-launch check; with no
-  Xcode identity, a first-launch pass must not be shared. Requires a full Xcode.
+  acting on the selection must wait for the newest running load, also one that overtakes the awaited one, and no load
+  may run more than one first-launch check; with no Xcode identity, a first-launch pass must not be shared. Requires a
+  full Xcode.
 - `npm run test:toolchain` — Run the compiled toolchain helpers in plain Node under every Xcode found among
   `/Applications/Xcode.app` and `/Applications/Xcode_26.app` (override with a colon-separated
   `VSXCODE_XCODE_APPS`), selecting each through `DEVELOPER_DIR`: the detected version, the simulator UI it
@@ -334,14 +335,15 @@ src/
   load runs two loads at once. Every refresh, every load and every written setting bumps a generation, and a load
   publishes only while it is still the latest: one that read the project file before the last change, finishing last,
   would otherwise paint the older values over the newer ones. The tree and every command that acts on the data (the
-  setting commands, Change Project, Target and Scheme, the leftover-app uninstall, Select Device, Build and Build & Run)
-  get it through `ensureProjectData`, which waits for the newest load (or starts one) instead of starting another or
-  finding nothing, so a click during a reload, or with the view hidden, waits for it rather than doing nothing or acting
-  on missing data (no My Mac, a test target built as an app). Every row shows a new value as soon as VSXcode knows it.
-  Selections kept in workspace state (target, scheme, device, Dev Bundle ID) redraw at once from it (`updateConfig` →
+  setting commands, Change Project, Target and Scheme, Select Device, Build and Build & Run) get it through
+  `ensureProjectData`, which waits for the newest load (or starts one) instead of starting another or finding nothing,
+  so a click during a reload, or with the view hidden, waits for it rather than doing nothing or acting on missing data
+  (no My Mac, a test target built as an app). Every row shows a new value as soon as VSXcode knows it. Selections kept
+  in workspace state (target, scheme, device, Dev Bundle ID) redraw at once from it (`updateConfig` →
   `notifyConfigChanged`); the data covers every target, so only a change of project drops it, and a target or device
-  change reloads it in place for the leftover-install warning, which reads both; the uninstall that acts on that list
-  waits for the running reload (`settledProjectData`). A setting command that wrote the file shows the value at once
+  change reloads it in place for the leftover-install warning, which reads both; the leftover-app uninstall, which acts
+  on that list, waits for the newest running reload, also one that overtakes the awaited one, and reads the selection
+  again before acting (`settledProjectData`). A setting command that wrote the file shows the value at once
   (`applyWrittenSetting`, about 20 ms from the pick); the reload the file change starts then confirms it. One that wrote
   nothing (the file already holds the value) reloads the data itself, since no watcher event will, in place, so the
   current values stay until the new ones arrive. A load costs about 0.7 s, nearly all xcodebuild: `-list`, and

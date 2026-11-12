@@ -1438,17 +1438,21 @@ export function activate(context: vscode.ExtensionContext): void {
         const current = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
         if (!current) { return; }
         const next = { ...current, ...patch };
-        await context.workspaceState.update('buildTaskConfig', next);
+        // The memento holds the new selection as soon as update() is called; its promise only settles the save. The reload
+        // for that selection starts in the same synchronous step, before awaiting it, so a wait on the newest load (the
+        // leftover-app uninstall's) never sees the new selection without a load for it.
+        const persisted = context.workspaceState.update('buildTaskConfig', next);
         if (next.projectFile !== current.projectFile) {
             // Every row's data belongs to the old project: drop it and let the tree load the new one.
             sidebarProvider.refresh();
-            return;
+        } else {
+            // The data covers every target, so redraw now; only the leftover-install warning needs a reload, done in place.
+            sidebarProvider.notifyConfigChanged();
+            if (SELECTION_FIELDS_IN_DATA.some((field) => next[field] !== current[field])) {
+                sidebarProvider.loadProjectData(next).catch((error) => log(`[sidebar] reload failed: ${error}`));
+            }
         }
-        // The data covers every target, so redraw now; only the leftover-install warning needs a reload, done in place.
-        sidebarProvider.notifyConfigChanged();
-        if (SELECTION_FIELDS_IN_DATA.some((field) => next[field] !== current[field])) {
-            sidebarProvider.loadProjectData(next).catch((error) => log(`[sidebar] reload failed: ${error}`));
-        }
+        await persisted;
     }
 
     // ── Package.swift commands ────────────────────────────────
@@ -1743,9 +1747,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const uninstallStaleAppsCmd = vscode.commands.registerCommand(
         'vsxcode.sidebar.uninstallStaleAppsOnSimulator',
         async () => {
+            // The leftover list is the newest reload's; re-read the selection after it, since a pick may land during the wait.
+            const data = await sidebarProvider.settledProjectData();
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
-            // The leftover list belongs to the selected target and simulator: after a pick, wait for the reload that redoes it.
-            const data = await sidebarProvider.settledProjectData(config);
             if (!config || !data) { return; }
             const stale = data.staleSimulatorInstalls;
             if (stale.length === 0) {
