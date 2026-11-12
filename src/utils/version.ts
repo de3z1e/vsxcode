@@ -4,6 +4,7 @@ import type { ExecFileOptionsWithStringEncoding } from 'child_process';
 import { promises as fsp } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { selectedXcodeKey } from './xcodeToolchain';
 
 const execFile = promisify(execFileCallback) as (
     file: string,
@@ -93,19 +94,30 @@ export async function detectMacOSVersion(): Promise<string | null> {
     }
 }
 
+/** How long a passed first-launch check is trusted for the same selected Xcode. */
+const FIRST_LAUNCH_TRUST_MS = 60_000;
+let firstLaunchCheck: { key: string; at: number; result: Promise<boolean> } | undefined;
+
 /**
  * Whether Xcode's post-update first-launch tasks are complete. `xcodebuild
  * -checkFirstLaunchStatus` exits 0 when ready; while pending, simctl/devicectl
  * block indefinitely and simulator builds fail, so the device subsystems gate
  * on this fast check. Any failure/timeout fails safe to "not ready".
+ * A pass is shared for a minute per selected Xcode (one sidebar load asks four times); a failure isn't kept, since setup can finish any moment.
  */
 export async function isXcodeFirstLaunchComplete(): Promise<boolean> {
-    try {
-        await execFile('xcodebuild', ['-checkFirstLaunchStatus'], { encoding: 'utf8', timeout: 10000 });
-        return true;
-    } catch {
-        return false;
+    const key = await selectedXcodeKey();
+    const now = Date.now();
+    if (firstLaunchCheck && firstLaunchCheck.key === key && now - firstLaunchCheck.at < FIRST_LAUNCH_TRUST_MS) {
+        return firstLaunchCheck.result;
     }
+    const result = execFile('xcodebuild', ['-checkFirstLaunchStatus'], { encoding: 'utf8', timeout: 10000 }).then(() => true, () => false);
+    const check = { key, at: now, result };
+    firstLaunchCheck = check;
+    void result.then((complete) => {
+        if (!complete && firstLaunchCheck === check) { firstLaunchCheck = undefined; }
+    });
+    return result;
 }
 
 export function isXcodeFirstLaunchNeeded(error: unknown): boolean {

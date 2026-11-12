@@ -31,18 +31,22 @@ const FIXTURE = fs.readFileSync(path.join(__dirname, 'fixtures', 'xcproj', 'sync
 // The sidebar runs `xcodebuild -list` before its other probes, so delaying it delays that load as a whole.
 
 let listDelays = [];
+let firstLaunchChecks = 0;
 const realExecFile = cp.execFile;
-function execFileWithDelays(file, args, options, callback) {
-    if (typeof options === 'function') { callback = options; options = undefined; }
-    if (file === 'xcodebuild' && Array.isArray(args) && args[0] === '-list') {
+// Arguments pass through as given (exec, for one, calls execFile without an argument list).
+function execFileWithDelays(...args) {
+    const [file, list] = args;
+    const xcodebuild = file === 'xcodebuild' && Array.isArray(list);
+    if (xcodebuild && list[0] === '-checkFirstLaunchStatus') { firstLaunchChecks++; }
+    if (xcodebuild && list[0] === '-list') {
         const delay = listDelays.length > 0 ? listDelays.shift() : 0;
-        setTimeout(() => realExecFile(file, args, options, callback), delay);
+        setTimeout(() => realExecFile(...args), delay);
         return undefined;
     }
-    return realExecFile(file, args, options, callback);
+    return realExecFile(...args);
 }
-execFileWithDelays[util.promisify.custom] = (file, args, options) => new Promise((resolve, reject) => {
-    execFileWithDelays(file, args, options, (error, stdout, stderr) => (error ? reject(Object.assign(error, { stdout, stderr })) : resolve({ stdout, stderr })));
+execFileWithDelays[util.promisify.custom] = (...args) => new Promise((resolve, reject) => {
+    execFileWithDelays(...args, (error, stdout, stderr) => (error ? reject(Object.assign(error, { stdout, stderr })) : resolve({ stdout, stderr })));
 });
 // Before any compiled module loads, since each promisifies execFile when it loads.
 cp.execFile = execFileWithDelays;
@@ -93,7 +97,14 @@ const CASES = [
     // The bug this check pins: the second refresh comes while the first load runs, and the first load finishes last.
     { name: 'overlapping loads, the older finishing last', listDelays: [0, 2500, 0], between: 300, olderFinishesLast: true },
     { name: 'overlapping loads, the newer finishing last', listDelays: [0, 0, 2500], between: 300, olderFinishesLast: false },
-    { name: 'loads one after the other', listDelays: [0, 2500, 0], between: 'settle' }
+    { name: 'loads one after the other', listDelays: [0, 2500, 0], between: 'settle' },
+    // A written value shows at once, without a load; the reload its file change starts then keeps it.
+    { name: 'a written setting shows at once', listDelays: [0, 0], flow: 'written', expected: '5.0' },
+    // A command during a reload waits for that load instead of starting another, and gets the file's value.
+    { name: 'a command during a reload waits for it', listDelays: [0, 1500], flow: 'ensure', expected: '5.0' },
+    // A load that read the file before a write (one no refresh started, as after a setting already in the file) must not
+    // paint the older value over the written one when it finishes.
+    { name: 'a load that read the file before a write keeps the written value', listDelays: [0, 1500], flow: 'stale-load', expected: '5.0' }
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -149,27 +160,61 @@ async function runCase(testCase) {
             if (!await writeProjectFile(bundle, 'xcproj', text, (message) => logs.push(message))) { throw new Error(`${value} wasn't written`); }
         };
 
+        firstLaunchChecks = 0;
         await render();
         await settled();
-        await setSwiftVersion('5.0');
-        provider.refresh();
-        if (testCase.between === 'settle') { await settled(); } else { await sleep(testCase.between); }
-        await setSwiftVersion('6.0');
-        provider.refresh();
-        await settled();
-
         const problems = [];
+        if (testCase.flow === 'written') {
+            const before = loads.length;
+            await setSwiftVersion('5.0');
+            provider.applyWrittenSetting('SyncApp', 'SWIFT_VERSION', '5.0');
+            await sleep(50);
+            if (shown[shown.length - 1] !== 'Swift 5') { problems.push(`50 ms after the write the row showed ${JSON.stringify(shown[shown.length - 1])}`); }
+            if (loads.length !== before) { problems.push('showing the written value started a load'); }
+            // The project-file watcher's refresh.
+            provider.refresh();
+            await settled();
+        } else if (testCase.flow === 'stale-load') {
+            const running = provider.loadProjectData(config);
+            await sleep(200);
+            await setSwiftVersion('5.0');
+            provider.applyWrittenSetting('SyncApp', 'SWIFT_VERSION', '5.0');
+            await running;
+            await settled();
+        } else if (testCase.flow === 'ensure') {
+            await setSwiftVersion('5.0');
+            provider.refresh();
+            await sleep(200);
+            const before = loads.length;
+            const data = await provider.ensureProjectData(config);
+            if (loads.length !== before) { problems.push(`the command started ${loads.length - before} load(s) instead of waiting for the running one`); }
+            if (data?.swiftVersionByTarget.SyncApp !== '5.0') { problems.push(`the command got ${data?.swiftVersionByTarget.SyncApp}, not 5.0`); }
+            await settled();
+        } else {
+            await setSwiftVersion('5.0');
+            provider.refresh();
+            if (testCase.between === 'settle') { await settled(); } else { await sleep(testCase.between); }
+            await setSwiftVersion('6.0');
+            provider.refresh();
+            await settled();
+        }
+
         const text = fs.readFileSync(projectFile, 'utf8');
         const target = parseNativeTargets(text).find((candidate) => candidate.name === 'SyncApp');
         const inFile = getBuildSettingsForTarget(text, target.buildConfigurationListId, 'Debug').swiftVersion;
         const inSidebar = provider.getProjectData()?.swiftVersionByTarget.SyncApp;
-        if (inFile !== '6.0') { problems.push(`the project file holds ${inFile}, not 6.0`); }
+        const expected = testCase.expected || '6.0';
+        if (inFile !== expected) { problems.push(`the project file holds ${inFile}, not ${expected}`); }
         if (inSidebar !== inFile) { problems.push(`the sidebar holds ${inSidebar} while the project file holds ${inFile}`); }
-        if (shown[shown.length - 1] !== 'Swift 6') { problems.push(`the row last showed ${JSON.stringify(shown[shown.length - 1])}`); }
+        if (shown[shown.length - 1] !== `Swift ${expected.replace(/\.0$/, '')}`) { problems.push(`the row last showed ${JSON.stringify(shown[shown.length - 1])}`); }
+        // The tree waits for the newest load, so the row never goes blank in between.
+        if (shown.includes('')) { problems.push(`the row went blank: ${JSON.stringify(shown)}`); }
+        // One first-launch check serves a whole load, or none when a recent pass is still trusted.
+        if (firstLaunchChecks > loads.length) { problems.push(`${firstLaunchChecks} first-launch checks for ${loads.length} load(s)`); }
         // One load to start and one per refresh: the fixture already holds 6.0, so without them every case would pass on the
         // first load alone. Then the order of the refreshes' two loads, so a timing change can't let the first case pass
         // without the older finishing last.
-        if (loads.length < 3) { problems.push(`expected a load to start and one per refresh, saw ${loads.length}`); }
+        if (!testCase.flow && loads.length < 3) { problems.push(`expected a load to start and one per refresh, saw ${loads.length}`); }
         const [older, newer] = loads.slice(-2);
         if (testCase.olderFinishesLast !== undefined && older && newer) {
             const olderLast = older.finishedAs > newer.finishedAs;

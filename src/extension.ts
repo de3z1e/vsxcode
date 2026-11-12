@@ -1606,7 +1606,7 @@ export function activate(context: vscode.ExtensionContext): void {
      * Sets a build setting in every configuration of a target. The read, edit and write run on the sync's write queue, so a
      * sync job can't interleave; the text is written only when it changed, and only into the file it was read from.
      */
-    async function setTargetBuildSetting(projectFile: string, configurationListId: string, key: string, value: string): Promise<void> {
+    async function setTargetBuildSetting(projectFile: string, targetName: string, configurationListId: string, key: string, value: string): Promise<void> {
         const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!rootPath) { return; }
         const bundlePath = path.join(rootPath, projectFile);
@@ -1637,8 +1637,11 @@ export function activate(context: vscode.ExtensionContext): void {
             failed = true;
             vscode.window.showErrorMessage(`Failed to update ${key}: ${(e as Error).message}`);
         }
-        // No write means no watcher refresh, so reload in place: unlike refresh(), the current data stays for commands started meanwhile.
-        if (!written) {
+        // A written value shows at once; the reload its file change starts confirms it. No write means no watcher refresh, so
+        // reload in place: unlike refresh(), the current data stays for commands started meanwhile.
+        if (written) {
+            sidebarProvider.applyWrittenSetting(targetName, key, value);
+        } else {
             sidebarProvider.loadProjectData(context.workspaceState.get<BuildTaskConfig>('buildTaskConfig'))
                 .catch((error) => log(`[settings] sidebar reload failed: ${error}`));
         }
@@ -1657,7 +1660,7 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
-            const data = sidebarProvider.getProjectData();
+            const data = await sidebarProvider.ensureProjectData(config);
             const currentValue = data?.bundleIdByTarget[config.targetName] || '';
             const resolved = data?.builtBundleIdByTarget[config.targetName];
             const input = await vscode.window.showInputBox({
@@ -1669,7 +1672,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
             const target = data?.targets.find(t => t.name === config.targetName);
             if (!target?.buildConfigurationListId) { return; }
-            await setTargetBuildSetting(config.projectFile, target.buildConfigurationListId, 'PRODUCT_BUNDLE_IDENTIFIER', input);
+            await setTargetBuildSetting(config.projectFile, config.targetName, target.buildConfigurationListId, 'PRODUCT_BUNDLE_IDENTIFIER', input);
         }
     );
 
@@ -1864,7 +1867,7 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
-            const data = sidebarProvider.getProjectData();
+            const data = await sidebarProvider.ensureProjectData(config);
             const currentVersion = data?.swiftVersionByTarget[config.targetName] || '';
             const normalizedCurrent = currentVersion.replace(/\.0$/, '');
 
@@ -1886,7 +1889,7 @@ export function activate(context: vscode.ExtensionContext): void {
             const target = data?.targets.find(t => t.name === config.targetName);
             if (!target?.buildConfigurationListId) { return; }
             const projectValue = pick.version.includes('.') ? pick.version : `${pick.version}.0`;
-            await setTargetBuildSetting(config.projectFile, target.buildConfigurationListId, 'SWIFT_VERSION', projectValue);
+            await setTargetBuildSetting(config.projectFile, config.targetName, target.buildConfigurationListId, 'SWIFT_VERSION', projectValue);
         }
     );
 
@@ -1895,7 +1898,7 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const config = context.workspaceState.get<BuildTaskConfig>('buildTaskConfig');
             if (!config) { return; }
-            const data = sidebarProvider.getProjectData();
+            const data = await sidebarProvider.ensureProjectData(config);
             const currentValue = data?.strictConcurrencyByTarget[config.targetName] || '';
 
             const options = [
@@ -1917,7 +1920,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
             const target = data?.targets.find(t => t.name === config.targetName);
             if (!target?.buildConfigurationListId) { return; }
-            await setTargetBuildSetting(config.projectFile, target.buildConfigurationListId, 'SWIFT_STRICT_CONCURRENCY', pick.value);
+            await setTargetBuildSetting(config.projectFile, config.targetName, target.buildConfigurationListId, 'SWIFT_STRICT_CONCURRENCY', pick.value);
         }
     );
 

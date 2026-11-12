@@ -116,6 +116,16 @@ function cacheKey(developerDir: string): string {
     return `${developerDir}\n${mtime}`;
 }
 
+/** The selected Xcode's identity for caches (developer directory and version file, as `cacheKey`); empty when none is selected. */
+export async function selectedXcodeKey(): Promise<string> {
+    try {
+        const developerDir = (await execFile('xcode-select', ['-p'], { encoding: 'utf8', timeout: 5000 })).stdout.trim();
+        return developerDir ? cacheKey(developerDir) : '';
+    } catch {
+        return '';
+    }
+}
+
 let cached: { key: string; toolchain: XcodeToolchain } | null = null;
 
 /** Detects the selected Xcode and primes the cache `currentXcodeToolchain` serves. */

@@ -135,6 +135,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
     private projectData: ProjectData | null = null;
     /** A load publishes only while still the latest, so one that read the file before a later change can't paint over newer data. */
     private loadGeneration = 0;
+    /** The newest load started, so a caller can wait on it instead of starting one that would overtake it. */
+    private latestLoad: { generation: number; done: Promise<void> } | undefined;
 
     constructor(
         private workspaceState: vscode.Memento,
@@ -167,9 +169,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             ];
         }
 
-        if (!this.projectData) {
-            await this.loadProjectData(config);
-        }
+        await this.ensureProjectData(config);
 
         if (element.itemType === 'section-config') {
             return this.getConfigItems(config!);
@@ -302,10 +302,47 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
     // ── Data loading ──────────────────────────────────────────
 
-    async loadProjectData(config?: BuildTaskConfig | null): Promise<void> {
+    /** Loads the project data and publishes it, unless a refresh, a written setting or a newer load overtakes this one first. */
+    loadProjectData(config?: BuildTaskConfig | null): Promise<void> {
+        const generation = ++this.loadGeneration;
+        const done = this.load(config, generation);
+        this.latestLoad = { generation, done };
+        return done;
+    }
+
+    /** The project data; when a refresh dropped it, waits for the newest running load (or starts one) rather than adding a second. */
+    async ensureProjectData(config?: BuildTaskConfig | null): Promise<ProjectData | null> {
+        // An overtaken load publishes nothing, so a few rounds may be needed; three is plenty in practice.
+        for (let attempt = 0; attempt < 3 && !this.projectData; attempt++) {
+            const latest = this.latestLoad;
+            const running = latest && latest.generation === this.loadGeneration ? latest.done : this.loadProjectData(config);
+            await running.catch((error) => this.log(`[sidebar] loading project data failed: ${error}`));
+        }
+        return this.projectData;
+    }
+
+    /** Shows a written setting before its file change's reload; values derived from it (inferred strict concurrency, a formula's resolved id) wait for that reload. */
+    applyWrittenSetting(targetName: string, key: string, value: string): void {
+        // A running load read the file before this write, so it must not publish, as after a refresh.
+        this.loadGeneration++;
+        const data = this.projectData;
+        if (!data) { return; }
+        if (key === 'SWIFT_VERSION') {
+            data.swiftVersionByTarget[targetName] = value;
+        } else if (key === 'SWIFT_STRICT_CONCURRENCY') {
+            data.strictConcurrencyByTarget[targetName] = value;
+        } else if (key === 'PRODUCT_BUNDLE_IDENTIFIER') {
+            data.bundleIdByTarget[targetName] = value;
+            delete data.builtBundleIdByTarget[targetName];
+        } else {
+            return;
+        }
+        this._onDidChangeTreeData.fire();
+    }
+
+    private async load(config: BuildTaskConfig | null | undefined, generation: number): Promise<void> {
         const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!rootPath) { return; }
-        const generation = ++this.loadGeneration;
 
         this.log('[sidebar] loading project data…');
         // simctl/devicectl block indefinitely until first-launch completes, so gate up
@@ -331,6 +368,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
 
         const projectFile = config?.projectFile || xcodeProjects[0];
         let definitionFileName: string | undefined;
+        let bundleIdEvaluation: Promise<Record<string, string>> = Promise.resolve({});
         if (projectFile) {
             const bundlePath = path.join(rootPath, projectFile);
             const resolution = resolveProjectFile(bundlePath);
@@ -399,6 +437,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
                 this.log(`[sidebar] no targets: ${message}`);
             }
 
+            // Started before -list, so its xcodebuild run overlaps that one instead of following it; it never rejects.
+            bundleIdEvaluation = this.evaluateBundleIds(xcodeReady ? bundlePath : undefined, bundleIdByTarget);
+
             // Scheme discovery needs xcodebuild; skip it when Xcode isn't ready.
             if (xcodeReady) {
                 try {
@@ -421,7 +462,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarItem> {
             listPhysicalDevices(),
             detectSupportedSwiftVersions(),
             this.findStaleSimulatorInstalls(config, bundleIdByTarget, productNameByTarget),
-            this.evaluateBundleIds(xcodeReady && projectFile ? path.join(rootPath, projectFile) : undefined, bundleIdByTarget),
+            bundleIdEvaluation,
         ]);
 
         if (generation !== this.loadGeneration) {

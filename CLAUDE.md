@@ -82,7 +82,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test:sidebar` — Run the compiled sidebar provider in plain Node against a stubbed `vscode`, on a temp copy of
   the JSON SyncApp fixture: two Swift version changes, each followed by the refresh the project-file watcher makes, with
   chosen `xcodebuild -list` calls delayed so two loads overlap and the older finishes last (and the controls: the newer
-  last, no overlap). The Swift Language Version row must end on the value the file holds. Requires a full Xcode.
+  last, no overlap). The Swift Language Version row must end on the value the file holds and never go blank, a written
+  value must show at once without a load, a command during a reload must wait for that load rather than start one, and no
+  load may run more than one first-launch check. Requires a full Xcode.
 - `npm run test:toolchain` — Run the compiled toolchain helpers in plain Node under every Xcode found among
   `/Applications/Xcode.app` and `/Applications/Xcode_26.app` (override with a colon-separated
   `VSXCODE_XCODE_APPS`), selecting each through `DEVELOPER_DIR`: the detected version, the simulator UI it
@@ -259,7 +261,8 @@ src/
 │   └── testController.ts        — vscode.TestController for XCTest discovery, execution,
 │                                  result parsing, and xccov code coverage integration
 └── utils/
-    ├── version.ts               — Swift/macOS version detection via xcrun, version comparison, cleanup()
+    ├── version.ts               — Swift/macOS version detection via xcrun, version comparison, cleanup(); the
+    │                              first-launch check, one passed answer shared for a minute per selected Xcode
     ├── coreDataCodegen.ts       — momc --action generate runner; DerivedSources tree
     │                              (~/Library/Developer/VSCode/DerivedSources/<key>/) with
     │                              workspace keying + marker file; staging-dir swap
@@ -325,11 +328,15 @@ src/
 - **Agent guide link**: the Xcode Build view's **Copy Prompt for AI Agent** title button (✨) copies a one-line prompt any AI agent can act on. It links `docs/AGENT_README.md` as raw GitHub content at the tag `v<version>` of the installed extension, with the version and repository read from `context.extension.packageJSON` when clicked. It also names the selected project and scheme, which live in workspace state where an agent can't see them. It writes nothing to the workspace. The link works only for versions published with `npm run release`, which creates the tag
 - **Activation**: `workspaceContains:**/*.pbxproj`, `workspaceContains:**/project.xcproj` and `onDebug`
 - **Sidebar data**: `refresh()` drops the data and the tree's next `getChildren` loads it again, so a refresh during a load
-  runs two loads at once. Every refresh and every load bumps a generation, and a load publishes only while it is still the
-  latest: one that read the project file before the last change, finishing last, would otherwise paint the older values over
-  the newer ones. A setting command that writes nothing (the file already holds the value) reloads the sidebar's data itself,
-  since no watcher event will, in place: the current values stay until the new ones arrive, so a command started meanwhile
-  still finds its target. Pinned by `npm run test:sidebar`
+  runs two loads at once. Every refresh, every load and every written setting bumps a generation, and a load publishes only
+  while it is still the latest: one that read the project file before the last change, finishing last, would otherwise paint the older values over
+  the newer ones. The tree and the setting commands get the data through `ensureProjectData`, which waits for the newest
+  load (or starts one) instead of starting another or finding nothing, so a click during a reload waits for it. A setting
+  command that wrote the file shows the value at once (`applyWrittenSetting`, about 20 ms from the pick); the reload the
+  file change starts then confirms it. One that wrote nothing (the file already holds the value) reloads the data itself,
+  since no watcher event will, in place, so the current values stay until the new ones arrive. A load costs about 0.7 s,
+  nearly all xcodebuild: `-list`, and `-showBuildSettings` alongside it when a bundle id is a formula; one first-launch
+  check serves the whole load. Pinned by `npm run test:sidebar`
 
 ### Package.swift Features
 
