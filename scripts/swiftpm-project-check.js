@@ -685,7 +685,7 @@ const SCENARIOS = [
         }
     },
     {
-        name: "a bundle id formula, as in Xcode 27.2's new projects: the box edits the formula and notes the resolved id",
+        name: "a bundle id formula, as in Xcode 27's untitled app projects: the box edits the formula and notes the resolved id",
         run() {
             const workspace = makeWorkspace('ordinary-json');
             const projectFile = 'SyncApp.xcodeproj/project.xcproj';

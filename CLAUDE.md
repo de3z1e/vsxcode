@@ -65,22 +65,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   settings, and translates the entry ids a scenario's result names. JSON-only scenarios cover declined
   edits: the rest of a batch lands, and a repair's adds and removals and a Core Data add or move count only
   what landed. The JSON run needs Xcode 27.2 or later.
-- `npm run test:swiftpm-project` — Run the compiled extension's `activate()` in plain Node against a
-  stubbed `vscode`, on temp workspaces, to check the SwiftPM-generated project prompt. A project with
-  SwiftPM's `OBJ_n` ids gets a modal choice before VSXcode changes anything: **Use VSXcode fully**
-  backs up the files VSXcode would change and turns everything on; **Keep it a SwiftPM package**
-  leaves the workspace untouched and is remembered; dismissing asks again on the next open. The Generate
-  command offers the same choice, and an ordinary project behaves as before, including one created deeper in
-  the tree after the folder opens; a SwiftPM-generated project in the JSON format lists and backs up
-  `project.xcproj`. The same harness checks the extension's handling of the project file: a setting command
-  writes only a changed text, which `xcprojformatter` leaves as it is; a bundle id formula (Xcode 27.2's new-project
-  default) opens in the edit box as written, with the resolved id noted in its prompt; the device picker opened while the
-  sidebar's data is dropped (a project-file change with the view not drawn) still lists My Mac; picking a device keeps the
-  sidebar's data in place; a project file appearing in a package
-  checkout, or the workspace project's own file saved atomically, changes nothing; a second definition file in
-  the bundle is reported once, in Xcode's words, after a 1 s re-check; and the switch to the JSON file refreshes
-  once. Requires a full Xcode, since activation runs `xcodebuild -list` and lists simulators, and Xcode 27.2 or
-  later for the JSON cases.
+- `npm run test:swiftpm-project` — Run the compiled extension's `activate()` in plain Node against a stubbed
+  `vscode`, on temp workspaces, to check the SwiftPM-generated project prompt. A project with SwiftPM's `OBJ_n`
+  ids gets a modal choice before VSXcode changes anything: **Use VSXcode fully** backs up the files VSXcode
+  would change and turns everything on; **Keep it a SwiftPM package** leaves the workspace untouched and is
+  remembered; dismissing asks again on the next open. The Generate command offers the same choice, and an
+  ordinary project behaves as before, including one created deeper in the tree after the folder opens; a
+  SwiftPM-generated project in the JSON format lists and backs up `project.xcproj`. The same harness checks the
+  extension's handling of the project file: a setting command writes only a changed text, which
+  `xcprojformatter` leaves as it is; a bundle id formula (as Xcode 27's untitled app projects have) opens in the
+  edit box as written, with the resolved id noted in its prompt; the device picker opened while the sidebar's
+  data is dropped (a project-file change with the view not drawn) still lists My Mac; picking a device keeps the
+  sidebar's data in place; a project file appearing in a package checkout, or the workspace project's own file
+  saved atomically, changes nothing; a second definition file in the bundle is reported once, in Xcode's words,
+  after a 1 s re-check; and the switch to the JSON file refreshes once. Requires a full Xcode, since activation
+  runs `xcodebuild -list` and lists simulators, and Xcode 27.2 or later for the JSON cases.
 - `npm run test:sidebar` — Run the compiled sidebar provider in plain Node against a stubbed `vscode`, on a temp copy of
   the JSON SyncApp fixture: two Swift version changes, each followed by the refresh the project-file watcher makes, with
   chosen `xcodebuild -list` calls delayed so two loads overlap and the older finishes last (and the controls: the newer
